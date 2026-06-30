@@ -1,0 +1,39 @@
+// Fonts
+@import url('https://fonts.bunny.net/css?family=Nunito');
+
+// Variables
+@import 'variables';
+
+// Bootstrap
+@import 'bootstrap/scss/bootstrap';
+
+// Bootstrap Icons
+@import 'bootstrap-icons/font/bootstrap-icons';
+
+// Your custom styles (optional)
+:root {
+    --navy: #1B2A4A;
+    --gold: #C9A84C;
+    --slate: #64748B;
+    --border: #E2E8F0;
+    --surface: #F8FAFC;
+}
+
+.bg-navy { background-color: var(--navy); }
+.text-navy { color: var(--navy); }
+.text-gold { color: var(--gold); }
+
+// Fix for badge opacity
+.badge.bg-opacity-10 {
+    background-color: rgba(var(--bs-primary-rgb), 0.1) !important;
+}
+
+.badge.bg-success-opacity-10 {
+    background-color: rgba(var(--bs-success-rgb), 0.1) !important;
+    color: var(--bs-success);
+}
+
+.badge.bg-danger-opacity-10 {
+    background-color: rgba(var(--bs-danger-rgb), 0.1) !important;
+    color: var(--bs-danger);
+}
