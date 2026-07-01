@@ -16,7 +16,7 @@ class BudgetImport implements
 {
     public array  $errors   = [];
     public int    $imported = 0;
-    public int    $headingRow = 2; // Skip instruction row
+    public int    $headingRow = 2;
 
     public function __construct(
         protected BudgetVersion $version
@@ -30,28 +30,40 @@ class BudgetImport implements
             try {
                 $lineItemId = (int) $row['line_item_id'];
 
-                if (!$lineItemId) continue;
+                if (!$lineItemId) {
+                    $this->errors[] = "Row ".($index+3).": Missing line_item_id.";
+                    continue;
+                }
 
                 $item = BudgetLineItem::where('id', $lineItemId)
                     ->where('budget_version_id', $this->version->id)
                     ->first();
 
                 if (!$item) {
-                    $this->errors[] = "Row ".($index+3).": Line item ID {$lineItemId} not found in this budget.";
+                    $this->errors[] = "Row ".($index+3).": Line item ID {$lineItemId} not found.";
                     continue;
                 }
 
-                $q1 = max(0, (float) ($row['q1_jan-mar'] ?? $row['q1'] ?? 0));
-                $q2 = max(0, (float) ($row['q2_apr-jun'] ?? $row['q2'] ?? 0));
-                $q3 = max(0, (float) ($row['q3_jul-sep'] ?? $row['q3'] ?? 0));
-                $q4 = max(0, (float) ($row['q4_oct-dec'] ?? $row['q4'] ?? 0));
+                // ✅ EXACT column names from your Excel
+                $q1 = max(0, (float) ($row['Q1 (Jan-Mar)'] ?? 0));
+                $q2 = max(0, (float) ($row['Q2 (Apr-Jun)'] ?? 0));
+                $q3 = max(0, (float) ($row['Q3 (Jul-Sep)'] ?? 0));
+                $q4 = max(0, (float) ($row['Q4 (Oct-Dec)'] ?? 0));
+
+                // ✅ Fallback for alternative column names
+                if ($q1 === 0 && $q2 === 0 && $q3 === 0 && $q4 === 0) {
+                    $q1 = max(0, (float) ($row['q1'] ?? $row['Q1'] ?? 0));
+                    $q2 = max(0, (float) ($row['q2'] ?? $row['Q2'] ?? 0));
+                    $q3 = max(0, (float) ($row['q3'] ?? $row['Q3'] ?? 0));
+                    $q4 = max(0, (float) ($row['q4'] ?? $row['Q4'] ?? 0));
+                }
 
                 $item->update([
                     'q1_amount'       => $q1,
                     'q2_amount'       => $q2,
                     'q3_amount'       => $q3,
                     'q4_amount'       => $q4,
-                    'justification'   => $row['justification'] ?? null,
+                    'justification'   => $row['justification'] ?? $row['Justification'] ?? null,
                     'last_updated_by' => auth()->id(),
                 ]);
 
@@ -66,10 +78,11 @@ class BudgetImport implements
     public function rules(): array
     {
         return [
-            '*.q1_jan-mar' => ['nullable','numeric','min:0'],
-            '*.q2_apr-jun' => ['nullable','numeric','min:0'],
-            '*.q3_jul-sep' => ['nullable','numeric','min:0'],
-            '*.q4_oct-dec' => ['nullable','numeric','min:0'],
+            // ✅ EXACT column names from your Excel
+            '*.Q1 (Jan-Mar)' => ['nullable', 'numeric', 'min:0'],
+            '*.Q2 (Apr-Jun)' => ['nullable', 'numeric', 'min:0'],
+            '*.Q3 (Jul-Sep)' => ['nullable', 'numeric', 'min:0'],
+            '*.Q4 (Oct-Dec)' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 }

@@ -65,10 +65,10 @@ class BudgetDataSheet implements
             'Category',        // B
             'Account Code',    // C
             'Account Name',    // D
-            'Q1 (Jan-Mar)',    // E
-            'Q2 (Apr-Jun)',    // F
-            'Q3 (Jul-Sep)',    // G
-            'Q4 (Oct-Dec)',    // H
+            'Q1',    // E
+            'Q2',    // F
+            'Q3',    // G
+            'Q4',    // H
             'Total',           // I
             'Justification',   // J
         ];

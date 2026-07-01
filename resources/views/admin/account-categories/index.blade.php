@@ -113,5 +113,7 @@
     </div>
 </div>
 
-<div class="mt-3">{{ $categories->links() }}</div>
+<div class="mt-3">
+    {{ $categories->appends(request()->query())->links('pagination::bootstrap-5') }}
+</div>
 @endsection
