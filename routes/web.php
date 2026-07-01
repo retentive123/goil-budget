@@ -279,5 +279,6 @@ Route::middleware(['auth', 'role:super_admin'])->prefix('admin/maintenance')->na
             Route::post('/enable',  [MaintenanceController::class, 'enable'])->name('enable');
             Route::post('/disable', [MaintenanceController::class, 'disable'])->name('disable');
         });
+        //comment
 
 });
