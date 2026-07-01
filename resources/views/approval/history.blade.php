@@ -441,6 +441,41 @@
             $decisions = $budgetVersion->approvalDecisions ?? collect();
             $firstDecision = $decisions->sortBy('decided_at')->first();
             $lastDecision  = $decisions->sortBy('decided_at')->last();
+
+            // Calculate the time difference using Carbon
+            $timeString = '—';
+
+            if ($budgetVersion->submitted_at && $lastDecision) {
+                $start = \Carbon\Carbon::parse($budgetVersion->submitted_at);
+                $end = \Carbon\Carbon::parse($lastDecision->decided_at);
+                $diff = $start->diff($end);
+
+                // Build the time string
+                $parts = [];
+
+                if ($diff->y > 0) {
+                    $parts[] = $diff->y . ' year' . ($diff->y > 1 ? 's' : '');
+                }
+                if ($diff->m > 0) {
+                    $parts[] = $diff->m . ' month' . ($diff->m > 1 ? 's' : '');
+                }
+                if ($diff->d > 0) {
+                    $parts[] = $diff->d . ' day' . ($diff->d > 1 ? 's' : '');
+                }
+                if ($diff->h > 0) {
+                    $parts[] = $diff->h . ' hour' . ($diff->h > 1 ? 's' : '');
+                }
+                if ($diff->i > 0) {
+                    $parts[] = $diff->i . ' minute' . ($diff->i > 1 ? 's' : '');
+                }
+                if ($diff->s > 0) {
+                    $parts[] = $diff->s . ' second' . ($diff->s > 1 ? 's' : '');
+                }
+
+                $timeString = implode(', ', $parts);
+            }
+
+
             $daysInReview  = $budgetVersion->submitted_at && $lastDecision
                 ? $budgetVersion->submitted_at->diffInDays($lastDecision->decided_at)
                 : null;
@@ -471,7 +506,7 @@
                 <div class="col-6">
                     <div style="font-size:11px;color:var(--slate)">Days in Review</div>
                     <div style="font-size:13px;font-weight:600;color:var(--navy)">
-                        {{ $daysInReview !== null ? $daysInReview . ' day(s)' : '—' }}
+                        {{ $timeString }}
                     </div>
                 </div>
             </div>
