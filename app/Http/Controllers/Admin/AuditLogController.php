@@ -25,7 +25,10 @@ class AuditLogController extends Controller
             ->when($request->date_to,   fn($q) => $q->whereDate('created_at', '<=', $request->date_to))
             ->orderByDesc('created_at');
 
-        $logs  = $query->paginate(10)->withQueryString();
+        $perPage = in_array((int) $request->get('per_page', 10), [10, 25, 50, 100])
+            ? (int) $request->per_page
+            : 10;
+        $logs = $query->paginate($perPage)->withQueryString();
 
         // Stats for the summary strip
         $stats = [
