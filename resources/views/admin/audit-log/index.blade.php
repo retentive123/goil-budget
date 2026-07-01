@@ -1,6 +1,10 @@
 @extends('layouts.app')
 @section('title', 'Audit Log')
+
 @section('content')
+
+{{-- Bootstrap Table CSS (loaded here since layout has no @stack('styles')) --}}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-table@1.22.4/dist/bootstrap-table.min.css">
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
@@ -11,7 +15,7 @@
     </div>
     <a href="{{ route('admin.audit-log.export', request()->query()) }}"
        class="btn btn-sm btn-outline-success">
-        Export CSV
+        <i class="fas fa-file-csv me-1"></i>Export All (CSV)
     </a>
 </div>
 
@@ -49,8 +53,17 @@
     </div>
 </div>
 
-{{-- Filters --}}
+{{-- Server-side filters --}}
 <form method="GET" class="chart-card mb-4">
+    <div class="d-flex align-items-center mb-2 gap-2">
+        <i class="fas fa-filter text-muted" style="font-size:12px"></i>
+        <span class="fw-semibold small text-muted">Filter Records</span>
+        @if(request()->hasAny(['search','user_id','module','severity','date_from','date_to']))
+        <a href="{{ route('admin.audit-log.index') }}" class="small text-muted ms-2">
+            <i class="fas fa-times-circle me-1"></i>Clear filters
+        </a>
+        @endif
+    </div>
     <div class="row g-2 align-items-end">
         <div class="col-md-3">
             <label class="form-label small fw-semibold mb-1">Search</label>
@@ -111,29 +124,56 @@
             </button>
         </div>
     </div>
-    @if(request()->hasAny(['search','user_id','module','severity','date_from','date_to']))
-    <div class="mt-2">
-        <a href="{{ route('admin.audit-log.index') }}"
-           class="small text-muted">Clear filters</a>
-    </div>
-    @endif
 </form>
 
 {{-- Log table --}}
 <div class="chart-card">
+
+    {{-- Table controls: per-page selector --}}
+    <div class="d-flex align-items-center gap-2 mb-3">
+        <label class="small text-muted mb-0" for="perPageSelect">Show</label>
+        <select id="perPageSelect" class="form-select form-select-sm" style="width:auto">
+            @foreach([10, 25, 50, 100] as $n)
+            <option value="{{ $n }}" {{ request('per_page', 10) == $n ? 'selected' : '' }}>
+                {{ $n }}
+            </option>
+            @endforeach
+        </select>
+        <span class="small text-muted">entries per page</span>
+        <span class="ms-auto small text-muted">
+            Showing {{ $logs->firstItem() }}–{{ $logs->lastItem() }} of {{ $logs->total() }} records
+        </span>
+    </div>
+
     <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0">
+        <table
+            id="auditTable"
+            class="table table-sm table-hover mb-0"
+            data-toggle="table"
+            data-search="true"
+            data-search-placeholder="Quick search on this page…"
+            data-show-columns="true"
+            data-show-columns-toggle-all="true"
+            data-show-export="true"
+            data-export-types='["copy","csv","excel","pdf","json"]'
+            data-export-options='{"fileName":"audit-log-{{ now()->format('Y-m-d') }}"}'
+            data-show-search-clear-button="true"
+            data-search-align="left"
+            data-buttons-class="btn-sm btn-outline-secondary"
+            data-minimum-count-columns="1"
+        >
             <thead style="font-size:11px;text-transform:uppercase;
                           letter-spacing:.5px;color:var(--slate)">
                 <tr>
-                    <th style="width:140px">Date / Time</th>
-                    <th>User</th>
-                    <th>Module</th>
-                    <th>Event</th>
-                    <th>Subject</th>
-                    <th>Severity</th>
-                    <th>IP</th>
-                    <th></th>
+                    <th data-field="datetime"  data-title="Date / Time"  style="width:140px">Date / Time</th>
+                    <th data-field="user"      data-title="User">User</th>
+                    <th data-field="module"    data-title="Module">Module</th>
+                    <th data-field="event"     data-title="Event">Event</th>
+                    <th data-field="subject"   data-title="Subject">Subject</th>
+                    <th data-field="severity"  data-title="Severity">Severity</th>
+                    <th data-field="ip"        data-title="IP Address">IP</th>
+                    <th data-field="actions"   data-title="Actions"
+                        data-switchable="false" data-visible-export="false"></th>
                 </tr>
             </thead>
             <tbody>
@@ -204,8 +244,32 @@
         </table>
     </div>
     <div class="mt-3 px-2">
-    {{ $logs->appends(request()->query())->links('pagination::bootstrap-5') }}
-</div>
+        {{ $logs->appends(request()->query())->links('pagination::bootstrap-5') }}
+    </div>
 </div>
 
 @endsection
+
+@push('scripts')
+{{-- jQuery (required by tableexport plugin) --}}
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+{{-- Bootstrap Table --}}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap-table@1.22.4/dist/bootstrap-table.min.js"></script>
+{{-- Export extension dependencies --}}
+<script src="https://cdn.jsdelivr.net/npm/tableexport.jquery.plugin@1.10.21/libs/jsPDF/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tableexport.jquery.plugin@1.10.21/tableExport.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap-table@1.22.4/dist/extensions/export/bootstrap-table-export.min.js"></script>
+<script>
+$(function () {
+    $('#auditTable').bootstrapTable();
+
+    // Per-page selector: redirect with updated per_page param
+    $('#perPageSelect').on('change', function () {
+        const url = new URL(window.location.href);
+        url.searchParams.set('per_page', this.value);
+        url.searchParams.delete('page');
+        window.location.href = url.toString();
+    });
+});
+</script>
+@endpush
