@@ -57,6 +57,7 @@
                 <tr>
                     <th>Name</th>
                     <th>Code</th>
+                    <th>Type</th>
                     <th>Description</th>
                     <th>Account Codes</th>
                     <th>Status</th>
@@ -74,6 +75,11 @@
                     <td>
                         <span class="badge bg-secondary">
                             {{ $category->account_codes_count }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge bg-secondary">
+                            {{ $category->budget_type }}
                         </span>
                     </td>
                     <td>
@@ -113,5 +119,7 @@
     </div>
 </div>
 
-<div class="mt-3">{{ $categories->links() }}</div>
+<div class="mt-3">
+    {{ $categories->appends(request()->query())->links('pagination::bootstrap-5') }}
+</div>
 @endsection
