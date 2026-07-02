@@ -410,11 +410,6 @@
         @endforeach
     </div>
 
-    <div class="mb-4">
-        <div class="chart-title">Quarterly Cash Flow — Budget vs Actual</div>
-        <canvas id="cfBarChart" height="100"></canvas>
-    </div>
-
     <div class="chart-title mb-2">Monthly Cash Flow Detail</div>
     <div class="table-responsive">
     <table class="table table-sm table-hover mb-0">
@@ -667,7 +662,6 @@
 </div>{{-- /tab-content --}}
 
 {{-- ══ Scripts ══ --}}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 // ── Data ──────────────────────────────────────────────────────────────────
 const PNL_REVENUE  = @json($pnl['sections']['revenue']);
@@ -887,40 +881,6 @@ function dlBlob(content, filename, mime) {
     });
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
-
-// ── Cash Flow chart ────────────────────────────────────────────────────────
-new Chart(document.getElementById('cfBarChart'), {
-    type: 'bar',
-    data: {
-        labels: ['Q1','Q2','Q3','Q4'],
-        datasets: [
-            {
-                label: 'Budget Net',
-                data: [1,2,3,4].map(q => CF_QUARTERLY[q].net_budget),
-                backgroundColor: [1,2,3,4].map(q =>
-                    CF_QUARTERLY[q].net_budget >= 0 ? '#6EE7B7' : '#FCA5A5'),
-                borderRadius: 4,
-            },
-            {
-                label: 'Actual Net',
-                data: [1,2,3,4].map(q => CF_QUARTERLY[q].net_actual),
-                backgroundColor: [1,2,3,4].map(q =>
-                    CF_QUARTERLY[q].net_actual >= 0 ? '#34D399' : '#F87171'),
-                borderRadius: 4,
-            },
-        ]
-    },
-    options: {
-        responsive: true,
-        plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12 } } },
-        scales: {
-            y: { grid: { color: '#F1F5F9' },
-                 ticks: { font: { size: 11 },
-                     callback: v => v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'K':v } },
-            x: { grid: { display: false }, ticks: { font: { size: 11 } } }
-        }
-    }
-});
 
 // ── Balance Sheet rendering ───────────────────────────────────────────────
 const bsState = {assets:{}, liabilities:{}};

@@ -176,6 +176,65 @@
     </div>
 </div>
 
+{{-- Section breakdown cards --}}
+@if(!empty($sectionTotals))
+@php
+    $stRev = $sectionTotals['revenue'] ?? 0;
+    $stExp = $sectionTotals['expense'] ?? 0;
+    $stNet = $stRev - $stExp;
+    $stCx  = $sectionTotals['capex']   ?? 0;
+    $stBl  = $sectionTotals['balance'] ?? 0;
+@endphp
+<div class="row g-3 mb-4">
+    <div class="col">
+        <div class="stat-card">
+            <div class="stat-accent" style="background:#1B2A4A"></div>
+            <div class="stat-label">Total Revenue</div>
+            <div class="stat-value" style="font-size:15px;color:#1B2A4A">GHS {{ number_format($stRev,0) }}</div>
+            <div class="stat-sub">Income Statement</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="stat-card">
+            <div class="stat-accent" style="background:#7C2D12"></div>
+            <div class="stat-label">Total Expenses</div>
+            <div class="stat-value" style="font-size:15px;color:#7C2D12">GHS {{ number_format($stExp,0) }}</div>
+            <div class="stat-sub">Income Statement</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="stat-card">
+            <div class="stat-accent" style="background:{{ $stNet >= 0 ? '#10B981' : '#F43F5E' }}"></div>
+            <div class="stat-label">Net Income (IS)</div>
+            <div class="stat-value" style="font-size:15px;color:{{ $stNet >= 0 ? '#10B981' : '#F43F5E' }}">
+                {{ $stNet < 0 ? '–' : '' }}GHS {{ number_format(abs($stNet),0) }}
+            </div>
+            <div class="stat-sub">Revenue − Expenses</div>
+        </div>
+    </div>
+    @if($stCx > 0)
+    <div class="col">
+        <div class="stat-card">
+            <div class="stat-accent" style="background:#78350F"></div>
+            <div class="stat-label">Capital Expenditure</div>
+            <div class="stat-value" style="font-size:15px;color:#78350F">GHS {{ number_format($stCx,0) }}</div>
+            <div class="stat-sub">CapEx section</div>
+        </div>
+    </div>
+    @endif
+    @if($stBl > 0)
+    <div class="col">
+        <div class="stat-card">
+            <div class="stat-accent" style="background:#4C1D95"></div>
+            <div class="stat-label">Assets &amp; Liabilities</div>
+            <div class="stat-value" style="font-size:15px;color:#4C1D95">GHS {{ number_format($stBl,0) }}</div>
+            <div class="stat-sub">Balance section</div>
+        </div>
+    </div>
+    @endif
+</div>
+@endif
+
 {{-- Charts row 1 --}}
 <div class="row g-3 mb-4">
 
@@ -220,11 +279,25 @@
         </div>
     </div>
 
-    {{-- Category breakdown --}}
+    {{-- Budget by Section donut --}}
     <div class="col-md-4">
         <div class="chart-card h-100">
-            <div class="chart-title">By Category</div>
-            <canvas id="catPie" height="200"></canvas>
+            <div class="chart-title">Budget by Section</div>
+            <canvas id="sectionDonut" height="200"></canvas>
+            @if(!empty($sectionTotals))
+            @php
+                $sdNet = ($sectionTotals['revenue'] ?? 0) - ($sectionTotals['expense'] ?? 0);
+            @endphp
+            <div class="mt-2" style="font-size:11px;color:var(--slate);line-height:1.8">
+                <div><span style="display:inline-block;width:10px;height:10px;background:#1B2A4A;border-radius:2px;margin-right:5px"></span>IS Net: <strong style="color:{{ $sdNet >= 0 ? '#10B981' : '#F43F5E' }}">{{ $sdNet < 0 ? '–' : '' }}GHS {{ number_format(abs($sdNet),0) }}</strong></div>
+                @if(($sectionTotals['capex'] ?? 0) > 0)
+                <div><span style="display:inline-block;width:10px;height:10px;background:#78350F;border-radius:2px;margin-right:5px"></span>CapEx: <strong>GHS {{ number_format($sectionTotals['capex'],0) }}</strong></div>
+                @endif
+                @if(($sectionTotals['balance'] ?? 0) > 0)
+                <div><span style="display:inline-block;width:10px;height:10px;background:#4C1D95;border-radius:2px;margin-right:5px"></span>Balance: <strong>GHS {{ number_format($sectionTotals['balance'],0) }}</strong></div>
+                @endif
+            </div>
+            @endif
         </div>
     </div>
 
@@ -443,18 +516,32 @@ new Chart(document.getElementById('deptBudgetBar'),{
 });
 @endif
 
-// Category pie
-@if(count($categoryBreakdown))
-new Chart(document.getElementById('catPie'),{
-    type:'pie',
+// Budget by Section donut
+@if(!empty($sectionTotals))
+@php
+    $sdLabels = ['Income Statement'];
+    $sdData   = [($sectionTotals['revenue'] ?? 0) + ($sectionTotals['expense'] ?? 0)];
+    $sdColors = ['#1B2A4A'];
+    if (($sectionTotals['capex'] ?? 0) > 0)   { $sdLabels[] = 'Capital Expenditure'; $sdData[] = $sectionTotals['capex'];   $sdColors[] = '#78350F'; }
+    if (($sectionTotals['balance'] ?? 0) > 0) { $sdLabels[] = 'Assets & Liabilities'; $sdData[] = $sectionTotals['balance']; $sdColors[] = '#4C1D95'; }
+@endphp
+new Chart(document.getElementById('sectionDonut'),{
+    type:'doughnut',
     data:{
-        labels:{!! json_encode(array_column($categoryBreakdown,'name')) !!},
+        labels:{!! json_encode($sdLabels) !!},
         datasets:[{
-            data:{!! json_encode(array_column($categoryBreakdown,'total')) !!},
-            backgroundColor:PALETTE,borderWidth:2,borderColor:'#fff',
+            data:{!! json_encode($sdData) !!},
+            backgroundColor:{!! json_encode($sdColors) !!},
+            borderWidth:3,borderColor:'#fff',hoverOffset:6,
         }]
     },
-    options:{plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:6,boxWidth:10}}}}
+    options:{
+        cutout:'65%',
+        plugins:{
+            legend:{position:'bottom',labels:{font:{size:10},padding:8,boxWidth:10}},
+            tooltip:{callbacks:{label:ctx=>'GHS '+ctx.parsed.toLocaleString('en-GH',{minimumFractionDigits:0})}}
+        }
+    }
 });
 @endif
 
@@ -541,7 +628,7 @@ new Chart(document.getElementById('yoyLine'),{
         </div>
         <div class="col-auto d-flex gap-2">
             @if($myBudget->isEditable())
-            <a href="{{ route('budget.show', $myBudget) }}"
+            <a href="{{ route('budget.show-pnl', $myBudget) }}"
                class="btn btn-sm"
                style="background:var(--navy);color:#fff;border-radius:8px">
                 Continue Editing
@@ -552,7 +639,7 @@ new Chart(document.getElementById('yoyLine'),{
                 Submit →
             </a>
             @else
-            <a href="{{ route('budget.show', $myBudget) }}"
+            <a href="{{ route('budget.show-pnl', $myBudget) }}"
                class="btn btn-sm btn-outline-secondary"
                style="border-radius:8px">
                 View Budget
@@ -576,6 +663,48 @@ new Chart(document.getElementById('yoyLine'),{
     </div>
     @endforeach
 </div>
+
+{{-- Section breakdown mini-cards --}}
+@if(!empty($mySectionTotals))
+<div class="row g-2 mb-4">
+    <div class="col">
+        <div class="quarter-pill">
+            <div class="q-label">Revenue</div>
+            <div class="q-value" style="font-size:14px;color:#1B2A4A">GHS {{ number_format($mySectionTotals['revenue'],0) }}</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="quarter-pill">
+            <div class="q-label">Expenses</div>
+            <div class="q-value" style="font-size:14px;color:#7C2D12">GHS {{ number_format($mySectionTotals['expense'],0) }}</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="quarter-pill">
+            <div class="q-label">Net Income</div>
+            <div class="q-value" style="font-size:14px;color:{{ $mySectionTotals['net'] >= 0 ? '#10B981' : '#F43F5E' }}">
+                {{ $mySectionTotals['net'] < 0 ? '–' : '' }}GHS {{ number_format(abs($mySectionTotals['net']),0) }}
+            </div>
+        </div>
+    </div>
+    @if($mySectionTotals['capex'] > 0)
+    <div class="col">
+        <div class="quarter-pill">
+            <div class="q-label">CapEx</div>
+            <div class="q-value" style="font-size:14px;color:#78350F">GHS {{ number_format($mySectionTotals['capex'],0) }}</div>
+        </div>
+    </div>
+    @endif
+    @if($mySectionTotals['balance'] > 0)
+    <div class="col">
+        <div class="quarter-pill">
+            <div class="q-label">Balance</div>
+            <div class="q-value" style="font-size:14px;color:#4C1D95">GHS {{ number_format($mySectionTotals['balance'],0) }}</div>
+        </div>
+    </div>
+    @endif
+</div>
+@endif
 
 {{-- Charts --}}
 <div class="row g-3 mb-4">
@@ -640,7 +769,7 @@ new Chart(document.getElementById('yoyLine'),{
                     <span class="status-pill pill-{{ $v->status }}">
                         {{ ucfirst(str_replace('_',' ',$v->status)) }}
                     </span>
-                    <a href="{{ route('budget.show',$v) }}"
+                    <a href="{{ route('budget.show-pnl',$v) }}"
                        style="font-size:11px;color:var(--navy)">View →</a>
                 </div>
             </div>
@@ -654,7 +783,7 @@ new Chart(document.getElementById('yoyLine'),{
         <div class="chart-card">
             <div class="chart-title">Quick Actions</div>
             <div class="d-grid gap-2">
-                <a href="{{ route('budget.index') }}"
+                <a href="{{ isset($myBudget) && $myBudget ? route('budget.show-pnl', $myBudget) : route('budget.index') }}"
                    class="btn btn-sm text-start"
                    style="background:var(--surface);border:1px solid var(--border);
                           border-radius:8px;padding:10px 14px;font-size:13px;color:var(--navy)">

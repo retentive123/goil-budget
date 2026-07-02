@@ -98,6 +98,18 @@ class DashboardController extends Controller
                 ->orderByDesc('total_amount')
                 ->limit(5)->get();
 
+            // Section totals for department view
+            $allItems = BudgetLineItem::where('budget_version_id', $myBudget->id)
+                ->with('accountCode.category')->get();
+            $rev = $allItems->filter(fn($i) => in_array($i->accountCode->category->budget_type, ['revenue','both']))->sum(fn($i) => $i->effectiveBudget());
+            $exp = $allItems->filter(fn($i) => $i->accountCode->category->budget_type === 'expense')->sum(fn($i) => $i->effectiveBudget());
+            $cx  = $allItems->filter(fn($i) => $i->accountCode->category->budget_type === 'capital_expenditure')->sum(fn($i) => $i->effectiveBudget());
+            $bl  = $allItems->filter(fn($i) => in_array($i->accountCode->category->budget_type, ['assets','liabilities']))->sum(fn($i) => $i->effectiveBudget());
+            $data['mySectionTotals'] = [
+                'revenue' => $rev, 'expense' => $exp,
+                'net'     => $rev - $exp, 'capex' => $cx, 'balance' => $bl,
+            ];
+
             // Monthly actuals for dept
             $data['monthlyActuals'] = \App\Models\BudgetActual::where('department_id', $user->department_id)
                 ->where('budget_period_id', $currentPeriod->id)
@@ -167,8 +179,9 @@ class DashboardController extends Controller
                 usort($deptBudgets, fn($a, $b) => $b['total'] <=> $a['total']);
             }
 
-            // Category breakdown
+            // Category breakdown + section totals
             $categoryBreakdown = [];
+            $sectionTotals = ['revenue' => 0, 'expense' => 0, 'capex' => 0, 'balance' => 0];
             if ($currentPeriod) {
                 $items = BudgetLineItem::whereHas('budgetVersion', fn($q) =>
                         $q->where('budget_period_id', $currentPeriod->id)->where('status', 'approved')
@@ -177,11 +190,20 @@ class DashboardController extends Controller
                     ->groupBy('accountCode.category.name');
 
                 foreach ($items as $cat => $catItems) {
+                    $budgetType = $catItems->first()->accountCode->category->budget_type ?? 'expense';
+                    $total      = $catItems->sum(fn($item) => $item->effectiveBudget());
                     $categoryBreakdown[] = [
-                        'name'  => $cat,
-                        // ✅ Sum effective totals for each line item in category
-                        'total' => $catItems->sum(fn($item) => $item->effectiveBudget()),
+                        'name'        => $cat,
+                        'total'       => $total,
+                        'budget_type' => $budgetType,
                     ];
+                    $section = match(true) {
+                        in_array($budgetType, ['revenue', 'both'])        => 'revenue',
+                        $budgetType === 'capital_expenditure'             => 'capex',
+                        in_array($budgetType, ['assets', 'liabilities'])  => 'balance',
+                        default                                           => 'expense',
+                    };
+                    $sectionTotals[$section] += $total;
                 }
                 usort($categoryBreakdown, fn($a, $b) => $b['total'] <=> $a['total']);
             }
@@ -202,7 +224,7 @@ class DashboardController extends Controller
                 ];
             })->filter(fn($r) => $r['budget'] > 0)->values();
 
-            return compact('deptBudgets', 'categoryBreakdown', 'yoySummary');
+            return compact('deptBudgets', 'categoryBreakdown', 'sectionTotals', 'yoySummary');
         });
 
         // ── Merge cached data ──
