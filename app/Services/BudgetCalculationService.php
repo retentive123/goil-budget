@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\BudgetActual;
 use App\Models\BudgetVersion;
 use App\Models\BudgetLineItem;
 use App\Models\BudgetPeriod;
@@ -27,9 +28,12 @@ class BudgetCalculationService
 
         foreach ($accountCodes as $code) {
             $lineType = match($code->category->budget_type) {
-                'revenue' => 'revenue',
-                'both'    => 'expense',
-                default   => 'expense',
+                'revenue'              => 'revenue',
+                'both'                 => 'expense',
+                'capital_expenditure'  => 'capex',
+                'assets'               => 'asset',
+                'liabilities'          => 'liability',
+                default                => 'expense',
             };
 
             BudgetLineItem::firstOrCreate(
@@ -210,6 +214,136 @@ public function isOverBudget(int $departmentId, int $periodId): array
             'q4'    => $items->sum('q4_amount'),
             'total' => $version->effectiveTotal(),
         ];
+    }
+
+    /**
+     * Build P&L-structured data for budget entry/review views
+     */
+    public function buildPnlData(BudgetVersion $version, ?BudgetPeriod $prevPeriod): array
+    {
+        $items = $version->lineItems;
+
+        $prevActuals = [];
+        $prevBudgets = [];
+
+        if ($prevPeriod) {
+            $prevActuals = BudgetActual::where('budget_period_id', $prevPeriod->id)
+                ->where('department_id', $version->department_id)
+                ->where('status', 'confirmed')
+                ->selectRaw('account_code_id, sum(amount) as total')
+                ->groupBy('account_code_id')
+                ->pluck('total', 'account_code_id')
+                ->map(fn($v) => (float) $v)
+                ->toArray();
+
+            $prevVersionIds = BudgetVersion::where('budget_period_id', $prevPeriod->id)
+                ->where('department_id', $version->department_id)
+                ->where('status', 'approved')
+                ->pluck('id');
+
+            if ($prevVersionIds->isNotEmpty()) {
+                $prevBudgets = BudgetLineItem::whereIn('budget_version_id', $prevVersionIds)
+                    ->selectRaw('account_code_id, sum(q1_amount + q2_amount + q3_amount + q4_amount) as total')
+                    ->groupBy('account_code_id')
+                    ->pluck('total', 'account_code_id')
+                    ->map(fn($v) => (float) $v)
+                    ->toArray();
+            }
+        }
+
+        $blank = ['q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0,'total'=>0,'effective'=>0,'prev_budget'=>0,'prev_actual'=>0];
+        $sections = [
+            'revenue' => ['categories' => [], 'totals' => $blank],
+            'expense' => ['categories' => [], 'totals' => $blank],
+            'capex'   => ['categories' => [], 'totals' => $blank],
+            'balance' => ['categories' => [], 'totals' => $blank],
+        ];
+        $catIndex = [];
+
+        foreach ($items as $item) {
+            $cat  = $item->accountCode->category;
+            $type = match(true) {
+                in_array($cat->budget_type, ['revenue', 'both'])         => 'revenue',
+                $cat->budget_type === 'capital_expenditure'              => 'capex',
+                in_array($cat->budget_type, ['assets', 'liabilities'])   => 'balance',
+                default                                                  => 'expense',
+            };
+            $catName = $cat->name;
+            $codeId  = $item->account_code_id;
+
+            if (!isset($catIndex[$type][$catName])) {
+                $catIndex[$type][$catName] = count($sections[$type]['categories']);
+                $sections[$type]['categories'][] = [
+                    'name'   => $catName,
+                    'items'  => [],
+                    'totals' => ['q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0,'total'=>0,'effective'=>0,'prev_budget'=>0,'prev_actual'=>0,'common_size'=>0],
+                ];
+            }
+
+            $idx       = $catIndex[$type][$catName];
+            $supp      = $item->approvedSupplementaryTotal();
+            $effective = (float) $item->total_amount + $supp;
+            $prevB     = $prevBudgets[$codeId] ?? 0.0;
+            $prevA     = $prevActuals[$codeId] ?? 0.0;
+
+            $sections[$type]['categories'][$idx]['items'][] = [
+                'id'            => $item->id,
+                'code'          => $item->accountCode->code,
+                'name'          => $item->accountCode->name,
+                'q1'            => (float) $item->q1_amount,
+                'q2'            => (float) $item->q2_amount,
+                'q3'            => (float) $item->q3_amount,
+                'q4'            => (float) $item->q4_amount,
+                'total'         => (float) $item->total_amount,
+                'supp'          => $supp,
+                'effective'     => $effective,
+                'prev_budget'   => $prevB,
+                'prev_actual'   => $prevA,
+                'justification' => $item->justification ?? '',
+                'line_type'     => $item->line_type,
+                'common_size'   => 0,
+            ];
+
+            foreach (['q1','q2','q3','q4'] as $k) {
+                $sections[$type]['totals'][$k] += (float) $item->{$k.'_amount'};
+            }
+            $sections[$type]['totals']['total']       += (float) $item->total_amount;
+            $sections[$type]['totals']['effective']   += $effective;
+            $sections[$type]['totals']['prev_budget'] += $prevB;
+            $sections[$type]['totals']['prev_actual'] += $prevA;
+        }
+
+        // Recompute category totals cleanly
+        foreach (['revenue','expense','capex','balance'] as $type) {
+            foreach ($sections[$type]['categories'] as &$cat) {
+                $cat['totals'] = ['q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0,'total'=>0,'effective'=>0,'prev_budget'=>0,'prev_actual'=>0,'common_size'=>0];
+                foreach ($cat['items'] as $it) {
+                    $cat['totals']['q1']          += $it['q1'];
+                    $cat['totals']['q2']          += $it['q2'];
+                    $cat['totals']['q3']          += $it['q3'];
+                    $cat['totals']['q4']          += $it['q4'];
+                    $cat['totals']['total']       += $it['total'];
+                    $cat['totals']['effective']   += $it['effective'];
+                    $cat['totals']['prev_budget'] += $it['prev_budget'];
+                    $cat['totals']['prev_actual'] += $it['prev_actual'];
+                }
+            }
+        }
+
+        // Second pass: common_size per section
+        foreach (['revenue','expense','capex','balance'] as $type) {
+            $sectionEff = $sections[$type]['totals']['effective'];
+            foreach ($sections[$type]['categories'] as &$cat) {
+                $cat['totals']['common_size'] = $sectionEff > 0
+                    ? round($cat['totals']['effective'] / $sectionEff * 100, 2) : 0;
+                foreach ($cat['items'] as &$it) {
+                    $it['common_size'] = $sectionEff > 0
+                        ? round($it['effective'] / $sectionEff * 100, 2) : 0;
+                }
+            }
+        }
+
+        return $sections;
     }
 
     /**

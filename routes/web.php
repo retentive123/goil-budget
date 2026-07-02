@@ -126,6 +126,7 @@ Route::middleware('auth')->group(function () {
             ->group(function () {
                 Route::get('/',                          [AllBudgetsController::class, 'index'])->name('index');
                 Route::get('/export',                    [AllBudgetsController::class, 'export'])->name('export');
+                Route::get('/{budgetVersion}/pnl',       [AllBudgetsController::class, 'showPnl'])->name('show-pnl');
                 Route::get('/{budgetVersion}',           [AllBudgetsController::class, 'show'])->name('show');
                 Route::get('/department/{department}',   [AllBudgetsController::class, 'department'])->name('department');
             });
@@ -134,12 +135,13 @@ Route::middleware('auth')->group(function () {
     // Budget entry routes
     // -------------------------------------------------------
     Route::middleware('permission:create budget')->prefix('budget')->name('budget.')->group(function () {
-        Route::get('/',                        [BudgetEntryController::class, 'index'])->name('index');
-        Route::post('/start',                  [BudgetEntryController::class, 'start'])->name('start');
-        Route::get('/{budgetVersion}',         [BudgetEntryController::class, 'show'])->name('show');
-        Route::post('/{budgetVersion}/save',   [BudgetEntryController::class, 'save'])->name('save');
-        Route::post('/{budgetVersion}/submit', [BudgetSubmissionController::class, 'submit'])->name('submit');
-        Route::get('/{budgetVersion}/confirm', [BudgetSubmissionController::class, 'confirm'])->name('confirm');
+        Route::get('/',                            [BudgetEntryController::class, 'index'])->name('index');
+        Route::post('/start',                      [BudgetEntryController::class, 'start'])->name('start');
+        Route::get('/{budgetVersion}/pnl',         [BudgetEntryController::class, 'showPnl'])->name('show-pnl');
+        Route::get('/{budgetVersion}',             [BudgetEntryController::class, 'show'])->name('show');
+        Route::post('/{budgetVersion}/save',       [BudgetEntryController::class, 'save'])->name('save');
+        Route::post('/{budgetVersion}/submit',     [BudgetSubmissionController::class, 'submit'])->name('submit');
+        Route::get('/{budgetVersion}/confirm',     [BudgetSubmissionController::class, 'confirm'])->name('confirm');
     });
 
 
@@ -166,6 +168,7 @@ Route::middleware('auth')->group(function () {
     // -------------------------------------------------------
     Route::middleware('permission:approve budget')->prefix('approvals')->name('approvals.')->group(function () {
         Route::get('/',                        [ApprovalController::class, 'index'])->name('index');
+        Route::get('/{budgetVersion}/pnl',     [ApprovalController::class, 'showPnl'])->name('show-pnl');
         Route::get('/{budgetVersion}',         [ApprovalController::class, 'show'])->name('show');
         Route::post('/{budgetVersion}/decide', [ApprovalController::class, 'decide'])->name('decide');
         Route::get('/{budgetVersion}/history', [ApprovalController::class, 'history'])->name('history');
@@ -186,6 +189,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/virement',        [ReportController::class, 'virement'])->name('virement');
     Route::get('/flexed',          [ReportController::class, 'flexed'])->name('flexed');
     Route::get('/approved',        [ReportController::class, 'approved'])->name('approved');
+    Route::get('/financial',       [ReportController::class, 'financialStatement'])->name('financial');
+    Route::get('/capex',           [ReportController::class, 'capex'])->name('capex');
 
     Route::middleware('permission:export reports')->group(function () {
         Route::get('/export/approved',    [ReportController::class, 'exportApproved'])->name('export.approved');
@@ -252,6 +257,12 @@ Route::prefix('import-export')->name('ie.')->group(function () {
     // Budget
     Route::get('budget/{budgetVersion}/download',
         [ImportExportController::class, 'downloadBudgetTemplate'])->name('budget.download');
+    Route::get('budget/{budgetVersion}/download-pnl',
+        [ImportExportController::class, 'downloadPnlBudgetTemplate'])->name('budget.download-pnl');
+    Route::get('budget/{budgetVersion}/export',
+        [ImportExportController::class, 'exportBudget'])->name('budget.export');
+    Route::get('budget/{budgetVersion}/export-pnl',
+        [ImportExportController::class, 'exportPnlBudget'])->name('budget.export-pnl');
     Route::post('budget/{budgetVersion}/upload',
         [ImportExportController::class, 'uploadBudget'])->name('budget.upload');
 

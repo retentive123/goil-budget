@@ -31,8 +31,7 @@ class BudgetImport implements
                 $lineItemId = (int) $row['line_item_id'];
 
                 if (!$lineItemId) {
-                    $this->errors[] = "Row ".($index+3).": Missing line_item_id.";
-                    continue;
+                    continue; // silently skip header/subtotal/spacer rows (P&L template)
                 }
 
                 $item = BudgetLineItem::where('id', $lineItemId)

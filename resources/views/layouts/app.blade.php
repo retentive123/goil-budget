@@ -812,6 +812,16 @@
                 <i class="fas fa-arrow-up nav-icon"></i>
                 <span class="link-text">Utilisation</span>
             </a>
+            <a href="{{ route('reports.financial') }}"
+               class="sidebar-link {{ request()->routeIs('reports.financial') ? 'active' : '' }}">
+                <i class="fas fa-file-invoice-dollar nav-icon"></i>
+                <span class="link-text">Financial Statements</span>
+            </a>
+            <a href="{{ route('reports.capex') }}"
+               class="sidebar-link {{ request()->routeIs('reports.capex') ? 'active' : '' }}">
+                <i class="fas fa-hard-hat nav-icon"></i>
+                <span class="link-text">Capital Expenditure</span>
+            </a>
         </div>
         @endcan
         {{-- ════════════════════════════════════════════════ --}}

@@ -10,6 +10,7 @@ use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
@@ -32,10 +33,7 @@ class AccountCategoryDataSheet implements
     WithStyles,
     ShouldAutoSize
 {
-    public function title(): string
-    {
-        return 'Existing Categories';
-    }
+    public function title(): string { return 'Existing Categories'; }
 
     public function collection()
     {
@@ -45,6 +43,7 @@ class AccountCategoryDataSheet implements
                 $c->id,
                 $c->code,
                 $c->name,
+                $c->budget_type,
                 $c->description,
                 $c->is_active ? 'Yes' : 'No',
                 $c->accountCodes()->count(),
@@ -53,44 +52,22 @@ class AccountCategoryDataSheet implements
 
     public function headings(): array
     {
-        return ['ID', 'Code', 'Name', 'Description', 'Active', 'Code Count'];
+        return ['ID', 'Code', 'Name', 'Budget Type', 'Description', 'Active', 'Code Count'];
     }
 
     public function styles(Worksheet $sheet)
     {
-        // Style the header row
-        $sheet->getStyle('A1:F1')->applyFromArray([
-            'font' => [
-                'bold' => true,
-                'color' => ['argb' => 'FFFFFFFF'],
-                'size' => 12,
-            ],
-            'fill' => [
-                'fillType' => Fill::FILL_SOLID,
-                'startColor' => ['argb' => 'FF1B2A4A'], // Navy blue
-            ],
-            'alignment' => [
-                'horizontal' => Alignment::HORIZONTAL_CENTER,
-            ],
+        $sheet->getStyle('A1:G1')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF'], 'size' => 12],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF1B2A4A']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
         ]);
 
-        // Hide the ID column (column A)
         $sheet->getColumnDimension('A')->setVisible(false);
 
-        // Auto-size other columns
-        foreach (range('B', 'F') as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
-        }
-
-        // Add borders to data range
         $highestRow = $sheet->getHighestRow();
-        $sheet->getStyle('A1:F' . $highestRow)->applyFromArray([
-            'borders' => [
-                'allBorders' => [
-                    'borderStyle' => Border::BORDER_THIN,
-                    'color' => ['argb' => 'FFCBD5E1'],
-                ],
-            ],
+        $sheet->getStyle('A1:G' . $highestRow)->applyFromArray([
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['argb' => 'FFCBD5E1']]],
         ]);
 
         return [];
@@ -102,79 +79,56 @@ class AccountCategoryTemplateSheet implements
     WithStyles,
     ShouldAutoSize
 {
-    public function title(): string
-    {
-        return 'Import Template';
-    }
+    // All valid budget_type values
+    private const VALID_TYPES = ['revenue', 'expense', 'both', 'assets', 'liabilities', 'capital_expenditure'];
 
-    /**
-     *  FIX: Use styles() method instead of __invoke()
-     */
+    public function title(): string { return 'Import Template'; }
+
     public function styles(Worksheet $sheet)
     {
-        // Set column headers
-        $sheet->fromArray([[
-            'code', 'name', 'description',
-        ]], null, 'A1');
+        // Headers: A=code, B=name, C=budget_type, D=description
+        $sheet->fromArray([['code', 'name', 'budget_type', 'description']], null, 'A1');
 
-        // Style the header row
-        $sheet->getStyle('A1:C1')->applyFromArray([
-            'font' => [
-                'bold' => true,
-                'color' => ['argb' => 'FFFFFFFF'],
-                'size' => 12,
-            ],
-            'fill' => [
-                'fillType' => Fill::FILL_SOLID,
-                'startColor' => ['argb' => 'FF1B2A4A'], // Navy blue
-            ],
-            'alignment' => [
-                'horizontal' => Alignment::HORIZONTAL_CENTER,
-            ],
+        $sheet->getStyle('A1:D1')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF'], 'size' => 12],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF1B2A4A']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
         ]);
 
         // Sample row
-        $sampleRow = [
-            'OPEX', 'Operating Expenses', 'Day-to-day operational costs',
-        ];
-        $sheet->fromArray([$sampleRow], null, 'A2');
-
-        // Style the sample row
-        $sheet->getStyle('A2:C2')->applyFromArray([
-            'fill' => [
-                'fillType' => Fill::FILL_SOLID,
-                'startColor' => ['argb' => 'FFFFF9C4'], // Light yellow
-            ],
-            'font' => [
-                'color' => ['argb' => 'FF666666'],
-            ],
+        $sheet->fromArray([['OPEX', 'Operating Expenses', 'expense', 'Day-to-day operational costs']], null, 'A2');
+        $sheet->getStyle('A2:D2')->applyFromArray([
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFFF9C4']],
+            'font' => ['color' => ['argb' => 'FF666666']],
         ]);
 
-        // Add helper text
-        $sheet->setCellValue('E1', '← Sample row. Delete before uploading.');
-
-        // Style helper text
-        $sheet->getStyle('E1')->applyFromArray([
-            'font' => [
-                'italic' => true,
-                'color' => ['argb' => 'FF999999'],
-            ],
-        ]);
-
-        // Auto-size columns
-        foreach (range('A', 'C') as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
+        // Data validation dropdown for budget_type (column C), rows 2–200
+        $typeList = '"' . implode(',', self::VALID_TYPES) . '"';
+        for ($row = 2; $row <= 200; $row++) {
+            $dv = $sheet->getCell("C{$row}")->getDataValidation();
+            $dv->setType(DataValidation::TYPE_LIST);
+            $dv->setErrorStyle(DataValidation::STYLE_STOP);
+            $dv->setAllowBlank(false);
+            $dv->setShowDropDown(true);
+            $dv->setShowInputMessage(true);
+            $dv->setPromptTitle('Budget Type');
+            $dv->setPrompt('Pick one: ' . implode(', ', self::VALID_TYPES));
+            $dv->setShowErrorMessage(true);
+            $dv->setErrorTitle('Invalid type');
+            $dv->setError('Must be one of: ' . implode(', ', self::VALID_TYPES));
+            $dv->setFormula1($typeList);
         }
 
-        // Add borders to data range
-        $highestRow = $sheet->getHighestRow();
-        $sheet->getStyle('A1:C' . $highestRow)->applyFromArray([
-            'borders' => [
-                'allBorders' => [
-                    'borderStyle' => Border::BORDER_THIN,
-                    'color' => ['argb' => 'FFCBD5E1'],
-                ],
-            ],
+        // Helper text
+        $sheet->setCellValue('F1', '← Sample row (delete before uploading).');
+        $sheet->setCellValue('F2', 'budget_type values: revenue | expense | both | assets | liabilities | capital_expenditure');
+        $sheet->getStyle('F1:F2')->applyFromArray([
+            'font' => ['italic' => true, 'color' => ['argb' => 'FF999999'], 'size' => 10],
+        ]);
+
+        $highestRow = max(2, $sheet->getHighestDataRow());
+        $sheet->getStyle("A1:D{$highestRow}")->applyFromArray([
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['argb' => 'FFCBD5E1']]],
         ]);
 
         return [];

@@ -536,6 +536,49 @@ public function deptComparison(Request $request)
         ));
     }
 
+    // ── Financial Statement (P&L / Cash Flow / Balance Sheet) ──
+    public function financialStatement(Request $request)
+    {
+        $period      = $this->resolvePeriod($request);
+        $periods     = BudgetPeriod::orderByDesc('year')->orderByDesc('id')->get();
+        $departments = Department::where('is_active', true)->orderBy('name')->get();
+        $deptId      = $request->integer('department_id') ?: null;
+
+        if (!$period) {
+            return view('reports.financial', [
+                'period'       => null,
+                'periods'      => $periods,
+                'departments'  => $departments,
+                'deptId'       => null,
+                'pnl'          => null,
+                'cashflow'     => null,
+                'balanceSheet' => null,
+            ]);
+        }
+
+        $versions = BudgetVersion::where('budget_period_id', $period->id)
+            ->where('status', 'approved')
+            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->get();
+
+        // Previous period for year-over-year columns
+        $prevPeriod = BudgetPeriod::where('year', $period->year - 1)
+            ->orderByDesc('id')->first()
+            ?? BudgetPeriod::where('id', '<', $period->id)
+                ->orderByDesc('year')->orderByDesc('id')->first();
+
+        return view('reports.financial', [
+            'period'       => $period,
+            'prevPeriod'   => $prevPeriod,
+            'periods'      => $periods,
+            'departments'  => $departments,
+            'deptId'       => $deptId,
+            'pnl'          => $this->buildPnlData($versions, $period, $deptId, $prevPeriod),
+            'cashflow'     => $this->buildCashFlowData($versions, $period, $deptId),
+            'balanceSheet' => $this->buildBalanceSheetData($versions, $period, $deptId, $prevPeriod),
+        ]);
+    }
+
     // ── Exports ───────────────────────────────────────────────
     public function exportApproved(Request $request)
     {
@@ -832,12 +875,17 @@ private function buildBudgetData($versions): array
 
     foreach ($versions as $version) {
         foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
+            // Exclude balance-sheet and capex items from P&L-based reports
+            $budgetType = $item->accountCode->category->budget_type ?? 'expense';
+            if (!in_array($budgetType, ['revenue', 'expense', 'both'])) continue;
+
             $cat  = $item->accountCode->category->name;
             $code = $item->accountCode->code;
 
             if (!isset($raw[$cat][$code])) {
                 $raw[$cat][$code] = [
                     'name'          => $item->accountCode->name,
+                    'budget_type'   => $budgetType,
                     'q1'            => 0,
                     'q2'            => 0,
                     'q3'            => 0,
@@ -884,15 +932,22 @@ private function buildVarianceData($versions, float $minPct = 0, string $filter 
     foreach ($raw as $cat => $codes) {
         foreach ($codes as $code => $vals) {
 
-            $actual   = (float) ($actualsByCode[$code] ?? 0);
-            $variance = $actual - $vals['total']; // total = effective budget
+            $actual    = (float) ($actualsByCode[$code] ?? 0);
+            $isRevenue = in_array($vals['budget_type'] ?? 'expense', ['revenue', 'both']);
+
+            // Both formulas produce: positive = favorable (green), negative = unfavorable (red)
+            // Revenue: actual − budget  (over-achievement is positive = good)
+            // Expense: budget − actual  (under-budget is positive = good)
+            $variance = $isRevenue
+                ? $actual - $vals['total']
+                : $vals['total'] - $actual;
             $pct      = $vals['total'] > 0
                 ? round(($variance / $vals['total']) * 100, 1)
                 : 0;
 
             if (abs($pct) < $minPct) continue;
-            if ($filter === 'over'  && $variance <= 0) continue;
-            if ($filter === 'under' && $variance >= 0) continue;
+            if ($filter === 'over'  && $variance >= 0) continue; // overspend  = negative variance
+            if ($filter === 'under' && $variance <= 0) continue; // underspend = positive variance
 
             $result[$cat][$code] = [
                 'name'          => $vals['name'],
@@ -902,8 +957,8 @@ private function buildVarianceData($versions, float $minPct = 0, string $filter 
                 'actual'        => $actual,
                 'variance'      => $variance,
                 'pct'           => $pct,
-                'status'        => $variance > 0 ? 'overspend'
-                    : ($variance < 0 ? 'underspend' : 'on_budget'),
+                'status'        => $variance < 0 ? 'overspend'
+                    : ($variance > 0 ? 'underspend' : 'on_budget'),
             ];
         }
     }
@@ -1106,6 +1161,594 @@ private function buildCodeExplorerData(Request $request): array
     }
 
     return [];
+}
+
+// ── P&L builder ───────────────────────────────────────────────────────────
+private function buildPnlData($versions, $period, ?int $deptId, ?BudgetPeriod $prevPeriod = null): array
+{
+    // Current-year confirmed actuals by account code
+    $actualsByCode = \App\Models\BudgetActual::where('budget_period_id', $period->id)
+        ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+        ->where('status', 'confirmed')
+        ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
+        ->selectRaw('account_codes.code as ac, SUM(budget_actuals.amount) as total')
+        ->groupBy('account_codes.code')
+        ->pluck('total', 'ac')
+        ->toArray();
+
+    // Previous-year actuals and effective budgets by account code
+    $prevActualsByCode = [];
+    $prevBudgetByCode  = [];
+
+    if ($prevPeriod) {
+        $prevActualsByCode = \App\Models\BudgetActual::where('budget_period_id', $prevPeriod->id)
+            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->where('status', 'confirmed')
+            ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
+            ->selectRaw('account_codes.code as ac, SUM(budget_actuals.amount) as total')
+            ->groupBy('account_codes.code')
+            ->pluck('total', 'ac')
+            ->toArray();
+
+        $prevVersions = BudgetVersion::where('budget_period_id', $prevPeriod->id)
+            ->where('status', 'approved')
+            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->get();
+
+        foreach ($prevVersions as $pv) {
+            foreach ($pv->lineItems()->with('accountCode')->get() as $item) {
+                $c = $item->accountCode->code;
+                $prevBudgetByCode[$c] = ($prevBudgetByCode[$c] ?? 0)
+                    + $item->total_amount + $item->approvedSupplementaryTotal();
+            }
+        }
+    }
+
+    // Accumulate raw data keyed by type → category → code
+    $raw = ['revenue' => [], 'expense' => []];
+
+    foreach ($versions as $version) {
+        foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
+            $cat     = $item->accountCode->category;
+            // Skip balance-sheet and capex items
+            if (!in_array($cat->budget_type, ['revenue', 'expense', 'both'])) continue;
+            $catName = $cat->name;
+            $code    = $item->accountCode->code;
+            $type    = in_array($cat->budget_type, ['revenue', 'both']) ? 'revenue' : 'expense';
+            $supp    = $item->approvedSupplementaryTotal();
+
+            if (!isset($raw[$type][$catName][$code])) {
+                $raw[$type][$catName][$code] = [
+                    'code' => $code, 'name' => $item->accountCode->name,
+                    'q1' => 0, 'q2' => 0, 'q3' => 0, 'q4' => 0,
+                    'budget' => 0, 'supp' => 0,
+                ];
+            }
+            $raw[$type][$catName][$code]['q1']     += $item->q1_amount;
+            $raw[$type][$catName][$code]['q2']     += $item->q2_amount;
+            $raw[$type][$catName][$code]['q3']     += $item->q3_amount;
+            $raw[$type][$catName][$code]['q4']     += $item->q4_amount;
+            $raw[$type][$catName][$code]['budget'] += $item->total_amount;
+            $raw[$type][$catName][$code]['supp']   += $supp;
+        }
+    }
+
+    $sections    = [];
+    $grandTotals = [];
+
+    foreach (['revenue', 'expense'] as $type) {
+        $sections[$type]    = [];
+        $grandTotals[$type] = [
+            'effective' => 0, 'actual' => 0,
+            'prev_budget' => 0, 'prev_actual' => 0,
+        ];
+
+        foreach ($raw[$type] as $catName => $codes) {
+            $catT     = ['effective' => 0, 'actual' => 0, 'prev_budget' => 0, 'prev_actual' => 0];
+            $codeRows = [];
+
+            foreach ($codes as $code => $v) {
+                $effective  = $v['budget'] + $v['supp'];
+                $actual     = (float) ($actualsByCode[$v['code']] ?? 0);
+                $prevBudget = (float) ($prevBudgetByCode[$v['code']] ?? 0);
+                $prevActual = (float) ($prevActualsByCode[$v['code']] ?? 0);
+
+                $variance = $type === 'revenue'
+                    ? $actual - $effective : $effective - $actual;
+                $pct = $effective > 0 ? round(($variance / $effective) * 100, 1) : 0;
+
+                $prevVariance = $type === 'revenue'
+                    ? $prevActual - $prevBudget : $prevBudget - $prevActual;
+                $prevPct = $prevBudget > 0 ? round(($prevVariance / $prevBudget) * 100, 1) : 0;
+
+                $growthPct = $prevActual != 0
+                    ? round((($actual - $prevActual) / abs($prevActual)) * 100, 1)
+                    : null;
+
+                $codeRows[] = array_merge($v, [
+                    'effective'    => $effective,
+                    'actual'       => $actual,
+                    'variance'     => $variance,
+                    'pct'          => $pct,
+                    'prev_budget'  => $prevBudget,
+                    'prev_actual'  => $prevActual,
+                    'prev_var_pct' => $prevPct,
+                    'growth_pct'   => $growthPct,
+                    'common_size'  => 0, // filled in second pass
+                ]);
+
+                $catT['effective']   += $effective;
+                $catT['actual']      += $actual;
+                $catT['prev_budget'] += $prevBudget;
+                $catT['prev_actual'] += $prevActual;
+            }
+
+            $catT['variance'] = $type === 'revenue'
+                ? $catT['actual'] - $catT['effective']
+                : $catT['effective'] - $catT['actual'];
+            $catT['pct'] = $catT['effective'] > 0
+                ? round(($catT['variance'] / $catT['effective']) * 100, 1) : 0;
+            $catT['prev_variance'] = $type === 'revenue'
+                ? $catT['prev_actual'] - $catT['prev_budget']
+                : $catT['prev_budget'] - $catT['prev_actual'];
+            $catT['prev_var_pct'] = $catT['prev_budget'] > 0
+                ? round(($catT['prev_variance'] / $catT['prev_budget']) * 100, 1) : 0;
+            $catT['growth_pct'] = $catT['prev_actual'] != 0
+                ? round((($catT['actual'] - $catT['prev_actual']) / abs($catT['prev_actual'])) * 100, 1)
+                : null;
+            $catT['common_size'] = 0; // second pass
+
+            $sections[$type][] = ['name' => $catName, 'codes' => $codeRows, 'total' => $catT];
+
+            foreach (['effective','actual','prev_budget','prev_actual'] as $k) {
+                $grandTotals[$type][$k] += $catT[$k];
+            }
+        }
+
+        $grandTotals[$type]['variance'] = $type === 'revenue'
+            ? $grandTotals[$type]['actual'] - $grandTotals[$type]['effective']
+            : $grandTotals[$type]['effective'] - $grandTotals[$type]['actual'];
+        $grandTotals[$type]['pct'] = $grandTotals[$type]['effective'] > 0
+            ? round(($grandTotals[$type]['variance'] / $grandTotals[$type]['effective']) * 100, 1) : 0;
+        $grandTotals[$type]['prev_variance'] = $type === 'revenue'
+            ? $grandTotals[$type]['prev_actual'] - $grandTotals[$type]['prev_budget']
+            : $grandTotals[$type]['prev_budget'] - $grandTotals[$type]['prev_actual'];
+        $grandTotals[$type]['prev_var_pct'] = $grandTotals[$type]['prev_budget'] > 0
+            ? round(($grandTotals[$type]['prev_variance'] / $grandTotals[$type]['prev_budget']) * 100, 1) : 0;
+        $grandTotals[$type]['growth_pct'] = $grandTotals[$type]['prev_actual'] != 0
+            ? round((($grandTotals[$type]['actual'] - $grandTotals[$type]['prev_actual']) / abs($grandTotals[$type]['prev_actual'])) * 100, 1)
+            : null;
+    }
+
+    // Second pass — common size: each code as % of its section's effective total
+    foreach (['revenue', 'expense'] as $type) {
+        $sectionEff = $grandTotals[$type]['effective'];
+        foreach ($sections[$type] as &$cat) {
+            $cat['total']['common_size'] = $sectionEff > 0
+                ? round(($cat['total']['effective'] / $sectionEff) * 100, 1) : 0;
+            foreach ($cat['codes'] as &$row) {
+                $row['common_size'] = $sectionEff > 0
+                    ? round(($row['effective'] / $sectionEff) * 100, 1) : 0;
+            }
+            unset($row);
+        }
+        unset($cat);
+    }
+
+    $netBudget      = $grandTotals['revenue']['effective'] - $grandTotals['expense']['effective'];
+    $netActual      = $grandTotals['revenue']['actual']    - $grandTotals['expense']['actual'];
+    $netVariance    = $netActual - $netBudget;
+    $prevNetBudget  = $grandTotals['revenue']['prev_budget'] - $grandTotals['expense']['prev_budget'];
+    $prevNetActual  = $grandTotals['revenue']['prev_actual'] - $grandTotals['expense']['prev_actual'];
+
+    return [
+        'sections'        => $sections,
+        'totals'          => $grandTotals,
+        'net_budget'      => $netBudget,
+        'net_actual'      => $netActual,
+        'net_variance'    => $netVariance,
+        'net_pct'         => $netBudget != 0 ? round(($netVariance / abs($netBudget)) * 100, 1) : 0,
+        'prev_net_budget' => $prevNetBudget,
+        'prev_net_actual' => $prevNetActual,
+        'net_growth_pct'  => $prevNetActual != 0
+            ? round((($netActual - $prevNetActual) / abs($prevNetActual)) * 100, 1) : null,
+    ];
+}
+
+// ── Cash-flow builder ─────────────────────────────────────────────────────
+private function buildCashFlowData($versions, $period, ?int $deptId): array
+{
+    // Quarterly budget by type (revenue / expense)
+    $qBudget = ['revenue' => [1=>0,2=>0,3=>0,4=>0], 'expense' => [1=>0,2=>0,3=>0,4=>0]];
+
+    foreach ($versions as $version) {
+        foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
+            if (!in_array($item->accountCode->category->budget_type, ['revenue', 'expense', 'both'])) continue;
+            $type = in_array($item->accountCode->category->budget_type, ['revenue','both'])
+                ? 'revenue' : 'expense';
+            $supp = $item->approvedSupplementaryTotal();
+            $qBudget[$type][1] += $item->q1_amount;
+            $qBudget[$type][2] += $item->q2_amount;
+            $qBudget[$type][3] += $item->q3_amount;
+            $qBudget[$type][4] += $item->q4_amount + $supp;
+        }
+    }
+
+    // Monthly confirmed actuals grouped by month and category type
+    $monthlyActuals = \App\Models\BudgetActual::where('budget_period_id', $period->id)
+        ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+        ->where('status', 'confirmed')
+        ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
+        ->join('account_categories', 'account_codes.account_category_id', '=', 'account_categories.id')
+        ->selectRaw('budget_actuals.month, account_categories.budget_type, SUM(budget_actuals.amount) as total')
+        ->groupBy('budget_actuals.month', 'account_categories.budget_type')
+        ->get();
+
+    // Build month table: budget interpolated as quarter ÷ 3
+    $months = [];
+    for ($m = 1; $m <= 12; $m++) {
+        $q = (int) ceil($m / 3);
+        $months[$m] = [
+            'budget_in'  => $qBudget['revenue'][$q] / 3,
+            'budget_out' => $qBudget['expense'][$q] / 3,
+            'actual_in'  => 0.0,
+            'actual_out' => 0.0,
+        ];
+    }
+
+    foreach ($monthlyActuals as $row) {
+        $type = in_array($row->budget_type, ['revenue','both']) ? 'revenue' : 'expense';
+        if ($type === 'revenue') {
+            $months[$row->month]['actual_in']  += $row->total;
+        } else {
+            $months[$row->month]['actual_out'] += $row->total;
+        }
+    }
+
+    // Add derived: net flow + cumulative
+    $cumBudget = 0.0;
+    $cumActual = 0.0;
+    foreach ($months as $m => &$d) {
+        $d['net_budget'] = $d['budget_in']  - $d['budget_out'];
+        $d['net_actual'] = $d['actual_in']  - $d['actual_out'];
+        $cumBudget      += $d['net_budget'];
+        $cumActual      += $d['net_actual'];
+        $d['cum_budget'] = $cumBudget;
+        $d['cum_actual'] = $cumActual;
+    }
+    unset($d);
+
+    // Quarterly roll-up
+    $quarterly = [];
+    for ($q = 1; $q <= 4; $q++) {
+        $qMonths           = array_intersect_key($months, array_flip(range(($q-1)*3+1, $q*3)));
+        $quarterly[$q]     = [
+            'budget_in'  => $qBudget['revenue'][$q],
+            'budget_out' => $qBudget['expense'][$q],
+            'actual_in'  => array_sum(array_column($qMonths, 'actual_in')),
+            'actual_out' => array_sum(array_column($qMonths, 'actual_out')),
+        ];
+        $quarterly[$q]['net_budget'] = $quarterly[$q]['budget_in']  - $quarterly[$q]['budget_out'];
+        $quarterly[$q]['net_actual'] = $quarterly[$q]['actual_in']  - $quarterly[$q]['actual_out'];
+    }
+
+    return [
+        'monthly'   => $months,
+        'quarterly' => $quarterly,
+        'q_budget'  => $qBudget,
+        'annual'    => [
+            'budget_in'  => array_sum($qBudget['revenue']),
+            'budget_out' => array_sum($qBudget['expense']),
+            'actual_in'  => array_sum(array_column($months, 'actual_in')),
+            'actual_out' => array_sum(array_column($months, 'actual_out')),
+        ],
+    ];
+}
+
+// ── Balance Sheet data builder ────────────────────────────────────────────
+private function buildBalanceSheetData($versions, $period, ?int $deptId, ?BudgetPeriod $prevPeriod = null): array
+{
+    $actualsByCode     = [];
+    $prevActualsByCode = [];
+    $prevBudgetByCode  = [];
+
+    $actualsByCode = \App\Models\BudgetActual::where('budget_period_id', $period->id)
+        ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+        ->where('status', 'confirmed')
+        ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
+        ->selectRaw('account_codes.code as ac, SUM(budget_actuals.amount) as total')
+        ->groupBy('account_codes.code')
+        ->pluck('total', 'ac')
+        ->toArray();
+
+    if ($prevPeriod) {
+        $prevActualsByCode = \App\Models\BudgetActual::where('budget_period_id', $prevPeriod->id)
+            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->where('status', 'confirmed')
+            ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
+            ->selectRaw('account_codes.code as ac, SUM(budget_actuals.amount) as total')
+            ->groupBy('account_codes.code')
+            ->pluck('total', 'ac')
+            ->toArray();
+
+        $prevVersions = BudgetVersion::where('budget_period_id', $prevPeriod->id)
+            ->where('status', 'approved')
+            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->get();
+        foreach ($prevVersions as $pv) {
+            foreach ($pv->lineItems()->with('accountCode')->get() as $item) {
+                $c = $item->accountCode->code;
+                $prevBudgetByCode[$c] = ($prevBudgetByCode[$c] ?? 0)
+                    + $item->total_amount + $item->approvedSupplementaryTotal();
+            }
+        }
+    }
+
+    $raw = ['assets' => [], 'liabilities' => []];
+
+    foreach ($versions as $version) {
+        foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
+            $cat     = $item->accountCode->category;
+            $type    = match($cat->budget_type) {
+                'assets'      => 'assets',
+                'liabilities' => 'liabilities',
+                default       => null,
+            };
+            if (!$type) continue;
+
+            $catName = $cat->name;
+            $code    = $item->accountCode->code;
+            $supp    = $item->approvedSupplementaryTotal();
+
+            if (!isset($raw[$type][$catName][$code])) {
+                $raw[$type][$catName][$code] = [
+                    'code' => $code, 'name' => $item->accountCode->name,
+                    'q1' => 0, 'q2' => 0, 'q3' => 0, 'q4' => 0,
+                    'budget' => 0, 'supp' => 0,
+                ];
+            }
+            $raw[$type][$catName][$code]['q1']     += $item->q1_amount;
+            $raw[$type][$catName][$code]['q2']     += $item->q2_amount;
+            $raw[$type][$catName][$code]['q3']     += $item->q3_amount;
+            $raw[$type][$catName][$code]['q4']     += $item->q4_amount;
+            $raw[$type][$catName][$code]['budget'] += $item->total_amount;
+            $raw[$type][$catName][$code]['supp']   += $supp;
+        }
+    }
+
+    $sections    = [];
+    $grandTotals = [];
+
+    foreach (['assets', 'liabilities'] as $type) {
+        $sections[$type]    = [];
+        $grandTotals[$type] = ['effective' => 0, 'actual' => 0, 'prev_budget' => 0, 'prev_actual' => 0];
+
+        foreach ($raw[$type] as $catName => $codes) {
+            $catT     = ['effective' => 0, 'actual' => 0, 'prev_budget' => 0, 'prev_actual' => 0];
+            $codeRows = [];
+
+            foreach ($codes as $code => $v) {
+                $effective  = $v['budget'] + $v['supp'];
+                $actual     = (float) ($actualsByCode[$v['code']] ?? 0);
+                $prevBudget = (float) ($prevBudgetByCode[$v['code']] ?? 0);
+                $prevActual = (float) ($prevActualsByCode[$v['code']] ?? 0);
+                $growthPct  = $prevActual != 0
+                    ? round((($actual - $prevActual) / abs($prevActual)) * 100, 1) : null;
+
+                $codeRows[] = array_merge($v, [
+                    'effective'   => $effective,
+                    'actual'      => $actual,
+                    'prev_budget' => $prevBudget,
+                    'prev_actual' => $prevActual,
+                    'growth_pct'  => $growthPct,
+                    'common_size' => 0,
+                ]);
+
+                $catT['effective']   += $effective;
+                $catT['actual']      += $actual;
+                $catT['prev_budget'] += $prevBudget;
+                $catT['prev_actual'] += $prevActual;
+            }
+
+            $catT['growth_pct']  = $catT['prev_actual'] != 0
+                ? round((($catT['actual'] - $catT['prev_actual']) / abs($catT['prev_actual'])) * 100, 1) : null;
+            $catT['common_size'] = 0;
+
+            $sections[$type][] = ['name' => $catName, 'codes' => $codeRows, 'total' => $catT];
+
+            foreach (['effective', 'actual', 'prev_budget', 'prev_actual'] as $k) {
+                $grandTotals[$type][$k] += $catT[$k];
+            }
+        }
+
+        $grandTotals[$type]['growth_pct'] = $grandTotals[$type]['prev_actual'] != 0
+            ? round((($grandTotals[$type]['actual'] - $grandTotals[$type]['prev_actual']) / abs($grandTotals[$type]['prev_actual'])) * 100, 1) : null;
+    }
+
+    // Common size: each code as % of its section total
+    foreach (['assets', 'liabilities'] as $type) {
+        $sectionEff = $grandTotals[$type]['effective'];
+        foreach ($sections[$type] as &$cat) {
+            $cat['total']['common_size'] = $sectionEff > 0
+                ? round(($cat['total']['effective'] / $sectionEff) * 100, 1) : 0;
+            foreach ($cat['codes'] as &$row) {
+                $row['common_size'] = $sectionEff > 0
+                    ? round(($row['effective'] / $sectionEff) * 100, 1) : 0;
+            }
+            unset($row);
+        }
+        unset($cat);
+    }
+
+    $netBudget = $grandTotals['assets']['effective'] - $grandTotals['liabilities']['effective'];
+    $netActual = $grandTotals['assets']['actual']    - $grandTotals['liabilities']['actual'];
+
+    return [
+        'sections'   => $sections,
+        'totals'     => $grandTotals,
+        'net_budget' => $netBudget,
+        'net_actual' => $netActual,
+    ];
+}
+
+// ── CapEx data builder ────────────────────────────────────────────────────
+private function buildCapexData($versions, $period, ?int $deptId, ?BudgetPeriod $prevPeriod = null): array
+{
+    $actualsByCode     = [];
+    $prevActualsByCode = [];
+    $prevBudgetByCode  = [];
+
+    $actualsByCode = \App\Models\BudgetActual::where('budget_period_id', $period->id)
+        ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+        ->where('status', 'confirmed')
+        ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
+        ->selectRaw('account_codes.code as ac, SUM(budget_actuals.amount) as total')
+        ->groupBy('account_codes.code')
+        ->pluck('total', 'ac')
+        ->toArray();
+
+    if ($prevPeriod) {
+        $prevActualsByCode = \App\Models\BudgetActual::where('budget_period_id', $prevPeriod->id)
+            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->where('status', 'confirmed')
+            ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
+            ->selectRaw('account_codes.code as ac, SUM(budget_actuals.amount) as total')
+            ->groupBy('account_codes.code')
+            ->pluck('total', 'ac')
+            ->toArray();
+
+        $prevVersions = BudgetVersion::where('budget_period_id', $prevPeriod->id)
+            ->where('status', 'approved')
+            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->get();
+        foreach ($prevVersions as $pv) {
+            foreach ($pv->lineItems()->with('accountCode')->get() as $item) {
+                $c = $item->accountCode->code;
+                $prevBudgetByCode[$c] = ($prevBudgetByCode[$c] ?? 0)
+                    + $item->total_amount + $item->approvedSupplementaryTotal();
+            }
+        }
+    }
+
+    $raw = [];
+
+    foreach ($versions as $version) {
+        foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
+            if ($item->accountCode->category->budget_type !== 'capital_expenditure') continue;
+
+            $catName = $item->accountCode->category->name;
+            $code    = $item->accountCode->code;
+            $supp    = $item->approvedSupplementaryTotal();
+
+            if (!isset($raw[$catName][$code])) {
+                $raw[$catName][$code] = [
+                    'code' => $code, 'name' => $item->accountCode->name,
+                    'q1' => 0, 'q2' => 0, 'q3' => 0, 'q4' => 0,
+                    'budget' => 0, 'supp' => 0,
+                ];
+            }
+            $raw[$catName][$code]['q1']     += $item->q1_amount;
+            $raw[$catName][$code]['q2']     += $item->q2_amount;
+            $raw[$catName][$code]['q3']     += $item->q3_amount;
+            $raw[$catName][$code]['q4']     += $item->q4_amount;
+            $raw[$catName][$code]['budget'] += $item->total_amount;
+            $raw[$catName][$code]['supp']   += $supp;
+        }
+    }
+
+    $sections    = [];
+    $grandTotals = ['effective' => 0, 'actual' => 0, 'prev_budget' => 0, 'prev_actual' => 0];
+
+    foreach ($raw as $catName => $codes) {
+        $catT     = ['effective' => 0, 'actual' => 0, 'prev_budget' => 0, 'prev_actual' => 0];
+        $codeRows = [];
+
+        foreach ($codes as $code => $v) {
+            $effective  = $v['budget'] + $v['supp'];
+            $actual     = (float) ($actualsByCode[$v['code']] ?? 0);
+            $prevBudget = (float) ($prevBudgetByCode[$v['code']] ?? 0);
+            $prevActual = (float) ($prevActualsByCode[$v['code']] ?? 0);
+            $growthPct  = $prevActual != 0
+                ? round((($actual - $prevActual) / abs($prevActual)) * 100, 1) : null;
+
+            $codeRows[] = array_merge($v, [
+                'effective'   => $effective,
+                'actual'      => $actual,
+                'prev_budget' => $prevBudget,
+                'prev_actual' => $prevActual,
+                'growth_pct'  => $growthPct,
+                'common_size' => 0,
+            ]);
+
+            $catT['effective']   += $effective;
+            $catT['actual']      += $actual;
+            $catT['prev_budget'] += $prevBudget;
+            $catT['prev_actual'] += $prevActual;
+        }
+
+        $catT['growth_pct']  = $catT['prev_actual'] != 0
+            ? round((($catT['actual'] - $catT['prev_actual']) / abs($catT['prev_actual'])) * 100, 1) : null;
+        $catT['common_size'] = 0;
+
+        $sections[] = ['name' => $catName, 'codes' => $codeRows, 'total' => $catT];
+        foreach (['effective', 'actual', 'prev_budget', 'prev_actual'] as $k) {
+            $grandTotals[$k] += $catT[$k];
+        }
+    }
+
+    $grandTotals['growth_pct'] = $grandTotals['prev_actual'] != 0
+        ? round((($grandTotals['actual'] - $grandTotals['prev_actual']) / abs($grandTotals['prev_actual'])) * 100, 1) : null;
+
+    // Common size
+    $sectionEff = $grandTotals['effective'];
+    foreach ($sections as &$cat) {
+        $cat['total']['common_size'] = $sectionEff > 0
+            ? round(($cat['total']['effective'] / $sectionEff) * 100, 1) : 0;
+        foreach ($cat['codes'] as &$row) {
+            $row['common_size'] = $sectionEff > 0
+                ? round(($row['effective'] / $sectionEff) * 100, 1) : 0;
+        }
+        unset($row);
+    }
+    unset($cat);
+
+    return ['sections' => $sections, 'totals' => $grandTotals];
+}
+
+// ── Public actions for new reports ────────────────────────────────────────
+public function capex(Request $request)
+{
+    $period      = $this->resolvePeriod($request);
+    $periods     = BudgetPeriod::orderByDesc('year')->orderByDesc('id')->get();
+    $departments = Department::where('is_active', true)->orderBy('name')->get();
+    $deptId      = $request->integer('department_id') ?: null;
+
+    if (!$period) {
+        return view('reports.capex', [
+            'period' => null, 'periods' => $periods,
+            'departments' => $departments, 'deptId' => null,
+            'capex' => null, 'prevPeriod' => null,
+        ]);
+    }
+
+    $versions = BudgetVersion::where('budget_period_id', $period->id)
+        ->where('status', 'approved')
+        ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+        ->get();
+
+    $prevPeriod = BudgetPeriod::where('year', $period->year - 1)
+        ->orderByDesc('id')->first()
+        ?? BudgetPeriod::where('id', '<', $period->id)
+            ->orderByDesc('year')->orderByDesc('id')->first();
+
+    return view('reports.capex', [
+        'period'      => $period,
+        'prevPeriod'  => $prevPeriod,
+        'periods'     => $periods,
+        'departments' => $departments,
+        'deptId'      => $deptId,
+        'capex'       => $this->buildCapexData($versions, $period, $deptId, $prevPeriod),
+    ]);
 }
 
 }

@@ -2,18 +2,37 @@
 @section('title', 'Budget — ' . $budgetVersion->department->name)
 @section('content')
 
-<div class="d-flex align-items-center gap-2 mb-4">
-    <a href="{{ route('budgets.index') }}"
-       class="text-muted text-decoration-none small">← All Budgets</a>
-    <span class="text-muted">/</span>
-    <a href="{{ route('budgets.department', $budgetVersion->department) }}"
-       class="text-muted text-decoration-none small">
-        {{ $budgetVersion->department->name }}
-    </a>
-    <span class="text-muted">/</span>
-    <span class="small">
-        v{{ $budgetVersion->version_number }} — {{ $budgetVersion->period->name }}
-    </span>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex align-items-center gap-2">
+        <a href="{{ route('budgets.index') }}"
+           class="text-muted text-decoration-none small">← All Budgets</a>
+        <span class="text-muted">/</span>
+        <a href="{{ route('budgets.department', $budgetVersion->department) }}"
+           class="text-muted text-decoration-none small">
+            {{ $budgetVersion->department->name }}
+        </a>
+        <span class="text-muted">/</span>
+        <span class="small">v{{ $budgetVersion->version_number }} — {{ $budgetVersion->period->name }}</span>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <div class="btn-group btn-group-sm" role="group">
+            <span class="btn btn-secondary" style="pointer-events:none;">Classic View</span>
+            <a href="{{ route('budgets.show-pnl', $budgetVersion) }}" class="btn btn-outline-secondary">P&amp;L View</a>
+        </div>
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-success dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                <i class="bi bi-download"></i> Export
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="{{ route('ie.budget.export', $budgetVersion) }}">
+                    <i class="bi bi-file-earmark-excel me-1"></i> Classic Export (.xlsx)
+                </a></li>
+                <li><a class="dropdown-item" href="{{ route('ie.budget.export-pnl', $budgetVersion) }}">
+                    <i class="bi bi-file-earmark-excel me-1"></i> P&amp;L Export (.xlsx)
+                </a></li>
+            </ul>
+        </div>
+    </div>
 </div>
 
 {{-- Version switcher --}}
@@ -206,18 +225,54 @@
         </div>
         @endif
 
-        {{-- Line items by category --}}
-        @foreach($summary as $catName => $catData)
+        {{-- Split summary by budget type --}}
         @php
-            $catActual = collect($catData['items'])
-                ->sum(fn($item) => $actualsPerItem->get($item->id, 0));
-            $catBudget = $catData['total'];
-            $catEffective = collect($catData['items'])->sum(fn($item) => $item->effectiveBudget());
-            $catUtil   = $catEffective > 0
-                ? round(($catActual/$catEffective)*100,1) : 0;
-            $catSupp = collect($catData['items'])->sum(fn($item) => $item->approvedSupplementaryTotal());
+            $pnlTypes      = ['revenue', 'expense', 'both'];
+            $allSumPnl     = array_filter($summary, fn($d) => in_array(
+                $d['items']->first()?->accountCode?->category?->budget_type ?? 'expense', $pnlTypes));
+            $allSumCapex   = array_filter($summary, fn($d) =>
+                ($d['items']->first()?->accountCode?->category?->budget_type ?? '') === 'capital_expenditure');
+            $allSumBalance = array_filter($summary, fn($d) => in_array(
+                $d['items']->first()?->accountCode?->category?->budget_type ?? '', ['assets', 'liabilities']));
+            $allTabGroups  = [
+                ['id'=>'altab-pnl',     'label'=>'Revenue &amp; Expenses',   'summary'=>$allSumPnl,     'active'=>true],
+                ['id'=>'altab-capex',   'label'=>'Capital Expenditure',      'summary'=>$allSumCapex,   'active'=>false],
+                ['id'=>'altab-balance', 'label'=>'Assets &amp; Liabilities', 'summary'=>$allSumBalance, 'active'=>false],
+            ];
         @endphp
-        <div class="chart-card mb-3">
+
+        {{-- Tab navigation --}}
+        <ul class="nav nav-tabs mb-0" id="allBudgetTabs" role="tablist">
+            @foreach($allTabGroups as $altab)
+            @if($altab['active'] || !empty($altab['summary']))
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {{ $altab['active'] ? 'active' : '' }}"
+                        data-bs-toggle="tab" data-bs-target="#{{ $altab['id'] }}"
+                        type="button" role="tab">
+                    {!! $altab['label'] !!}
+                    @if(!empty($altab['summary']))
+                    <span class="badge bg-secondary ms-1" style="font-size:10px">{{ count($altab['summary']) }}</span>
+                    @endif
+                </button>
+            </li>
+            @endif
+            @endforeach
+        </ul>
+
+        <div class="tab-content border border-top-0 rounded-bottom mb-4" id="allBudgetTabsContent">
+        @foreach($allTabGroups as $altab)
+        @if($altab['active'] || !empty($altab['summary']))
+        <div class="tab-pane fade {{ $altab['active'] ? 'show active' : '' }} p-3"
+             id="{{ $altab['id'] }}" role="tabpanel">
+            @forelse($altab['summary'] as $catName => $catData)
+            @php
+                $catActual = collect($catData['items'])->sum(fn($item) => $actualsPerItem->get($item->id, 0));
+                $catBudget = $catData['total'];
+                $catEffective = collect($catData['items'])->sum(fn($item) => $item->effectiveBudget());
+                $catUtil   = $catEffective > 0 ? round(($catActual/$catEffective)*100,1) : 0;
+                $catSupp = collect($catData['items'])->sum(fn($item) => $item->approvedSupplementaryTotal());
+            @endphp
+            <div class="chart-card mb-3">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div style="font-size:12px;font-weight:700;text-transform:uppercase;
                             letter-spacing:.5px;color:var(--navy)">
@@ -327,7 +382,16 @@
                 </table>
             </div>
         </div>
+        @empty
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-inbox d-block mb-2" style="font-size:2rem;opacity:.3"></i>
+            No items in this section yet.
+        </div>
+        @endforelse
+        </div>
+        @endif
         @endforeach
+        </div>
 
         {{-- Grand total footer --}}
         <div class="chart-card" style="background:var(--navy);color:#fff">

@@ -102,18 +102,29 @@
                         <select name="budget_type"
                                 class="form-select @error('budget_type') is-invalid @enderror"
                                 style="border-radius: 10px; border-color: #E2E8F0; padding: 10px 14px;">
-                            <option value="expense"
-                                    {{ old('budget_type', $accountCategory->budget_type ?? 'expense') === 'expense' ? 'selected' : '' }}>
-                                📉 Expense — costs and expenditures
-                            </option>
-                            <option value="revenue"
-                                    {{ old('budget_type', $accountCategory->budget_type ?? 'expense') === 'revenue' ? 'selected' : '' }}>
-                                📈 Revenue — income and receipts
-                            </option>
-                            <option value="both"
-                                    {{ old('budget_type', $accountCategory->budget_type ?? 'expense') === 'both' ? 'selected' : '' }}>
-                                📊 Both — mixed revenue and expense
-                            </option>
+                            @php $bt = old('budget_type', $accountCategory->budget_type ?? 'expense'); @endphp
+                            <optgroup label="Income Statement">
+                                <option value="revenue" {{ $bt === 'revenue' ? 'selected' : '' }}>
+                                    📈 Revenue — income and receipts
+                                </option>
+                                <option value="expense" {{ $bt === 'expense' ? 'selected' : '' }}>
+                                    📉 Expense — costs and expenditures
+                                </option>
+                                <option value="both" {{ $bt === 'both' ? 'selected' : '' }}>
+                                    📊 Both — mixed revenue and expense
+                                </option>
+                            </optgroup>
+                            <optgroup label="Balance Sheet &amp; CapEx">
+                                <option value="assets" {{ $bt === 'assets' ? 'selected' : '' }}>
+                                    🏦 Assets — resources owned or controlled
+                                </option>
+                                <option value="liabilities" {{ $bt === 'liabilities' ? 'selected' : '' }}>
+                                    📋 Liabilities — obligations and payables
+                                </option>
+                                <option value="capital_expenditure" {{ $bt === 'capital_expenditure' ? 'selected' : '' }}>
+                                    🏗️ Capital Expenditure — long-term investment
+                                </option>
+                            </optgroup>
                         </select>
                         <div style="font-size: 12px; color: #64748B; margin-top: 4px;">
                             <i class="fas fa-info-circle"></i> Determines how line items in this category are treated.

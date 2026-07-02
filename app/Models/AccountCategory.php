@@ -13,13 +13,32 @@ class AccountCategory extends Model
 
     protected $casts = ['is_active' => 'boolean'];
 
-    public function isRevenue(): bool  {
-        return in_array($this->budget_type, ['revenue','both']);
-        }
+    // Types that appear in the P&L income statement
+    public const PNL_TYPES = ['revenue', 'expense', 'both'];
 
-    public function isExpense(): bool  {
-        return in_array($this->budget_type, ['expense','both']);
-        }
+    public function isRevenue(): bool {
+        return in_array($this->budget_type, ['revenue', 'both']);
+    }
+
+    public function isExpense(): bool {
+        return in_array($this->budget_type, ['expense', 'both']);
+    }
+
+    public function isCapex(): bool {
+        return $this->budget_type === 'capital_expenditure';
+    }
+
+    public function isAsset(): bool {
+        return $this->budget_type === 'assets';
+    }
+
+    public function isLiability(): bool {
+        return $this->budget_type === 'liabilities';
+    }
+
+    public function isPnlType(): bool {
+        return in_array($this->budget_type, self::PNL_TYPES);
+    }
 
     public function accountCodes()
     {

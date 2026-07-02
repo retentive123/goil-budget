@@ -7,6 +7,9 @@ use App\Models\BudgetPeriod;
 use App\Models\Department;
 use App\Models\BudgetActual;
 use App\Exports\BudgetTemplateExport;
+use App\Exports\BudgetPnlTemplateExport;
+use App\Exports\BudgetReadOnlyExport;
+use App\Exports\BudgetPnlReadOnlyExport;
 use App\Exports\ActualsTemplateExport;
 use App\Exports\AccountCategoryExport;
 use App\Exports\AccountCodeExport;
@@ -35,6 +38,81 @@ class ImportExportController extends Controller
         \App\Services\AuditLogger::reportExported('budget_template','xlsx', auth()->user());
 
         return Excel::download(new BudgetTemplateExport($budgetVersion), $filename);
+    }
+
+    // ── Budget P&L Template Download ─────────────────
+    public function downloadPnlBudgetTemplate(BudgetVersion $budgetVersion)
+    {
+        $this->authorizeBudgetAccess($budgetVersion);
+
+        $budgetVersion->load('lineItems.accountCode.category','department','period');
+
+        $filename = 'budget-pnl-' .
+            str($budgetVersion->department->name)->slug() . '-' .
+            $budgetVersion->period->year . '-v' .
+            $budgetVersion->version_number . '.xlsx';
+
+        \App\Services\AuditLogger::reportExported('budget_pnl_template','xlsx', auth()->user());
+
+        return Excel::download(new BudgetPnlTemplateExport($budgetVersion), $filename);
+    }
+
+    // ── Budget Read-Only Export (Classic) ────────────
+    public function exportBudget(BudgetVersion $budgetVersion)
+    {
+        $this->authorizeBudgetAccess($budgetVersion);
+
+        $budgetVersion->load('lineItems.accountCode.category', 'department', 'period');
+
+        $actualsPerItem = BudgetActual::where('budget_period_id', $budgetVersion->budget_period_id)
+            ->where('department_id', $budgetVersion->department_id)
+            ->where('status', 'confirmed')
+            ->selectRaw('budget_line_item_id, sum(amount) as total')
+            ->groupBy('budget_line_item_id')
+            ->pluck('total', 'budget_line_item_id');
+
+        $filename = 'budget-export-' .
+            str($budgetVersion->department->name)->slug() . '-' .
+            $budgetVersion->period->year . '-v' .
+            $budgetVersion->version_number . '.xlsx';
+
+        \App\Services\AuditLogger::reportExported('budget_export', 'xlsx', auth()->user());
+
+        return Excel::download(new BudgetReadOnlyExport($budgetVersion, $actualsPerItem), $filename);
+    }
+
+    // ── Budget Read-Only Export (P&L) ─────────────────
+    public function exportPnlBudget(BudgetVersion $budgetVersion)
+    {
+        $this->authorizeBudgetAccess($budgetVersion);
+
+        $budgetVersion->load('lineItems.accountCode.category', 'department', 'period');
+
+        $actualsPerItem = BudgetActual::where('budget_period_id', $budgetVersion->budget_period_id)
+            ->where('department_id', $budgetVersion->department_id)
+            ->where('status', 'confirmed')
+            ->selectRaw('budget_line_item_id, sum(amount) as total')
+            ->groupBy('budget_line_item_id')
+            ->pluck('total', 'budget_line_item_id');
+
+        $period     = $budgetVersion->period;
+        $prevPeriod = BudgetPeriod::where('year', $period->year - 1)->orderByDesc('id')->first()
+            ?? BudgetPeriod::where('id', '<', $period->id)->orderByDesc('year')->orderByDesc('id')->first();
+
+        $calculator = app(BudgetCalculationService::class);
+        $pnlData    = $calculator->buildPnlData($budgetVersion, $prevPeriod);
+
+        $filename = 'budget-pnl-export-' .
+            str($budgetVersion->department->name)->slug() . '-' .
+            $budgetVersion->period->year . '-v' .
+            $budgetVersion->version_number . '.xlsx';
+
+        \App\Services\AuditLogger::reportExported('budget_pnl_export', 'xlsx', auth()->user());
+
+        return Excel::download(
+            new BudgetPnlReadOnlyExport($budgetVersion, $pnlData, $prevPeriod, $actualsPerItem),
+            $filename
+        );
     }
 
     // ── Budget Upload ─────────────────────────────────

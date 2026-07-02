@@ -280,121 +280,162 @@
         </div>
     </div>
 
-    {{-- Line items by category --}}
-    @foreach($byCategory as $catName => $items)
-    <div class="chart-card mb-3">
-        <div class="chart-title">{{ $catName }}</div>
-        <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0">
-                <thead style="font-size:11px;text-transform:uppercase;
-                              letter-spacing:.5px;color:var(--slate)">
-                    <tr>
-                        <th style="width:25%">Account</th>
-                        <th class="text-end" style="min-width:120px">Budget</th>
-                        <th class="text-end">YTD Actual</th>
-                        <th class="text-end">Remaining</th>
-                        <th class="text-end" style="width:150px">
-                            {{ \App\Models\BudgetActual::MONTHS[$month] }} Actual
-                        </th>
-                        <th>Reference</th>
-                        <th>Note</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach($items as $item)
-                    @php
-                        $existing = $existingActuals->get($item->id);
-                        $ytd      = $ytdActuals->get($item->id, 0);
-                        $supplementary = $item->approvedSupplementaryTotal();
-                        $effective     = $item->effectiveBudget();
-                        $remaining = $effective - $ytd;
-                        $idx = $loop->parent->index * 100 + $loop->index;
-                    @endphp
-                    <tr>
-                        <input type="hidden"
-                               name="actuals[{{ $idx }}][line_item_id]"
-                               value="{{ $item->id }}">
+    {{-- Split by budget type --}}
+    @php
+        $pnlTypes          = ['revenue', 'expense', 'both'];
+        $byCategoryPnl     = $byCategory->filter(fn($items) => in_array(
+            $items->first()?->accountCode?->category?->budget_type ?? 'expense', $pnlTypes));
+        $byCategoryCapex   = $byCategory->filter(fn($items) =>
+            ($items->first()?->accountCode?->category?->budget_type ?? '') === 'capital_expenditure');
+        $byCategoryBalance = $byCategory->filter(fn($items) => in_array(
+            $items->first()?->accountCode?->category?->budget_type ?? '', ['assets', 'liabilities']));
+        $actTabGroups = [
+            ['id'=>'acttab-pnl',     'label'=>'Revenue &amp; Expenses',   'cats'=>$byCategoryPnl,     'active'=>true],
+            ['id'=>'acttab-capex',   'label'=>'Capital Expenditure',      'cats'=>$byCategoryCapex,   'active'=>false],
+            ['id'=>'acttab-balance', 'label'=>'Assets &amp; Liabilities', 'cats'=>$byCategoryBalance, 'active'=>false],
+        ];
+    @endphp
 
-                        <td>
-                            <div style="font-family:monospace;font-weight:700;font-size:12px;color:var(--navy)">
-                                {{ $item->accountCode->code }}
-                            </div>
-                            <div style="font-size:11px;color:var(--slate)">
-                                {{ $item->accountCode->name }}
-                            </div>
-                            @if($item->justification)
-                            <div style="font-size:10px;color:#94A3B8;font-style:italic;margin-top:2px">
-                                {{ Str::limit($item->justification, 50) }}
-                            </div>
-                            @endif
-                        </td>
-                        <td class="text-end small">
-                            <div>{{ number_format($item->total_amount, 2) }}</div>
-                            @if($supplementary > 0)
-                            <div style="font-size:10px;color:#10B981;">
-                                +{{ number_format($supplementary, 2) }} supp.
-                            </div>
-                            <div style="font-size:11px;font-weight:700;color:var(--navy);border-top:1px dashed var(--border);padding-top:2px;margin-top:2px">
-                                = {{ number_format($effective, 2) }}
-                            </div>
-                            @endif
-                        </td>
-                        <td class="text-end small">
-                            {{ number_format($ytd, 2) }}
-                        </td>
-                        <td class="text-end small fw-semibold"
-                            style="color:{{ $remaining >= 0 ? '#10B981' : '#F43F5E' }}">
-                            {{ number_format($remaining, 2) }}
-                        </td>
-                        <td>
-                            <input type="number"
-                                   name="actuals[{{ $idx }}][amount]"
-                                   class="form-control form-control-sm actual-input"
-                                   value="{{ $existing?->amount ?? '' }}"
-                                   min="0" step="0.01"
-                                   placeholder="0.00"
-                                   {{ $isConfirmed ? 'readonly' : '' }}
-                                   oninput="updateTotals()">
-                        </td>
-                        <td>
-                            <input type="text"
-                                   name="actuals[{{ $idx }}][reference]"
-                                   class="form-control form-control-sm"
-                                   value="{{ $existing?->reference ?? '' }}"
-                                   placeholder="Invoice/Voucher #"
-                                   {{ $isConfirmed ? 'readonly' : '' }}>
-                        </td>
-                        <td>
-                            <input type="text"
-                                   name="actuals[{{ $idx }}][description]"
-                                   class="form-control form-control-sm"
-                                   value="{{ $existing?->description ?? '' }}"
-                                   placeholder="Optional note"
-                                   {{ $isConfirmed ? 'readonly' : '' }}>
-                        </td>
-                    </tr>
-                    @endforeach
-                </tbody>
-                @php
-                    $catTotal = $items->sum(fn($i) => $i->effectiveBudget());
-                    $catYtd = $items->sum(fn($i) => $ytdActuals->get($i->id, 0));
-                    $catRemaining = $catTotal - $catYtd;
-                @endphp
-                <tfoot style="background:#F8FAFC;font-weight:700;font-size:12px">
-                    <tr>
-                        <td>Category Total</td>
-                        <td class="text-end">{{ number_format($catTotal, 2) }}</td>
-                        <td class="text-end">{{ number_format($catYtd, 2) }}</td>
-                        <td class="text-end" style="color:{{ $catRemaining >= 0 ? '#10B981' : '#F43F5E' }}">
-                            {{ number_format($catRemaining, 2) }}
-                        </td>
-                        <td colspan="3"></td>
-                    </tr>
-                </tfoot>
-            </table>
+    {{-- Tab navigation --}}
+    <ul class="nav nav-tabs mb-0" id="actTabs" role="tablist">
+        @foreach($actTabGroups as $acttab)
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {{ $acttab['active'] ? 'active' : '' }}"
+                    data-bs-toggle="tab" data-bs-target="#{{ $acttab['id'] }}"
+                    type="button" role="tab">
+                {!! $acttab['label'] !!}
+                @if($acttab['cats']->isNotEmpty())
+                <span class="badge bg-secondary ms-1" style="font-size:10px">{{ $acttab['cats']->count() }}</span>
+                @endif
+            </button>
+        </li>
+        @endforeach
+    </ul>
+
+    <div class="tab-content border border-top-0 rounded-bottom mb-3" id="actTabsContent">
+    @foreach($actTabGroups as $acttab)
+    <div class="tab-pane fade {{ $acttab['active'] ? 'show active' : '' }} p-3"
+         id="{{ $acttab['id'] }}" role="tabpanel">
+        @forelse($acttab['cats'] as $catName => $items)
+        <div class="chart-card mb-3">
+            <div class="chart-title">{{ $catName }}</div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--slate)">
+                        <tr>
+                            <th style="width:25%">Account</th>
+                            <th class="text-end" style="min-width:120px">Budget</th>
+                            <th class="text-end">YTD Actual</th>
+                            <th class="text-end">Remaining</th>
+                            <th class="text-end" style="width:150px">
+                                {{ \App\Models\BudgetActual::MONTHS[$month] }} Actual
+                            </th>
+                            <th>Reference</th>
+                            <th>Note</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($items as $item)
+                        @php
+                            $existing      = $existingActuals->get($item->id);
+                            $ytd           = $ytdActuals->get($item->id, 0);
+                            $supplementary = $item->approvedSupplementaryTotal();
+                            $effective     = $item->effectiveBudget();
+                            $remaining     = $effective - $ytd;
+                            $idx           = $loop->parent->parent->index * 10000
+                                           + $loop->parent->index * 100
+                                           + $loop->index;
+                        @endphp
+                        <tr>
+                            <input type="hidden"
+                                   name="actuals[{{ $idx }}][line_item_id]"
+                                   value="{{ $item->id }}">
+                            <td>
+                                <div style="font-family:monospace;font-weight:700;font-size:12px;color:var(--navy)">
+                                    {{ $item->accountCode->code }}
+                                </div>
+                                <div style="font-size:11px;color:var(--slate)">
+                                    {{ $item->accountCode->name }}
+                                </div>
+                                @if($item->justification)
+                                <div style="font-size:10px;color:#94A3B8;font-style:italic;margin-top:2px">
+                                    {{ Str::limit($item->justification, 50) }}
+                                </div>
+                                @endif
+                            </td>
+                            <td class="text-end small">
+                                <div>{{ number_format($item->total_amount, 2) }}</div>
+                                @if($supplementary > 0)
+                                <div style="font-size:10px;color:#10B981;">
+                                    +{{ number_format($supplementary, 2) }} supp.
+                                </div>
+                                <div style="font-size:11px;font-weight:700;color:var(--navy);border-top:1px dashed var(--border);padding-top:2px;margin-top:2px">
+                                    = {{ number_format($effective, 2) }}
+                                </div>
+                                @endif
+                            </td>
+                            <td class="text-end small">{{ number_format($ytd, 2) }}</td>
+                            <td class="text-end small fw-semibold"
+                                style="color:{{ $remaining >= 0 ? '#10B981' : '#F43F5E' }}">
+                                {{ number_format($remaining, 2) }}
+                            </td>
+                            <td>
+                                <input type="number"
+                                       name="actuals[{{ $idx }}][amount]"
+                                       class="form-control form-control-sm actual-input"
+                                       value="{{ $existing?->amount ?? '' }}"
+                                       min="0" step="0.01"
+                                       placeholder="0.00"
+                                       {{ $isConfirmed ? 'readonly' : '' }}
+                                       oninput="updateTotals()">
+                            </td>
+                            <td>
+                                <input type="text"
+                                       name="actuals[{{ $idx }}][reference]"
+                                       class="form-control form-control-sm"
+                                       value="{{ $existing?->reference ?? '' }}"
+                                       placeholder="Invoice/Voucher #"
+                                       {{ $isConfirmed ? 'readonly' : '' }}>
+                            </td>
+                            <td>
+                                <input type="text"
+                                       name="actuals[{{ $idx }}][description]"
+                                       class="form-control form-control-sm"
+                                       value="{{ $existing?->description ?? '' }}"
+                                       placeholder="Optional note"
+                                       {{ $isConfirmed ? 'readonly' : '' }}>
+                            </td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                    @php
+                        $catTotal     = $items->sum(fn($i) => $i->effectiveBudget());
+                        $catYtd       = $items->sum(fn($i) => $ytdActuals->get($i->id, 0));
+                        $catRemaining = $catTotal - $catYtd;
+                    @endphp
+                    <tfoot style="background:#F8FAFC;font-weight:700;font-size:12px">
+                        <tr>
+                            <td>Category Total</td>
+                            <td class="text-end">{{ number_format($catTotal, 2) }}</td>
+                            <td class="text-end">{{ number_format($catYtd, 2) }}</td>
+                            <td class="text-end" style="color:{{ $catRemaining >= 0 ? '#10B981' : '#F43F5E' }}">
+                                {{ number_format($catRemaining, 2) }}
+                            </td>
+                            <td colspan="3"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
         </div>
+        @empty
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-inbox d-block mb-2" style="font-size:2rem;opacity:.3"></i>
+            No items in this section yet.
+        </div>
+        @endforelse
     </div>
     @endforeach
+    </div>
 
     @if(!$isConfirmed)
     <div class="d-flex gap-2 mt-4">

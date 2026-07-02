@@ -57,11 +57,52 @@ class ApprovalController extends Controller
         $progress     = $this->approvalService->approvalProgress($budgetVersion);
         $summary      = $this->calculator->summaryByCategory($budgetVersion);
         $grandTotals  = $this->calculator->grandTotals($budgetVersion);
-        $approvalService = $this->approvalService; // ← pass service to view
+        $approvalService = $this->approvalService;
+
+        // Revenue categories first, then expense
+        $revenueTypes = ['revenue', 'both'];
+        uasort($summary, function ($a, $b) use ($revenueTypes) {
+            $typeA = $a['items']->first()?->accountCode?->category?->budget_type ?? 'expense';
+            $typeB = $b['items']->first()?->accountCode?->category?->budget_type ?? 'expense';
+            return (in_array($typeA, $revenueTypes) ? 0 : 1) <=> (in_array($typeB, $revenueTypes) ? 0 : 1);
+        });
 
         return view('approval.show', compact(
             'budgetVersion', 'canDecide', 'currentStage',
             'progress', 'summary', 'grandTotals', 'approvalService'
+        ));
+    }
+
+    // Show a budget version for review in P&L view
+    public function showPnl(BudgetVersion $budgetVersion)
+    {
+        $budgetVersion->load(
+            'department', 'period',
+            'lineItems.accountCode.category',
+            'approvalDecisions.stage',
+            'approvalDecisions.decidedBy',
+            'submittedBy'
+        );
+
+        $canDecide    = $this->approvalService->canCurrentUserDecide($budgetVersion);
+        $currentStage = $this->approvalService->currentStage($budgetVersion);
+        $progress     = $this->approvalService->approvalProgress($budgetVersion);
+        $summary      = $this->calculator->summaryByCategory($budgetVersion);
+        $grandTotals  = $this->calculator->grandTotals($budgetVersion);
+        $approvalService = $this->approvalService;
+
+        $period = $budgetVersion->period;
+        $prevPeriod = BudgetPeriod::where('year', $period->year - 1)
+            ->orderByDesc('id')->first()
+            ?? BudgetPeriod::where('id', '<', $period->id)
+                ->orderByDesc('year')->orderByDesc('id')->first();
+
+        $pnlData = $this->calculator->buildPnlData($budgetVersion, $prevPeriod);
+
+        return view('approval.show-pnl', compact(
+            'budgetVersion', 'canDecide', 'currentStage',
+            'progress', 'summary', 'grandTotals', 'approvalService',
+            'pnlData', 'prevPeriod'
         ));
     }
 
