@@ -28,7 +28,7 @@ class AccountCategoryController extends Controller
             'name'        => ['required', 'string', 'max:255', 'unique:account_categories,name'],
             'code'        => ['required', 'string', 'max:20',  'unique:account_categories,code'],
             'description' => ['nullable', 'string'],
-            'budget_type' => ['required','in:revenue,expense,both'],
+            'budget_type' => ['required','in:revenue,expense,both,capital_expenditure,assets,liabilities'],
         ]);
 
         AccountCategory::create([...$validated, 'is_active' => true]);
@@ -59,7 +59,7 @@ class AccountCategoryController extends Controller
                               'unique:account_categories,code,' . $accountCategory->id],
             'description' => ['nullable', 'string'],
             'is_active'   => ['boolean'],
-            'budget_type' => ['required','in:revenue,expense,both'],
+            'budget_type' => ['required','in:revenue,expense,both,capital_expenditure,assets,liabilities'],
         ]);
 
         $accountCategory->update($validated);

@@ -45,15 +45,28 @@
                 <label class="form-label small fw-semibold">Budget Type</label>
                 <select name="budget_type"
                         class="form-select @error('budget_type') is-invalid @enderror">
-                    <option value="expense"  {{ old('budget_type','expense')==='expense'  ?'selected':'' }}>
-                        Expense — costs and expenditures
-                    </option>
-                    <option value="revenue"  {{ old('budget_type')==='revenue'  ?'selected':'' }}>
-                        Revenue — income and receipts
-                    </option>
-                    <option value="both"     {{ old('budget_type')==='both'     ?'selected':'' }}>
-                        Both — mixed revenue and expense
-                    </option>
+                    <optgroup label="Income Statement">
+                        <option value="revenue" {{ old('budget_type')==='revenue' ?'selected':'' }}>
+                            📈 Revenue — income and receipts
+                        </option>
+                        <option value="expense" {{ old('budget_type','expense')==='expense' ?'selected':'' }}>
+                            📉 Expense — costs and expenditures
+                        </option>
+                        <option value="both" {{ old('budget_type')==='both' ?'selected':'' }}>
+                            📊 Both — mixed revenue and expense
+                        </option>
+                    </optgroup>
+                    <optgroup label="Balance Sheet &amp; CapEx">
+                        <option value="assets" {{ old('budget_type')==='assets' ?'selected':'' }}>
+                            🏦 Assets — resources owned or controlled
+                        </option>
+                        <option value="liabilities" {{ old('budget_type')==='liabilities' ?'selected':'' }}>
+                            📋 Liabilities — obligations and payables
+                        </option>
+                        <option value="capital_expenditure" {{ old('budget_type')==='capital_expenditure' ?'selected':'' }}>
+                            🏗️ Capital Expenditure — long-term investment
+                        </option>
+                    </optgroup>
                 </select>
                 @error('budget_type')
                     <div class="invalid-feedback">{{ $message }}</div>

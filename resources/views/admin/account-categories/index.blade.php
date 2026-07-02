@@ -55,32 +55,40 @@
         <table class="table table-hover mb-0">
             <thead class="table-light">
                 <tr>
-                    <th>Name</th>
                     <th>Code</th>
-                    <th>Type</th>
+                    <th>Name</th>
+                    <th>Budget Type</th>
                     <th>Description</th>
-                    <th>Account Codes</th>
+                    <th class="text-center">Codes</th>
                     <th>Status</th>
                     <th></th>
                 </tr>
             </thead>
             <tbody>
                 @forelse($categories as $category)
+                @php
+                    $typeConfig = match($category->budget_type) {
+                        'revenue'             => ['label' => 'Revenue',             'bg' => '#D1FAE5', 'color' => '#065F46'],
+                        'expense'             => ['label' => 'Expense',             'bg' => '#FEE2E2', 'color' => '#991B1B'],
+                        'both'                => ['label' => 'Both',                'bg' => '#DBEAFE', 'color' => '#1E40AF'],
+                        'assets'              => ['label' => 'Assets',              'bg' => '#EDE9FE', 'color' => '#5B21B6'],
+                        'liabilities'         => ['label' => 'Liabilities',         'bg' => '#F3E8FF', 'color' => '#7C3AED'],
+                        'capital_expenditure' => ['label' => 'Capital Expenditure', 'bg' => '#FEF3C7', 'color' => '#92400E'],
+                        default               => ['label' => ucfirst($category->budget_type), 'bg' => '#F1F5F9', 'color' => '#475569'],
+                    };
+                @endphp
                 <tr>
-                    <td class="fw-semibold small">{{ $category->name }}</td>
                     <td><code>{{ $category->code }}</code></td>
-                    <td class="small text-muted">
-                        {{ $category->description ?? '—' }}
-                    </td>
+                    <td class="fw-semibold small">{{ $category->name }}</td>
                     <td>
-                        <span class="badge bg-secondary">
-                            {{ $category->account_codes_count }}
+                        <span class="badge"
+                              style="background:{{ $typeConfig['bg'] }};color:{{ $typeConfig['color'] }};font-weight:600">
+                            {{ $typeConfig['label'] }}
                         </span>
                     </td>
-                    <td>
-                        <span class="badge bg-secondary">
-                            {{ $category->budget_type }}
-                        </span>
+                    <td class="small text-muted">{{ $category->description ?? '—' }}</td>
+                    <td class="text-center">
+                        <span class="badge bg-secondary">{{ $category->account_codes_count }}</span>
                     </td>
                     <td>
                         <span class="badge bg-{{ $category->is_active ? 'success' : 'secondary' }}">
@@ -108,7 +116,7 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="6" class="text-center text-muted py-4">
+                    <td colspan="7" class="text-center text-muted py-4">
                         No categories yet.
                         <a href="{{ route('admin.account-categories.create') }}">Add one</a>.
                     </td>

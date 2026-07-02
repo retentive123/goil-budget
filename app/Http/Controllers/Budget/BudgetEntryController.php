@@ -79,12 +79,49 @@ class BudgetEntryController extends Controller
     {
         $this->authorizeBudgetAccess($budgetVersion);
 
+        // Sync any account codes assigned to the dept after this version was created
+        if ($budgetVersion->isEditable()) {
+            $this->calculator->populateLineItems($budgetVersion);
+        }
+
         $budgetVersion->load('lineItems.accountCode.category', 'period', 'department');
 
         $summary     = $this->calculator->summaryByCategory($budgetVersion);
         $grandTotals = $this->calculator->grandTotals($budgetVersion);
 
+        // Revenue categories first, then expense
+        $revenueTypes = ['revenue', 'both'];
+        uasort($summary, function ($a, $b) use ($revenueTypes) {
+            $typeA = $a['items']->first()?->accountCode?->category?->budget_type ?? 'expense';
+            $typeB = $b['items']->first()?->accountCode?->category?->budget_type ?? 'expense';
+            return (in_array($typeA, $revenueTypes) ? 0 : 1) <=> (in_array($typeB, $revenueTypes) ? 0 : 1);
+        });
+
         return view('budget.show', compact('budgetVersion', 'summary', 'grandTotals'));
+    }
+
+    // Show the P&L-style budget entry form
+    public function showPnl(BudgetVersion $budgetVersion)
+    {
+        $this->authorizeBudgetAccess($budgetVersion);
+
+        if ($budgetVersion->isEditable()) {
+            $this->calculator->populateLineItems($budgetVersion);
+        }
+
+        $budgetVersion->load('lineItems.accountCode.category', 'period', 'department');
+
+        $grandTotals = $this->calculator->grandTotals($budgetVersion);
+
+        $period = $budgetVersion->period;
+        $prevPeriod = \App\Models\BudgetPeriod::where('year', $period->year - 1)
+            ->orderByDesc('id')->first()
+            ?? \App\Models\BudgetPeriod::where('id', '<', $period->id)
+                ->orderByDesc('year')->orderByDesc('id')->first();
+
+        $pnlData = $this->calculator->buildPnlData($budgetVersion, $prevPeriod);
+
+        return view('budget.show-pnl', compact('budgetVersion', 'grandTotals', 'prevPeriod', 'pnlData'));
     }
 
     // Save line item amounts (auto-save)

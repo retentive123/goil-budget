@@ -96,11 +96,18 @@ class AllBudgetsController extends Controller
         );
 
         $summary      = $this->calculator->summaryByCategory($budgetVersion);
-        // ✅ Grand totals already use effective budget if you update BudgetCalculationService
         $grandTotals  = $this->calculator->grandTotals($budgetVersion);
         $progress     = $this->approvalService->approvalProgress($budgetVersion);
         $canDecide    = $this->approvalService->canCurrentUserDecide($budgetVersion);
         $currentStage = $this->approvalService->currentStage($budgetVersion);
+
+        // Revenue categories first, then expense
+        $revenueTypes = ['revenue', 'both'];
+        uasort($summary, function ($a, $b) use ($revenueTypes) {
+            $typeA = $a['items']->first()?->accountCode?->category?->budget_type ?? 'expense';
+            $typeB = $b['items']->first()?->accountCode?->category?->budget_type ?? 'expense';
+            return (in_array($typeA, $revenueTypes) ? 0 : 1) <=> (in_array($typeB, $revenueTypes) ? 0 : 1);
+        });
 
         // Actuals per line item
         $actualsPerItem = \App\Models\BudgetActual::where('department_id', $budgetVersion->department_id)
@@ -126,6 +133,56 @@ class AllBudgetsController extends Controller
             'budgetVersion', 'summary', 'grandTotals',
             'progress', 'canDecide', 'currentStage',
             'actualsPerItem', 'allVersions', 'supplementaries'
+        ));
+    }
+
+    // ── P&L view of a single budget version ──────────────────
+    public function showPnl(Request $request, BudgetVersion $budgetVersion)
+    {
+        $budgetVersion->load(
+            'department', 'period', 'submittedBy',
+            'lineItems.accountCode.category',
+            'approvalDecisions.stage',
+            'approvalDecisions.decidedBy',
+            'approvalDecisions.lineItemApprovals.lineItem.accountCode'
+        );
+
+        $summary      = $this->calculator->summaryByCategory($budgetVersion);
+        $grandTotals  = $this->calculator->grandTotals($budgetVersion);
+        $progress     = $this->approvalService->approvalProgress($budgetVersion);
+        $canDecide    = $this->approvalService->canCurrentUserDecide($budgetVersion);
+        $currentStage = $this->approvalService->currentStage($budgetVersion);
+
+        $actualsPerItem = \App\Models\BudgetActual::where('department_id', $budgetVersion->department_id)
+            ->where('budget_period_id', $budgetVersion->budget_period_id)
+            ->where('status', 'confirmed')
+            ->get()
+            ->groupBy('budget_line_item_id')
+            ->map(fn($g) => $g->sum('amount'));
+
+        $allVersions = BudgetVersion::where('budget_period_id', $budgetVersion->budget_period_id)
+            ->where('department_id', $budgetVersion->department_id)
+            ->orderByDesc('version_number')
+            ->get();
+
+        $supplementaries = \App\Models\SupplementaryBudget::where('budget_period_id', $budgetVersion->budget_period_id)
+            ->where('department_id', $budgetVersion->department_id)
+            ->with('accountCode', 'requestedBy', 'approvedBy')
+            ->get();
+
+        $period = $budgetVersion->period;
+        $prevPeriod = BudgetPeriod::where('year', $period->year - 1)
+            ->orderByDesc('id')->first()
+            ?? BudgetPeriod::where('id', '<', $period->id)
+                ->orderByDesc('year')->orderByDesc('id')->first();
+
+        $pnlData = $this->calculator->buildPnlData($budgetVersion, $prevPeriod);
+
+        return view('budgets.all.show-pnl', compact(
+            'budgetVersion', 'summary', 'grandTotals',
+            'progress', 'canDecide', 'currentStage',
+            'actualsPerItem', 'allVersions', 'supplementaries',
+            'pnlData', 'prevPeriod'
         ));
     }
 

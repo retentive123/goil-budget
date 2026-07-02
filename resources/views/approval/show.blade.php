@@ -2,16 +2,37 @@
 @section('title', 'Review Budget')
 @section('content')
 
-<div class="d-flex align-items-center gap-2 mb-4">
-    <a href="{{ route('approvals.index') }}" class="text-muted text-decoration-none">Approvals</a>
-    <span class="text-muted">/</span>
-    <span>{{ $budgetVersion->department->name }} — v{{ $budgetVersion->version_number }}</span>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex align-items-center gap-2">
+        <a href="{{ route('approvals.index') }}" class="text-muted text-decoration-none">Approvals</a>
+        <span class="text-muted">/</span>
+        <span>{{ $budgetVersion->department->name }} — v{{ $budgetVersion->version_number }}</span>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <div class="btn-group btn-group-sm" role="group">
+            <span class="btn btn-secondary" style="pointer-events:none;">Classic View</span>
+            <a href="{{ route('approvals.show-pnl', $budgetVersion) }}" class="btn btn-outline-secondary">P&amp;L View</a>
+        </div>
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-success dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                <i class="bi bi-download"></i> Export
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="{{ route('ie.budget.export', $budgetVersion) }}">
+                    <i class="bi bi-file-earmark-excel me-1"></i> Classic Export (.xlsx)
+                </a></li>
+                <li><a class="dropdown-item" href="{{ route('ie.budget.export-pnl', $budgetVersion) }}">
+                    <i class="bi bi-file-earmark-excel me-1"></i> P&amp;L Export (.xlsx)
+                </a></li>
+            </ul>
+        </div>
+    </div>
 </div>
 
 <div class="row g-4">
 
     {{-- Left: budget details --}}
-    <div class="col-lg-8">
+    <div class="col-lg-9">
 
         {{-- Info bar --}}
         <div class="card shadow-sm mb-3">
@@ -49,142 +70,191 @@
         </div>
         @endif
 
-        {{-- Line items --}}
-        @foreach($summary as $categoryName => $categoryData)
+        {{-- Split summary by budget type --}}
         @php
-            // ✅ Calculate effective category total including supplementary
-            $catEffectiveTotal = $categoryData['items']->sum(fn($item) => $item->effectiveBudget());
-            $catSuppTotal = $categoryData['items']->sum(fn($item) => $item->approvedSupplementaryTotal());
+            $pnlTypes       = ['revenue', 'expense', 'both'];
+            $summaryPnl     = array_filter($summary, fn($d) => in_array(
+                $d['items']->first()?->accountCode?->category?->budget_type ?? 'expense', $pnlTypes));
+            $summaryCapex   = array_filter($summary, fn($d) =>
+                ($d['items']->first()?->accountCode?->category?->budget_type ?? '') === 'capital_expenditure');
+            $summaryBalance = array_filter($summary, fn($d) => in_array(
+                $d['items']->first()?->accountCode?->category?->budget_type ?? '', ['assets', 'liabilities']));
+            $aprvTabGroups = [
+                ['id'=>'atab-pnl',     'label'=>'Revenue &amp; Expenses',   'summary'=>$summaryPnl,     'active'=>true],
+                ['id'=>'atab-capex',   'label'=>'Capital Expenditure',      'summary'=>$summaryCapex,   'active'=>false],
+                ['id'=>'atab-balance', 'label'=>'Assets &amp; Liabilities', 'summary'=>$summaryBalance, 'active'=>false],
+            ];
         @endphp
-        <div class="card shadow-sm mb-3">
-            <div class="card-header bg-light py-2 d-flex justify-content-between">
-                <span class="fw-semibold small text-uppercase">{{ $categoryName }}</span>
-                <span class="small text-muted">
-                    Total: <strong>{{ currency() }} {{ number_format($catEffectiveTotal, 2) }}</strong>
-                    @if($catSuppTotal > 0)
-                    <span style="color:#10B981;font-size:11px;">
-                        (+{{ number_format($catSuppTotal, 2) }} supp.)
-                    </span>
-                    @endif
-                </span>
-            </div>
-            <div class="card-body p-0">
-                <table class="table table-sm table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th style="width:30%">Account</th>
-                            <th class="text-end">Q1</th>
-                            <th class="text-end">Q2</th>
-                            <th class="text-end">Q3</th>
-                            <th class="text-end">Q4</th>
-                            <th class="text-end">Supplementary</th>
-                            <th class="text-end">Total</th>
-                            @if($canDecide)<th>Decision</th><th>Adjusted</th>@endif
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach($categoryData['items'] as $item)
-                        @php
-                            $itemSupp = $item->approvedSupplementaryTotal();
-                            $itemEffective = $item->effectiveBudget();
-                        @endphp
-                        <tr>
-                            <td class="small">
-                                <code>{{ $item->accountCode->code }}</code>
-                                {{ $item->accountCode->name }}
-                                @if($item->justification)
-                                    <div class="text-muted" style="font-size:11px">
-                                        {{ $item->justification }}
-                                    </div>
-                                @endif
-                            </td>
-                            <td class="text-end small">{{ number_format($item->q1_amount, 2) }}</td>
-                            <td class="text-end small">{{ number_format($item->q2_amount, 2) }}</td>
-                            <td class="text-end small">{{ number_format($item->q3_amount, 2) }}</td>
-                            <td class="text-end small">{{ number_format($item->q4_amount, 2) }}</td>
-                            <td class="text-end small" style="color:{{ $itemSupp > 0 ? '#10B981' : 'inherit' }}">
-                                {{ $itemSupp > 0 ? '+'.number_format($itemSupp, 2) : '—' }}
-                            </td>
-                            <td class="text-end small fw-semibold" style="color:var(--navy)">
-                                {{ number_format($itemEffective, 2) }}
-                            </td>
-                            @if($canDecide)
-                            <td>
-                                <select name="line_items[{{ $item->id }}][status]"
-                                    class="form-select form-select-sm li-decision"
-                                    form="decision-form"
-                                    data-item="{{ $item->id }}">
-                                    <option value="">—</option>
-                                    <option value="approved">Approve</option>
-                                    <option value="reduced">Reduce</option>
-                                    <option value="rejected">Reject</option>
-                                </select>
-                            </td>
-                            <td>
-                                <input type="number"
-                                    name="line_items[{{ $item->id }}][approved_amount]"
-                                    class="form-control form-control-sm li-amount"
-                                    form="decision-form"
-                                    id="amount-{{ $item->id }}"
-                                    placeholder="{{ currency() }}"
-                                    min="0" step="0.01"
-                                    style="display:none">
-                            </td>
-                            @endif
-                        </tr>
-                        @endforeach
-                    </tbody>
-                    <tfoot style="background:#F8FAFC;font-weight:700;font-size:11px">
-                        <tr>
-                            <td>Category Total</td>
-                            <td class="text-end">{{ number_format($categoryData['items']->sum('q1_amount'), 2) }}</td>
-                            <td class="text-end">{{ number_format($categoryData['items']->sum('q2_amount'), 2) }}</td>
-                            <td class="text-end">{{ number_format($categoryData['items']->sum('q3_amount'), 2) }}</td>
-                            <td class="text-end">{{ number_format($categoryData['items']->sum('q4_amount'), 2) }}</td>
-                            <td class="text-end" style="color:{{ $catSuppTotal > 0 ? '#10B981' : 'inherit' }}">
-                                {{ $catSuppTotal > 0 ? '+'.number_format($catSuppTotal, 2) : '—' }}
-                            </td>
-                            <td class="text-end" style="color:var(--navy)">
-                                {{ currency() }} {{ number_format($catEffectiveTotal, 2) }}
-                            </td>
-                            @if($canDecide)<td colspan="2"></td>@endif
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        </div>
-        @endforeach
 
-        {{-- Grand total footer --}}
-        <div class="card shadow-sm" style="background:var(--navy);color:#fff;border:none;">
-            <div class="card-body py-3">
-                <div class="row align-items-center">
-                    <div class="col">
-                        <div style="font-size:13px;color:rgba(255,255,255,.6)">
-                            Grand Total — All Categories
+        {{-- Tab navigation --}}
+        <ul class="nav nav-tabs mb-0" id="aprvTabs" role="tablist">
+            @foreach($aprvTabGroups as $atab)
+            @if($atab['active'] || !empty($atab['summary']))
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {{ $atab['active'] ? 'active' : '' }}"
+                        data-bs-toggle="tab" data-bs-target="#{{ $atab['id'] }}"
+                        type="button" role="tab">
+                    {!! $atab['label'] !!}
+                    @if(!empty($atab['summary']))
+                    <span class="badge bg-secondary ms-1" style="font-size:10px">{{ count($atab['summary']) }}</span>
+                    @endif
+                </button>
+            </li>
+            @endif
+            @endforeach
+        </ul>
+
+        <div class="tab-content border border-top-0 rounded-bottom mb-3" id="aprvTabsContent">
+        @foreach($aprvTabGroups as $atab)
+        @if($atab['active'] || !empty($atab['summary']))
+        @php
+            $tabGrandEff  = collect(array_values($atab['summary']))->sum(fn($c) => $c['items']->sum(fn($i) => $i->effectiveBudget()));
+            $tabGrandSupp = collect(array_values($atab['summary']))->sum(fn($c) => $c['items']->sum(fn($i) => $i->approvedSupplementaryTotal()));
+        @endphp
+        <div class="tab-pane fade {{ $atab['active'] ? 'show active' : '' }} p-3"
+             id="{{ $atab['id'] }}" role="tabpanel">
+            @forelse($atab['summary'] as $categoryName => $categoryData)
+            @php
+                $catEffectiveTotal = $categoryData['items']->sum(fn($item) => $item->effectiveBudget());
+                $catSuppTotal = $categoryData['items']->sum(fn($item) => $item->approvedSupplementaryTotal());
+            @endphp
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-light py-2 d-flex justify-content-between">
+                    <span class="fw-semibold small text-uppercase">{{ $categoryName }}</span>
+                    <span class="small text-muted">
+                        Total: <strong>{{ currency() }} {{ number_format($catEffectiveTotal, 2) }}</strong>
+                        @if($catSuppTotal > 0)
+                        <span style="color:#10B981;font-size:11px;">
+                            (+{{ number_format($catSuppTotal, 2) }} supp.)
+                        </span>
+                        @endif
+                    </span>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:30%">Account</th>
+                                <th class="text-end">Q1</th>
+                                <th class="text-end">Q2</th>
+                                <th class="text-end">Q3</th>
+                                <th class="text-end">Q4</th>
+                                <th class="text-end">Supplementary</th>
+                                <th class="text-end">Total</th>
+                                @if($canDecide)<th>Decision</th><th>Adjusted</th>@endif
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($categoryData['items'] as $item)
                             @php
-                                $totalSupp = $budgetVersion->lineItems->sum(fn($i) => $i->approvedSupplementaryTotal());
+                                $itemSupp = $item->approvedSupplementaryTotal();
+                                $itemEffective = $item->effectiveBudget();
                             @endphp
-                            @if($totalSupp > 0)
-                            <span style="color:#10B981;font-size:12px;">
-                                (incl. {{ number_format($totalSupp, 2) }} supplementary)
-                            </span>
-                            @endif
+                            <tr>
+                                <td class="small">
+                                    <code>{{ $item->accountCode->code }}</code>
+                                    {{ $item->accountCode->name }}
+                                    @if($item->justification)
+                                        <div class="text-muted" style="font-size:11px">
+                                            {{ $item->justification }}
+                                        </div>
+                                    @endif
+                                </td>
+                                <td class="text-end small">{{ number_format($item->q1_amount, 2) }}</td>
+                                <td class="text-end small">{{ number_format($item->q2_amount, 2) }}</td>
+                                <td class="text-end small">{{ number_format($item->q3_amount, 2) }}</td>
+                                <td class="text-end small">{{ number_format($item->q4_amount, 2) }}</td>
+                                <td class="text-end small" style="color:{{ $itemSupp > 0 ? '#10B981' : 'inherit' }}">
+                                    {{ $itemSupp > 0 ? '+'.number_format($itemSupp, 2) : '—' }}
+                                </td>
+                                <td class="text-end small fw-semibold" style="color:var(--navy)">
+                                    {{ number_format($itemEffective, 2) }}
+                                </td>
+                                @if($canDecide)
+                                <td>
+                                    <select name="line_items[{{ $item->id }}][status]"
+                                        class="form-select form-select-sm li-decision"
+                                        form="decision-form"
+                                        data-item="{{ $item->id }}">
+                                        <option value="">—</option>
+                                        <option value="approved">Approve</option>
+                                        <option value="reduced">Reduce</option>
+                                        <option value="rejected">Reject</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <input type="number"
+                                        name="line_items[{{ $item->id }}][approved_amount]"
+                                        class="form-control form-control-sm li-amount"
+                                        form="decision-form"
+                                        id="amount-{{ $item->id }}"
+                                        placeholder="{{ currency() }}"
+                                        min="0" step="0.01"
+                                        style="display:none">
+                                </td>
+                                @endif
+                            </tr>
+                            @endforeach
+                        </tbody>
+                        <tfoot style="background:#F8FAFC;font-weight:700;font-size:11px">
+                            <tr>
+                                <td>Category Total</td>
+                                <td class="text-end">{{ number_format($categoryData['items']->sum('q1_amount'), 2) }}</td>
+                                <td class="text-end">{{ number_format($categoryData['items']->sum('q2_amount'), 2) }}</td>
+                                <td class="text-end">{{ number_format($categoryData['items']->sum('q3_amount'), 2) }}</td>
+                                <td class="text-end">{{ number_format($categoryData['items']->sum('q4_amount'), 2) }}</td>
+                                <td class="text-end" style="color:{{ $catSuppTotal > 0 ? '#10B981' : 'inherit' }}">
+                                    {{ $catSuppTotal > 0 ? '+'.number_format($catSuppTotal, 2) : '—' }}
+                                </td>
+                                <td class="text-end" style="color:var(--navy)">
+                                    {{ currency() }} {{ number_format($catEffectiveTotal, 2) }}
+                                </td>
+                                @if($canDecide)<td colspan="2"></td>@endif
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            @empty
+            <div class="text-center text-muted py-5">
+                <i class="bi bi-inbox d-block mb-2" style="font-size:2rem;opacity:.3"></i>
+                No items in this section yet.
+            </div>
+            @endforelse
+
+            {{-- Tab grand total --}}
+            @if(!empty($atab['summary']))
+            <div class="card shadow-sm" style="background:var(--navy);color:#fff;border:none;">
+                <div class="card-body py-3">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <div style="font-size:13px;color:rgba(255,255,255,.6)">
+                                {!! $atab['label'] !!} — Total
+                                @if($tabGrandSupp > 0)
+                                <span style="color:#10B981;font-size:12px;">
+                                    (incl. {{ number_format($tabGrandSupp, 2) }} supplementary)
+                                </span>
+                                @endif
+                            </div>
                         </div>
-                    </div>
-                    <div class="col-auto">
-                        <div style="font-size:22px;font-weight:700;color:var(--gold)">
-                            {{ currency() }} {{ number_format($grandTotals['total'], 2) }}
+                        <div class="col-auto">
+                            <div style="font-size:22px;font-weight:700;color:var(--gold)">
+                                {{ currency() }} {{ number_format($tabGrandEff, 2) }}
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
+            @endif
+        </div>
+        @endif
+        @endforeach
         </div>
 
     </div>
 
     {{-- Right: approval progress + decision form --}}
-    <div class="col-lg-4">
+    <div class="col-lg-3">
 
         {{-- Approval progress --}}
         <div class="card shadow-sm mb-3">

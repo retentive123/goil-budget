@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php -l \"c:\\\\xampp\\\\htdocs\\\\goil-budget\\\\app\\\\Http\\\\Controllers\\\\Budget\\\\BudgetEntryController.php\")",
+      "Bash(php -l \"c:\\\\xampp\\\\htdocs\\\\goil-budget\\\\app\\\\Exports\\\\BudgetPnlTemplateExport.php\")",
+      "Bash(php -l \"c:\\\\xampp\\\\htdocs\\\\goil-budget\\\\app\\\\Http\\\\Controllers\\\\ImportExportController.php\")",
+      "Bash(php -l \"c:\\\\xampp\\\\htdocs\\\\goil-budget\\\\resources\\\\views\\\\budget\\\\show-pnl.blade.php\")",
+      "Bash(php -l \"c:\\\\xampp\\\\htdocs\\\\goil-budget\\\\resources\\\\views\\\\budget\\\\show.blade.php\")",
+      "Bash(php -l app/Services/BudgetCalculationService.php)",
+      "Bash(php -l app/Http/Controllers/Budget/BudgetEntryController.php)",
+      "Bash(php -l app/Http/Controllers/Approval/ApprovalController.php)",
+      "Bash(php -l routes/web.php)",
+      "Bash(php -l app/Exports/BudgetReadOnlyExport.php)",
+      "Bash(php -l app/Exports/BudgetPnlReadOnlyExport.php)",
+      "Bash(php -l app/Http/Controllers/ImportExportController.php)",
+      "PowerShell(php artisan migrate 2>&1)",
+      "PowerShell(php -l app/Models/AccountCategory.php)",
+      "PowerShell(php -l app/Http/Controllers/Admin/AccountCategoryController.php)",
+      "PowerShell(php -l app/Services/BudgetCalculationService.php)",
+      "PowerShell(php -l app/Exports/BudgetReadOnlyExport.php)",
+      "PowerShell(php -l app/Http/Controllers/Reports/ReportController.php 2>&1)",
+      "PowerShell(php -l app/Exports/AccountCategoryExport.php)",
+      "PowerShell(php -l app/Imports/AccountCategoryImport.php 2>&1)"
+    ]
+  }
+}

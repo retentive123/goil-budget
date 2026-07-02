@@ -33,7 +33,15 @@ class BudgetSubmissionController extends Controller
         $grandTotals = $this->calculator->grandTotals($budgetVersion);
         $budgetVersion->load('period', 'department', 'lineItems.accountCode.category');
 
-        return view('budget.confirm', compact('budgetVersion', 'grandTotals'));
+        $period     = $budgetVersion->period;
+        $prevPeriod = \App\Models\BudgetPeriod::where('year', $period->year - 1)
+            ->orderByDesc('id')->first()
+            ?? \App\Models\BudgetPeriod::where('id', '<', $period->id)
+                ->orderByDesc('year')->orderByDesc('id')->first();
+
+        $pnlData = $this->calculator->buildPnlData($budgetVersion, $prevPeriod);
+
+        return view('budget.confirm', compact('budgetVersion', 'grandTotals', 'prevPeriod', 'pnlData'));
     }
 
     public function submit(Request $request, BudgetVersion $budgetVersion)
