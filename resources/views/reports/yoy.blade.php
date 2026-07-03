@@ -247,6 +247,8 @@
         fn($r) => array_diff_key($r, array_flip(['budget_a_q','budget_b_q','actual_a_q','actual_b_q'])),
         $comparison['rows']
     );
+    $yoyTypes = array_values(array_unique(array_filter(array_column($tableRows, 'line_type'))));
+    sort($yoyTypes);
 @endphp
 
 <div class="chart-card" id="yoyTableCard">
@@ -289,7 +291,7 @@
         </div>
     </div>
 
-    {{-- Tab toggle + page size --}}
+    {{-- View toggle + page size --}}
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div class="d-flex gap-2">
             <button type="button" onclick="showView('budget')" id="btn_budget"
@@ -321,6 +323,24 @@
         </div>
     </div>
 
+    {{-- Type filter tabs --}}
+    <div class="d-flex gap-2 mb-3 flex-wrap" style="border-bottom:1px solid #E2E8F0;padding-bottom:10px">
+        <button type="button" class="yoy-type-btn active-type-btn"
+                onclick="setYoyType('')" data-type=""
+                style="font-size:11px;font-weight:600;padding:3px 14px;border-radius:20px;
+                       border:1.5px solid var(--navy);background:var(--navy);color:#fff;cursor:pointer">
+            All Types
+        </button>
+        @foreach($yoyTypes as $t)
+        <button type="button" class="yoy-type-btn"
+                onclick="setYoyType('{{ $t }}')" data-type="{{ $t }}"
+                style="font-size:11px;font-weight:600;padding:3px 14px;border-radius:20px;
+                       border:1.5px solid #E2E8F0;background:#F8FAFC;color:#475569;cursor:pointer">
+            {{ $t }}
+        </button>
+        @endforeach
+    </div>
+
     {{-- Budget view --}}
     <div id="view_budget" class="table-responsive">
         <table class="table table-sm table-hover mb-0">
@@ -330,6 +350,7 @@
                     <th>Code</th>
                     <th>Account</th>
                     <th>Category</th>
+                    <th>Type</th>
                     <th class="text-end">{{ $periodA->name }} Budget (eff.)</th>
                     <th class="text-end">{{ $periodB->name }} Budget (eff.)</th>
                     <th class="text-end">Change (GHS)</th>
@@ -340,7 +361,7 @@
             <tbody id="tbody_budget"></tbody>
             <tfoot style="background:#F8FAFC;font-weight:700;font-size:12px">
                 <tr>
-                    <td colspan="3">Total</td>
+                    <td colspan="4">Total</td>
                     <td class="text-end">GHS {{ number_format($comparison['budget_total_a'], 0) }}</td>
                     <td class="text-end">GHS {{ number_format($comparison['budget_total_b'], 0) }}</td>
                     <td class="text-end"
@@ -366,6 +387,7 @@
                     <th>Code</th>
                     <th>Account</th>
                     <th>Category</th>
+                    <th>Type</th>
                     <th class="text-end">{{ $periodA->name }} Actual</th>
                     <th class="text-end">{{ $periodB->name }} Actual</th>
                     <th class="text-end">Change (GHS)</th>
@@ -376,7 +398,7 @@
             <tbody id="tbody_actual"></tbody>
             <tfoot style="background:#F8FAFC;font-weight:700;font-size:12px">
                 <tr>
-                    <td colspan="3">Total</td>
+                    <td colspan="4">Total</td>
                     <td class="text-end" style="color:#10B981">
                         GHS {{ number_format($comparison['actual_total_a'], 0) }}
                     </td>
@@ -404,6 +426,7 @@
                 <tr>
                     <th rowspan="2">Code</th>
                     <th rowspan="2">Account</th>
+                    <th rowspan="2">Type</th>
                     <th colspan="4" class="text-center"
                         style="background:#F1F5F9;border-bottom:2px solid var(--slate)">
                         {{ $periodA->name }}
@@ -433,7 +456,7 @@
             <tbody id="tbody_combined"></tbody>
             <tfoot style="background:#F8FAFC;font-weight:700;font-size:11px">
                 <tr>
-                    <td colspan="2">Total</td>
+                    <td colspan="3">Total</td>
                     <td class="text-end">{{ number_format($comparison['original_total_a'],0) }}</td>
                     <td class="text-end" style="color:#92400E">
                         {{ $comparison['supplementary_total_a']>0 ? '+'.number_format($comparison['supplementary_total_a'],0) : '—' }}
@@ -684,6 +707,11 @@ function utilColor(u) {
     return u > 90 ? '#F43F5E' : u > 70 ? '#F59E0B' : '#10B981';
 }
 
+function typePill(t) {
+    return `<span style="font-size:10px;padding:1px 8px;border-radius:10px;
+                         background:#F1F5F9;color:#475569;white-space:nowrap">${esc(t??'')}</span>`;
+}
+
 function rowBudget(r) {
     const sA = r.supplementary_a > 0
         ? `<div style="font-size:9px;color:#92400E">incl. +${numFmt(r.supplementary_a)} suppl.</div>` : '';
@@ -693,6 +721,7 @@ function rowBudget(r) {
         <td style="font-family:monospace;font-weight:600;font-size:12px">${esc(r.code)}</td>
         <td class="small">${esc(r.name)}</td>
         <td class="small text-muted">${esc(r.category)}</td>
+        <td>${typePill(r.line_type)}</td>
         <td class="text-end small">GHS ${numFmt(r.budget_a)}${sA}</td>
         <td class="text-end small">GHS ${numFmt(r.budget_b)}${sB}</td>
         <td class="text-end small fw-semibold" style="color:${chgColor(r.budget_change)}">
@@ -708,6 +737,7 @@ function rowActual(r) {
         <td style="font-family:monospace;font-weight:600;font-size:12px">${esc(r.code)}</td>
         <td class="small">${esc(r.name)}</td>
         <td class="small text-muted">${esc(r.category)}</td>
+        <td>${typePill(r.line_type)}</td>
         <td class="text-end small" style="color:#10B981">GHS ${numFmt(r.actual_a)}</td>
         <td class="text-end small" style="color:#10B981">GHS ${numFmt(r.actual_b)}</td>
         <td class="text-end small fw-semibold" style="color:${chgColor(r.actual_change)}">
@@ -722,6 +752,7 @@ function rowCombined(r) {
     return `<tr>
         <td style="font-family:monospace;font-weight:600;font-size:11px">${esc(r.code)}</td>
         <td style="font-size:11px">${esc(r.name)}</td>
+        <td style="font-size:11px">${typePill(r.line_type)}</td>
         <td class="text-end" style="font-size:11px;background:#FAFAFA">${numFmt(r.original_a)}</td>
         <td class="text-end" style="font-size:11px;background:#FAFAFA;color:#92400E">
             ${r.supplementary_a > 0 ? '+' + numFmt(r.supplementary_a) : '—'}
@@ -807,17 +838,35 @@ function yoyGoPage(p) {
     document.getElementById('yoyTableCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-document.getElementById('codeSearch').addEventListener('input', function () {
-    const q = this.value.toLowerCase();
-    yoyFiltered = q
-        ? YOY_ROWS.filter(r =>
-            (r.code     ?? '').toLowerCase().includes(q) ||
-            (r.name     ?? '').toLowerCase().includes(q) ||
-            (r.category ?? '').toLowerCase().includes(q))
-        : YOY_ROWS;
+// ── Type filter tabs ──
+let yoyTypeFilter = '';
+
+function setYoyType(type) {
+    yoyTypeFilter = type;
+    document.querySelectorAll('.yoy-type-btn').forEach(b => {
+        const on = b.dataset.type === type;
+        b.style.background  = on ? 'var(--navy)' : '#F8FAFC';
+        b.style.color       = on ? '#fff'        : '#475569';
+        b.style.borderColor = on ? 'var(--navy)' : '#E2E8F0';
+    });
+    applyFilters();
+}
+
+function applyFilters() {
+    const q = document.getElementById('codeSearch').value.toLowerCase();
+    yoyFiltered = YOY_ROWS.filter(r => {
+        if (yoyTypeFilter && (r.line_type ?? '') !== yoyTypeFilter) return false;
+        if (!q) return true;
+        return (r.code      ?? '').toLowerCase().includes(q) ||
+               (r.name      ?? '').toLowerCase().includes(q) ||
+               (r.category  ?? '').toLowerCase().includes(q) ||
+               (r.line_type ?? '').toLowerCase().includes(q);
+    });
     yoyPage = 1;
     renderTable();
-});
+}
+
+document.getElementById('codeSearch').addEventListener('input', applyFilters);
 
 document.getElementById('yoyPageSize').addEventListener('change', function () {
     yoyPageSize = this.value === 'all' ? Infinity : parseInt(this.value);
@@ -829,32 +878,32 @@ document.getElementById('yoyPageSize').addEventListener('change', function () {
 function getExportConfig() {
     if (yoyView === 'budget') {
         return {
-            headers: ['Code','Account','Category',
+            headers: ['Code','Account','Category','Type',
                       `${PERIOD_A_NAME} Budget`,`${PERIOD_B_NAME} Budget`,
                       'Change (GHS)','Change %','Trend'],
-            row: r => [r.code, r.name, r.category,
+            row: r => [r.code, r.name, r.category, r.line_type,
                        r.budget_a, r.budget_b,
                        r.budget_change, r.budget_change_pct ?? 'New', r.budget_trend],
         };
     }
     if (yoyView === 'actual') {
         return {
-            headers: ['Code','Account','Category',
+            headers: ['Code','Account','Category','Type',
                       `${PERIOD_A_NAME} Actual`,`${PERIOD_B_NAME} Actual`,
                       'Change (GHS)','Change %','Trend'],
-            row: r => [r.code, r.name, r.category,
+            row: r => [r.code, r.name, r.category, r.line_type,
                        r.actual_a, r.actual_b,
                        r.actual_change, r.actual_change_pct ?? 'New', r.actual_trend],
         };
     }
     return {
-        headers: ['Code','Account',
+        headers: ['Code','Account','Type',
                   `${PERIOD_A_NAME} Original`,`${PERIOD_A_NAME} Suppl`,
                   `${PERIOD_A_NAME} Actual`,`${PERIOD_A_NAME} Util%`,
                   `${PERIOD_B_NAME} Original`,`${PERIOD_B_NAME} Suppl`,
                   `${PERIOD_B_NAME} Actual`,`${PERIOD_B_NAME} Util%`,
                   'Budget Change','Actual Change'],
-        row: r => [r.code, r.name,
+        row: r => [r.code, r.name, r.line_type,
                    r.original_a, r.supplementary_a, r.actual_a, r.utilisation_a,
                    r.original_b, r.supplementary_b, r.actual_b, r.utilisation_b,
                    r.budget_change, r.actual_change],

@@ -641,6 +641,9 @@ public function codeExplorerExport(Request $request)
 
     public function exportPdf(Request $request, string $type)
     {
+        $allowed = ['approved'];
+        abort_unless(in_array($type, $allowed, true), 404);
+
         $period   = $this->resolvePeriod($request);
         $versions = BudgetVersion::with('department','lineItems.accountCode.category')
             ->where('budget_period_id', $period?->id)
@@ -789,8 +792,13 @@ private function buildYoYComparison(
     $allCodes = $budgetA->keys()->merge($budgetB->keys())->unique();
     $rows     = [];
 
+    $lineTypeA  = $itemsA->groupBy('account_code_id')->map(fn($i) => $i->first()->line_type);
+    $lineTypeB  = $itemsB->groupBy('account_code_id')->map(fn($i) => $i->first()->line_type);
+    $typeLabels = ['revenue'=>'Revenue','expense'=>'Expense','capex'=>'CapEx','asset'=>'Asset','liability'=>'Liability'];
+
     foreach ($allCodes as $codeId) {
-        $code = AccountCode::with('category')->find($codeId);
+        $code    = AccountCode::with('category')->find($codeId);
+        $rawType = $lineTypeA->get($codeId) ?? $lineTypeB->get($codeId) ?? 'expense';
 
         $oA = (float)($origA->get($codeId, 0));
         $oB = (float)($origB->get($codeId, 0));
@@ -819,6 +827,7 @@ private function buildYoYComparison(
             'code'              => $code?->code,
             'name'              => $code?->name,
             'category'          => $code?->category?->name,
+            'line_type'         => $typeLabels[$rawType] ?? ucfirst($rawType),
 
             'original_a'        => $oA,                 // ← NEW
             'supplementary_a'   => $sA,                  // ← NEW

@@ -1,6 +1,14 @@
 @extends('layouts.app')
 @section('title', 'Record Actuals — ' . \App\Models\BudgetActual::MONTHS[$month] . ' ' . $year)
 @section('content')
+@php
+    $isConfirmed = \App\Models\BudgetActual::where('department_id', $department->id)
+        ->where('budget_period_id', $period->id)
+        ->where('month', $month)
+        ->where('year',  $year)
+        ->where('status','confirmed')
+        ->exists();
+@endphp
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
@@ -14,7 +22,7 @@
         </p>
     </div>
 
-    {{-- Month navigator --}}
+    {{-- Month navigator + save status --}}
     <div class="d-flex gap-2 align-items-center">
         @if($month > 1)
         <a href="{{ route('actuals.entry', ['period_id'=>$period->id,'department_id'=>$department->id,'month'=>$month-1,'year'=>$year]) }}"
@@ -28,6 +36,14 @@
         @if($month < 12)
         <a href="{{ route('actuals.entry', ['period_id'=>$period->id,'department_id'=>$department->id,'month'=>$month+1,'year'=>$year]) }}"
            class="btn btn-sm btn-outline-secondary">Next →</a>
+        @endif
+
+        @if(!$isConfirmed)
+        <span id="save-status"
+              style="font-size:11px;font-weight:600;padding:4px 14px;border-radius:20px;
+                     border:1px solid transparent;transition:all .25s;min-width:130px;
+                     text-align:center;display:inline-block;visibility:hidden">
+        </span>
         @endif
     </div>
 </div>
@@ -197,16 +213,6 @@
         </form>
     </div>
 </div>
-
-{{-- Check if month is already confirmed --}}
-@php
-    $isConfirmed = \App\Models\BudgetActual::where('department_id', $department->id)
-        ->where('budget_period_id', $period->id)
-        ->where('month', $month)
-        ->where('year',  $year)
-        ->where('status','confirmed')
-        ->exists();
-@endphp
 
 @if($isConfirmed)
 <div class="alert mb-4"
@@ -438,8 +444,8 @@
     </div>
 
     @if(!$isConfirmed)
-    <div class="d-flex gap-2 mt-4">
-        <button type="submit" class="btn"
+    <div class="d-flex gap-2 align-items-center mt-4">
+        <button type="submit" id="save-btn" class="btn"
                 style="background:var(--navy);color:#fff;border-radius:8px;padding:10px 24px">
             <i class="fas fa-save"></i> Save as Draft
         </button>
@@ -475,15 +481,135 @@
 @endcan
 
 <script>
+const AUTOSAVE_URL = "{{ route('actuals.autosave') }}";
+const CSRF         = "{{ csrf_token() }}";
+const PERIOD_ID    = {{ $period->id }};
+const DEPT_ID      = {{ $department->id }};
+const MONTH        = {{ $month }};
+const YEAR         = {{ $year }};
+const IS_CONFIRMED = {{ $isConfirmed ? 'true' : 'false' }};
+
+let autoSaveTimer = null;
+let isSaving      = false;
+
+/* ── Running totals ── */
 function updateTotals() {
     let total = 0;
     document.querySelectorAll('.actual-input').forEach(inp => {
         total += parseFloat(inp.value) || 0;
     });
-
     document.getElementById('monthTotal').textContent =
         '{{ currency() }} ' + total.toLocaleString('en-GH', { minimumFractionDigits: 2 });
 }
+
+/* ── Save-status badge helpers ── */
+function setStatus(state, text) {
+    const el = document.getElementById('save-status');
+    if (!el) return;
+    el.textContent  = text;
+    el.style.visibility = 'visible';
+    // unsaved → amber  |  saving → blue  |  saved → green  |  error → red
+    const styles = {
+        unsaved: { bg: '#FEF3C7', border: '#F59E0B', color: '#92400E' },
+        saving:  { bg: '#DBEAFE', border: '#3B82F6', color: '#1E40AF' },
+        saved:   { bg: '#D1FAE5', border: '#10B981', color: '#065F46' },
+        error:   { bg: '#FEE2E2', border: '#F43F5E', color: '#991B1B' },
+    };
+    const s = styles[state] || styles.saved;
+    el.style.background   = s.bg;
+    el.style.borderColor  = s.border;
+    el.style.color        = s.color;
+}
+
+/* ── Autosave ── */
+function scheduleAutoSave() {
+    if (IS_CONFIRMED) return;
+    clearTimeout(autoSaveTimer);
+    setStatus('unsaved', '● Unsaved changes');
+    autoSaveTimer = setTimeout(saveActuals, 3000);
+}
+
+function collectActuals() {
+    const rows = [];
+    // Each hidden line_item_id input anchors one row's data
+    document.querySelectorAll('input[name^="actuals["][name$="[line_item_id]"]').forEach(hiddenInput => {
+        const prefix  = hiddenInput.name.replace('[line_item_id]', '');
+        const amtInp  = document.querySelector(`input[name="${prefix}[amount]"]`);
+        const refInp  = document.querySelector(`input[name="${prefix}[reference]"]`);
+        const descInp = document.querySelector(`input[name="${prefix}[description]"]`);
+        rows.push({
+            line_item_id: hiddenInput.value,
+            amount:       amtInp  ? (amtInp.value  === '' ? null : parseFloat(amtInp.value))  : null,
+            reference:    refInp  ? refInp.value  : null,
+            description:  descInp ? descInp.value : null,
+        });
+    });
+    return rows;
+}
+
+async function saveActuals() {
+    if (isSaving || IS_CONFIRMED) return;
+    isSaving = true;
+
+    const btn = document.getElementById('save-btn');
+    if (btn) btn.disabled = true;
+    setStatus('saving', '↻ Saving…');
+
+    try {
+        const res = await fetch(AUTOSAVE_URL, {
+            method:  'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': CSRF,
+                'Accept':       'application/json',
+            },
+            body: JSON.stringify({
+                period_id:     PERIOD_ID,
+                department_id: DEPT_ID,
+                month:         MONTH,
+                year:          YEAR,
+                actuals:       collectActuals(),
+            }),
+        });
+
+        if (!res.ok) {
+            setStatus('error', '✕ Save failed (' + res.status + ')');
+            return;
+        }
+
+        const data = await res.json();
+        if (data.success) {
+            setStatus('saved', '✓ Saved at ' + data.saved_at);
+        } else {
+            setStatus('error', '✕ Save failed');
+        }
+    } catch (e) {
+        setStatus('error', '✕ Network error');
+    } finally {
+        isSaving = false;
+        if (btn) btn.disabled = false;
+    }
+}
+
+/* ── Attach listeners ── */
+document.addEventListener('DOMContentLoaded', function () {
+    updateTotals();
+
+    // Amount inputs — trigger totals + autosave
+    document.querySelectorAll('.actual-input').forEach(inp => {
+        inp.addEventListener('input', function () {
+            updateTotals();
+            scheduleAutoSave();
+        });
+    });
+
+    // Reference and description inputs — autosave only
+    document.querySelectorAll(
+        'input[name$="[reference]"], input[name$="[description]"]'
+    ).forEach(inp => {
+        inp.addEventListener('input', scheduleAutoSave);
+    });
+});
 
 function confirmMonth() {
     // Calculate total amount
@@ -567,10 +693,6 @@ function confirmMonth() {
     });
 }
 
-// Init totals
-document.addEventListener('DOMContentLoaded', function() {
-    updateTotals();
-});
 </script>
 
 <style>

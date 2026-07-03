@@ -727,17 +727,17 @@
         </a>
         @endcan
 
-        @can('request supplementary budget')
+        @canany(['request supplementary budget', 'approve supplementary budget'])
         <a href="{{ route('supplementary.index') }}"
         class="sidebar-link {{ request()->routeIs('supplementary.*') ? 'active' : '' }}">
         <i class="bi bi-node-plus nav-icon"></i>
             <span class="link-text">Supplementary</span>
-            @php $pendingSup = \App\Models\SupplementaryBudget::where('status','submitted')->count(); @endphp
+            @php $pendingSup = \App\Models\SupplementaryBudget::whereIn('status',['submitted','under_review'])->count(); @endphp
             @if($pendingSup)
                 <span class="nav-badge">{{ $pendingSup }}</span>
             @endif
         </a>
-        @endcan
+        @endcanany
 
         @can('grant deadline override')
         <a href="{{ route('admin.deadline-overrides.index') }}"

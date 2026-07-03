@@ -136,6 +136,13 @@ class LoginController extends Controller
         $this->enforceSingleSession($request, $user);
 
         if ($this->requires2FA($user)) {
+            if (empty($user->two_factor_confirmed_at)) {
+                // 2FA required but setup never completed — stay logged in, force to setup page
+                return redirect()->route('2fa.setup')
+                    ->with('info', 'Two-factor authentication is required for your account. Please complete the setup below.');
+            }
+
+            // Fully configured — log out and present the challenge
             session(['2fa_user_id' => $user->id, '2fa_remember' => $request->boolean('remember')]);
             Auth::logout();
             return redirect()->route('2fa.show');
@@ -179,9 +186,9 @@ class LoginController extends Controller
 
     private function requires2FA($user): bool
     {
-        // ✅ Get boolean value directly
-        $global2FA = \App\Models\SystemSetting::get('two_factor_enabled', false);
+        $globalEnabled = (bool) \App\Models\SystemSetting::get('two_factor_enabled', false);
+        $userEnabled   = (bool) $user->two_factor_enabled && !empty($user->two_factor_secret);
 
-        return $global2FA === true && !session()->has('2fa_verified_' . $user->id);
+        return ($globalEnabled || $userEnabled) && !session()->has('2fa_verified_' . $user->id);
     }
 }

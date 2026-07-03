@@ -44,9 +44,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/password/change',  [PasswordController::class, 'showChangeForm'])->name('password.change');
     Route::post('/password/change', [PasswordController::class, 'update'])->name('password.update');
-    Route::get('/2fa/setup',     [TwoFactorController::class, 'setup'])->name('2fa.setup');
-    Route::post('/2fa/enable',   [TwoFactorController::class, 'enable'])->name('2fa.enable');
-    Route::post('/2fa/disable',  [TwoFactorController::class, 'disable'])->name('2fa.disable');
+    Route::get('/2fa/setup',    [TwoFactorController::class, 'setup'])->name('2fa.setup');
+    Route::post('/2fa/enable',  [TwoFactorController::class, 'enable'])->name('2fa.enable');
+    Route::post('/2fa/disable', [TwoFactorController::class, 'disable'])
+        ->name('2fa.disable')
+        ->middleware('permission:disable two factor');
 
 
     // -------------------------------------------------------
@@ -149,17 +151,28 @@ Route::middleware('auth')->group(function () {
     // Supplementary budget routes
     Route::prefix('supplementary')->name('supplementary.')->group(function () {
 
+        Route::middleware('permission:request supplementary budget|approve supplementary budget')->group(function () {
+            Route::get('/', [SupplementaryBudgetController::class, 'index'])->name('index');
+        });
+
         Route::middleware('permission:request supplementary budget')->group(function () {
-            Route::get('/',        [SupplementaryBudgetController::class, 'index'])->name('index');
             Route::get('/create',  [SupplementaryBudgetController::class, 'create'])->name('create');
             Route::post('/',       [SupplementaryBudgetController::class, 'store'])->name('store');
-            Route::get('/{supplementary}', [SupplementaryBudgetController::class, 'show'])->name('show');
         });
 
         Route::middleware('permission:approve supplementary budget')->group(function () {
-            Route::get('/pending',                   [SupplementaryBudgetController::class, 'pending'])->name('pending');
-            Route::post('/{supplementary}/approve',  [SupplementaryBudgetController::class, 'approve'])->name('approve');
-            Route::post('/{supplementary}/reject',   [SupplementaryBudgetController::class, 'reject'])->name('reject');
+            Route::get('/pending',                         [SupplementaryBudgetController::class, 'pending'])->name('pending');
+            Route::post('/{supplementary}/approve',        [SupplementaryBudgetController::class, 'approve'])->name('approve');
+            Route::post('/{supplementary}/reject',         [SupplementaryBudgetController::class, 'reject'])->name('reject');
+            Route::post('/batch/{batchId}/approve',        [SupplementaryBudgetController::class, 'approveBatch'])->name('approve-batch');
+            Route::post('/batch/{batchId}/reject',         [SupplementaryBudgetController::class, 'rejectBatch'])->name('reject-batch');
+            Route::delete('/{supplementary}',              [SupplementaryBudgetController::class, 'destroy'])->name('destroy');
+            Route::delete('/batch/{batchId}',              [SupplementaryBudgetController::class, 'destroyBatch'])->name('destroy-batch');
+        });
+
+        // Wildcard show route must come last so it doesn't swallow /pending and /create
+        Route::middleware('permission:request supplementary budget|approve supplementary budget')->group(function () {
+            Route::get('/{supplementary}', [SupplementaryBudgetController::class, 'show'])->name('show');
         });
     });
 
@@ -244,8 +257,9 @@ Route::middleware('auth')->group(function () {
         });
 
         Route::middleware('permission:approve budget|create budget')->group(function () {
-            Route::post('/store',   [ActualController::class, 'store'])->name('store');
-            Route::post('/confirm', [ActualController::class, 'confirm'])->name('confirm');
+            Route::post('/store',    [ActualController::class, 'store'])->name('store');
+            Route::post('/autosave', [ActualController::class, 'autosave'])->name('autosave');
+            Route::post('/confirm',  [ActualController::class, 'confirm'])->name('confirm');
         });
     });
 
@@ -254,7 +268,7 @@ Route::middleware('auth')->group(function () {
 // Import / Export routes
 Route::prefix('import-export')->name('ie.')->group(function () {
 
-    // Budget
+    // Downloads are available to anyone with budget access (read-only)
     Route::get('budget/{budgetVersion}/download',
         [ImportExportController::class, 'downloadBudgetTemplate'])->name('budget.download');
     Route::get('budget/{budgetVersion}/download-pnl',
@@ -263,26 +277,28 @@ Route::prefix('import-export')->name('ie.')->group(function () {
         [ImportExportController::class, 'exportBudget'])->name('budget.export');
     Route::get('budget/{budgetVersion}/export-pnl',
         [ImportExportController::class, 'exportPnlBudget'])->name('budget.export-pnl');
-    Route::post('budget/{budgetVersion}/upload',
-        [ImportExportController::class, 'uploadBudget'])->name('budget.upload');
-
-    // Actuals
     Route::get('actuals/download',
         [ImportExportController::class, 'downloadActualsTemplate'])->name('actuals.download');
-    Route::post('actuals/upload',
-        [ImportExportController::class, 'uploadActuals'])->name('actuals.upload');
-
-    // Categories
     Route::get('categories/download',
         [ImportExportController::class, 'downloadCategoryTemplate'])->name('categories.download');
-    Route::post('categories/upload',
-        [ImportExportController::class, 'uploadCategories'])->name('categories.upload');
-
-    // Account codes
     Route::get('codes/download',
         [ImportExportController::class, 'downloadCodeTemplate'])->name('codes.download');
-    Route::post('codes/upload',
-        [ImportExportController::class, 'uploadCodes'])->name('codes.upload');
+
+    // Budget & actuals uploads require budget creation permission
+    Route::middleware('permission:create budget|approve budget')->group(function () {
+        Route::post('budget/{budgetVersion}/upload',
+            [ImportExportController::class, 'uploadBudget'])->name('budget.upload');
+        Route::post('actuals/upload',
+            [ImportExportController::class, 'uploadActuals'])->name('actuals.upload');
+    });
+
+    // Master-data uploads (categories, codes) are admin-only
+    Route::middleware('permission:manage categories|manage users')->group(function () {
+        Route::post('categories/upload',
+            [ImportExportController::class, 'uploadCategories'])->name('categories.upload');
+        Route::post('codes/upload',
+            [ImportExportController::class, 'uploadCodes'])->name('codes.upload');
+    });
 });
 
 Route::middleware(['auth', 'role:super_admin'])->prefix('admin/maintenance')->name('admin.maintenance.')->group(function () {

@@ -163,29 +163,81 @@
                         </div>
                     </div>
 
-                    {{-- Status --}}
+                    {{-- Status & Security --}}
                     <div class="mb-4">
                         <h6 class="fw-semibold mb-3" style="color: #1B2A4A; font-size: 13px;">
-                            <i class="fas fa-circle" style="color: #E65C00;"></i> Account Status
+                            <i class="fas fa-shield-alt" style="color: #E65C00;"></i> Status &amp; Security
                         </h6>
-                        <div class="d-flex gap-4">
-                            <div class="form-check">
-                                <input type="radio" name="is_active" value="1"
-                                       id="status_active" class="form-check-input"
-                                       {{ old('is_active', $user->is_active) ? 'checked' : '' }}
-                                       style="border-color: #E65C00;">
-                                <label for="status_active" class="form-check-label" style="color: #10B981; font-weight: 500;">
-                                    <i class="fas fa-check-circle"></i> Active
-                                </label>
+
+                        <div class="row g-3">
+                            {{-- Account Status --}}
+                            <div class="col-md-6">
+                                <div class="p-3 rounded-3 h-100" style="background:#F8FAFC;border:1px solid #E2E8F0">
+                                    <div class="fw-semibold mb-2" style="font-size:13px;color:#1B2A4A">
+                                        Account Status
+                                    </div>
+                                    <div class="d-flex gap-4">
+                                        <div class="form-check">
+                                            <input type="radio" name="is_active" value="1"
+                                                   id="status_active" class="form-check-input"
+                                                   {{ old('is_active', $user->is_active ? '1' : '0') === '1' ? 'checked' : '' }}
+                                                   {{ $user->id === auth()->id() ? 'disabled' : '' }}>
+                                            <label for="status_active" class="form-check-label fw-semibold"
+                                                   style="color:#10B981;font-size:13px">
+                                                <i class="fas fa-check-circle"></i> Active
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="radio" name="is_active" value="0"
+                                                   id="status_inactive" class="form-check-input"
+                                                   {{ old('is_active', $user->is_active ? '1' : '0') === '0' ? 'checked' : '' }}
+                                                   {{ $user->id === auth()->id() ? 'disabled' : '' }}>
+                                            <label for="status_inactive" class="form-check-label fw-semibold"
+                                                   style="color:#F43F5E;font-size:13px">
+                                                <i class="fas fa-times-circle"></i> Inactive
+                                            </label>
+                                        </div>
+                                    </div>
+                                    @if($user->id === auth()->id())
+                                    <div style="font-size:11px;color:#94A3B8;margin-top:6px">
+                                        You cannot deactivate your own account.
+                                    </div>
+                                    @endif
+                                </div>
                             </div>
-                            <div class="form-check">
-                                <input type="radio" name="is_active" value="0"
-                                       id="status_inactive" class="form-check-input"
-                                       {{ old('is_active', $user->is_active) ? '' : 'checked' }}
-                                       style="border-color: #E65C00;">
-                                <label for="status_inactive" class="form-check-label" style="color: #F43F5E; font-weight: 500;">
-                                    <i class="fas fa-times-circle"></i> Inactive
-                                </label>
+
+                            {{-- 2FA Toggle --}}
+                            <div class="col-md-6">
+                                <div class="p-3 rounded-3 h-100" style="background:#F8FAFC;border:1px solid #E2E8F0">
+                                    <div class="d-flex align-items-start justify-content-between gap-2">
+                                        <div style="flex:1">
+                                            <div class="fw-semibold" style="font-size:13px;color:#1B2A4A">
+                                                Two-Factor Authentication
+                                            </div>
+                                            <div style="font-size:11px;color:#64748B;margin-top:2px">
+                                                @if($user->two_factor_secret)
+                                                    Authenticator app configured.
+                                                    {{ $user->two_factor_enabled ? 'Currently enforced.' : 'Currently off.' }}
+                                                @else
+                                                    No authenticator app set up yet.
+                                                    Enabling will take effect after setup.
+                                                @endif
+                                            </div>
+                                        </div>
+                                        <div class="form-check form-switch ms-2" style="flex-shrink:0;padding-top:2px">
+                                            <input class="form-check-input" type="checkbox"
+                                                   role="switch" id="tfa_edit"
+                                                   name="two_factor_enabled" value="1"
+                                                   {{ old('two_factor_enabled', $user->two_factor_enabled ? '1' : '0') === '1' ? 'checked' : '' }}
+                                                   style="width:2.5em;height:1.3em;cursor:pointer">
+                                            <label class="form-check-label fw-semibold"
+                                                   for="tfa_edit"
+                                                   style="font-size:12px;color:#1B2A4A;cursor:pointer">
+                                                On
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

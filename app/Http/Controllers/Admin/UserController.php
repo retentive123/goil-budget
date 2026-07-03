@@ -69,23 +69,25 @@ class UserController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name'          => ['required', 'string', 'max:255'],
-            'email'         => ['required', 'email', 'unique:users,email'],
-            'employee_id'   => ['nullable', 'string', 'unique:users,employee_id'],
-            'phone'         => ['nullable', 'string', 'max:20'],
-            'department_id' => ['nullable', 'exists:departments,id'],
-            'role'          => ['required', 'exists:roles,name'],
-            'password'      => ['required', Password::min(8)->mixedCase()->numbers()->symbols()],
+            'name'               => ['required', 'string', 'max:255'],
+            'email'              => ['required', 'email', 'unique:users,email'],
+            'employee_id'        => ['nullable', 'string', 'unique:users,employee_id'],
+            'phone'              => ['nullable', 'string', 'max:20'],
+            'department_id'      => ['nullable', 'exists:departments,id'],
+            'role'               => ['required', 'exists:roles,name'],
+            'password'           => ['required', Password::min(8)->mixedCase()->numbers()->symbols()],
+            'two_factor_enabled' => ['nullable', 'in:0,1'],
         ]);
 
         $user = User::create([
-            'name'          => $validated['name'],
-            'email'         => $validated['email'],
-            'employee_id'   => $validated['employee_id'] ?? null,
-            'phone'         => $validated['phone'] ?? null,
-            'department_id' => $validated['department_id'] ?? null,
-            'password'      => Hash::make($validated['password']),
-            'is_active'     => true,
+            'name'               => $validated['name'],
+            'email'              => $validated['email'],
+            'employee_id'        => $validated['employee_id'] ?? null,
+            'phone'              => $validated['phone'] ?? null,
+            'department_id'      => $validated['department_id'] ?? null,
+            'password'           => Hash::make($validated['password']),
+            'is_active'          => true,
+            'two_factor_enabled' => (bool) ($validated['two_factor_enabled'] ?? false),
         ]);
 
         $user->assignRole($validated['role']);
@@ -113,20 +115,28 @@ class UserController extends Controller
     public function update(Request $request, User $user)
     {
         $validated = $request->validate([
-            'name'          => ['required', 'string', 'max:255'],
-            'email'         => ['required', 'email', 'unique:users,email,' . $user->id],
-            'employee_id'   => ['nullable', 'string', 'unique:users,employee_id,' . $user->id],
-            'phone'         => ['nullable', 'string', 'max:20'],
-            'department_id' => ['nullable', 'exists:departments,id'],
-            'role'          => ['required', 'exists:roles,name'],
+            'name'               => ['required', 'string', 'max:255'],
+            'email'              => ['required', 'email', 'unique:users,email,' . $user->id],
+            'employee_id'        => ['nullable', 'string', 'unique:users,employee_id,' . $user->id],
+            'phone'              => ['nullable', 'string', 'max:20'],
+            'department_id'      => ['nullable', 'exists:departments,id'],
+            'role'               => ['required', 'exists:roles,name'],
+            'is_active'          => ['nullable', 'in:0,1'],
+            'two_factor_enabled' => ['nullable', 'in:0,1'],
         ]);
 
+        $isActive = $user->id === auth()->id()
+            ? $user->is_active  // cannot deactivate self
+            : (bool) ($validated['is_active'] ?? $user->is_active);
+
         $user->update([
-            'name'          => $validated['name'],
-            'email'         => $validated['email'],
-            'employee_id'   => $validated['employee_id'] ?? null,
-            'phone'         => $validated['phone'] ?? null,
-            'department_id' => $validated['department_id'] ?? null,
+            'name'               => $validated['name'],
+            'email'              => $validated['email'],
+            'employee_id'        => $validated['employee_id'] ?? null,
+            'phone'              => $validated['phone'] ?? null,
+            'department_id'      => $validated['department_id'] ?? null,
+            'is_active'          => $isActive,
+            'two_factor_enabled' => (bool) ($validated['two_factor_enabled'] ?? false),
         ]);
 
         $user->syncRoles([$validated['role']]);
