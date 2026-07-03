@@ -114,6 +114,20 @@
                                style="max-width:120px"
                                onchange="markDirty(this)">
 
+                        @elseif($setting->key === 'backup_frequency')
+                        <select id="setting_{{ $setting->key }}"
+                                name="settings[{{ $setting->key }}]"
+                                class="form-select form-select-sm"
+                                style="max-width:160px"
+                                onchange="markDirty(this)">
+                            @foreach(['daily' => 'Daily', 'weekly' => 'Weekly', 'monthly' => 'Monthly'] as $val => $label)
+                            <option value="{{ $val }}"
+                                {{ old("settings.{$setting->key}", $setting->value) === $val ? 'selected' : '' }}>
+                                {{ $label }}
+                            </option>
+                            @endforeach
+                        </select>
+
                         @else
                         <input type="text"
                                id="setting_{{ $setting->key }}"

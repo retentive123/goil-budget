@@ -36,6 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\EnforceSessionTimeout::class,
             \App\Http\Middleware\EnforceSingleSession::class,
             \App\Http\Middleware\EnforceSegregationOfDuties::class,
+            \App\Http\Middleware\EnforceTwoFactor::class,
         ]);
 
         $middleware->alias([

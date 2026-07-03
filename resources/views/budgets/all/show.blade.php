@@ -131,7 +131,7 @@
 <div class="row g-4">
 
     {{-- ── Left: Budget Detail ── --}}
-    <div class="col-lg-8">
+    <div class="col-lg-9">
 
         {{-- Grand totals bar --}}
         @php
@@ -196,50 +196,78 @@
             </div>
         </div>
 
-        {{-- Charts --}}
+        {{-- Type aggregates for charts --}}
         @php
-            $catNames   = array_keys($summary);
-            $catBudgets = array_map(fn($c) => $c['total'], $summary);
-            $catEffective = array_map(function($cat) {
-                return collect($cat['items'])->sum(fn($item) => $item->effectiveBudget());
-            }, $summary);
-            $catActuals = array_map(function($cat) use ($actualsPerItem) {
-                return collect($cat['items'])->sum(fn($item) => $actualsPerItem->get($item->id, 0));
-            }, $summary);
+            $typeMap = [
+                'revenue'             => ['label' => 'Revenue',             'color' => '#1B2A4A'],
+                'both'                => ['label' => 'Revenue',             'color' => '#1B2A4A'],
+                'expense'             => ['label' => 'Expense',             'color' => '#7C2D12'],
+                'capital_expenditure' => ['label' => 'Capital Expenditure', 'color' => '#78350F'],
+                'assets'              => ['label' => 'Assets',              'color' => '#4C1D95'],
+                'liabilities'         => ['label' => 'Liabilities',         'color' => '#6D28D9'],
+            ];
+            $typeAgg = [];
+            foreach ($summary as $catData) {
+                $firstItem = $catData['items']->first();
+                $rawType   = $firstItem->accountCode->category->budget_type ?? 'expense';
+                $key       = ($rawType === 'both') ? 'revenue' : $rawType;
+                if (!isset($typeAgg[$key])) {
+                    $meta = $typeMap[$key] ?? ['label' => ucfirst(str_replace('_', ' ', $key)), 'color' => '#64748B'];
+                    $typeAgg[$key] = ['label' => $meta['label'], 'color' => $meta['color'], 'effective' => 0, 'actual' => 0];
+                }
+                foreach ($catData['items'] as $_ci) {
+                    $typeAgg[$key]['effective'] += $_ci->effectiveBudget();
+                    $typeAgg[$key]['actual']    += $actualsPerItem->get($_ci->id, 0);
+                }
+            }
+            $typeAgg = array_values(array_filter($typeAgg, function($d) {
+                return $d['effective'] > 0 || $d['actual'] > 0;
+            }));
+            $btLabels    = array_column($typeAgg, 'label');
+            $btColors    = array_column($typeAgg, 'color');
+            $btEffective = array_column($typeAgg, 'effective');
+            $btActuals   = array_column($typeAgg, 'actual');
         @endphp
 
-        @if(count($catNames) > 0)
+        {{-- Tab group split --}}
+        @php
+            $pnlBudgetTypes = ['revenue', 'expense', 'both'];
+            $allSumPnl      = [];
+            $allSumCapex    = [];
+            $allSumBalance  = [];
+            foreach ($summary as $ck => $cd) {
+                $bt = $cd['items']->first()->accountCode->category->budget_type ?? 'expense';
+                if (in_array($bt, $pnlBudgetTypes))        $allSumPnl[$ck]     = $cd;
+                elseif ($bt === 'capital_expenditure')      $allSumCapex[$ck]   = $cd;
+                elseif (in_array($bt, ['assets','liabilities'])) $allSumBalance[$ck] = $cd;
+            }
+            $allTabGroups = [
+                ['id' => 'altab-pnl',     'label' => 'Revenue &amp; Expenses',   'summary' => $allSumPnl,
+                 'active' => true,  'catBg' => '#1B2A4A', 'totalBg' => '#0F172A', 'textColor' => '#BFDBFE'],
+                ['id' => 'altab-capex',   'label' => 'Capital Expenditure',      'summary' => $allSumCapex,
+                 'active' => false, 'catBg' => '#78350F', 'totalBg' => '#451A03', 'textColor' => '#FEF3C7'],
+                ['id' => 'altab-balance', 'label' => 'Assets &amp; Liabilities', 'summary' => $allSumBalance,
+                 'active' => false, 'catBg' => '#4C1D95', 'totalBg' => '#2E1065', 'textColor' => '#EDE9FE'],
+            ];
+        @endphp
+
+        {{-- Charts by Budget Type --}}
+        @if(!empty($typeAgg))
         <div class="row g-3 mb-4">
-            <div class="col-md-5">
+            <div class="col-md-4">
                 <div class="chart-card h-100">
-                    <div class="chart-title">Budget by Category</div>
-                    <canvas id="catDonut" height="200"></canvas>
+                    <div class="chart-title">Budget by Type</div>
+                    <canvas id="typeDonut" height="220"></canvas>
                 </div>
             </div>
-            <div class="col-md-7">
+            <div class="col-md-8">
                 <div class="chart-card h-100">
-                    <div class="chart-title">Budget vs Actual by Category</div>
-                    <canvas id="catBar" height="200"></canvas>
+                    <div class="chart-title">Effective Budget vs Actual by Type</div>
+                    <canvas id="typeBar" height="220"></canvas>
                 </div>
             </div>
         </div>
         @endif
-
-        {{-- Split summary by budget type --}}
-        @php
-            $pnlTypes      = ['revenue', 'expense', 'both'];
-            $allSumPnl     = array_filter($summary, fn($d) => in_array(
-                $d['items']->first()?->accountCode?->category?->budget_type ?? 'expense', $pnlTypes));
-            $allSumCapex   = array_filter($summary, fn($d) =>
-                ($d['items']->first()?->accountCode?->category?->budget_type ?? '') === 'capital_expenditure');
-            $allSumBalance = array_filter($summary, fn($d) => in_array(
-                $d['items']->first()?->accountCode?->category?->budget_type ?? '', ['assets', 'liabilities']));
-            $allTabGroups  = [
-                ['id'=>'altab-pnl',     'label'=>'Revenue &amp; Expenses',   'summary'=>$allSumPnl,     'active'=>true],
-                ['id'=>'altab-capex',   'label'=>'Capital Expenditure',      'summary'=>$allSumCapex,   'active'=>false],
-                ['id'=>'altab-balance', 'label'=>'Assets &amp; Liabilities', 'summary'=>$allSumBalance, 'active'=>false],
-            ];
-        @endphp
 
         {{-- Tab navigation --}}
         <ul class="nav nav-tabs mb-0" id="allBudgetTabs" role="tablist">
@@ -259,135 +287,217 @@
             @endforeach
         </ul>
 
+        {{-- Tab content --}}
         <div class="tab-content border border-top-0 rounded-bottom mb-4" id="allBudgetTabsContent">
         @foreach($allTabGroups as $altab)
         @if($altab['active'] || !empty($altab['summary']))
-        <div class="tab-pane fade {{ $altab['active'] ? 'show active' : '' }} p-3"
+        <div class="tab-pane fade {{ $altab['active'] ? 'show active' : '' }}"
              id="{{ $altab['id'] }}" role="tabpanel">
-            @forelse($altab['summary'] as $catName => $catData)
+
+            @if(!empty($altab['summary']))
             @php
-                $catActual = collect($catData['items'])->sum(fn($item) => $actualsPerItem->get($item->id, 0));
-                $catBudget = $catData['total'];
-                $catEffective = collect($catData['items'])->sum(fn($item) => $item->effectiveBudget());
-                $catUtil   = $catEffective > 0 ? round(($catActual/$catEffective)*100,1) : 0;
-                $catSupp = collect($catData['items'])->sum(fn($item) => $item->approvedSupplementaryTotal());
+                $tabTotBudget = $tabTotSupp = $tabTotEff = $tabTotAct = 0;
+                $tabTotQ1 = $tabTotQ2 = $tabTotQ3 = $tabTotQ4 = 0;
+                foreach ($altab['summary'] as $cd) {
+                    $tabTotBudget += $cd['total'];
+                    $tabTotQ1 += $cd['items']->sum('q1_amount');
+                    $tabTotQ2 += $cd['items']->sum('q2_amount');
+                    $tabTotQ3 += $cd['items']->sum('q3_amount');
+                    $tabTotQ4 += $cd['items']->sum('q4_amount');
+                    foreach ($cd['items'] as $_ti) {
+                        $tabTotSupp += $_ti->approvedSupplementaryTotal();
+                        $tabTotEff  += $_ti->effectiveBudget();
+                        $tabTotAct  += $actualsPerItem->get($_ti->id, 0);
+                    }
+                }
+                $tabUtil = $tabTotEff > 0 ? round(($tabTotAct/$tabTotEff)*100,1) : 0;
+                $tabVar  = $tabTotAct - $tabTotEff;
             @endphp
-            <div class="chart-card mb-3">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <div style="font-size:12px;font-weight:700;text-transform:uppercase;
-                            letter-spacing:.5px;color:var(--navy)">
-                    {{ $catName }}
+
+            {{-- Toolbar --}}
+            <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom"
+                 style="background:#F8FAFC">
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" style="font-size:11px"
+                            onclick="expandAll('{{ $altab['id'] }}')">
+                        <i class="bi bi-arrows-expand"></i> Expand All
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" style="font-size:11px"
+                            onclick="collapseAll('{{ $altab['id'] }}')">
+                        <i class="bi bi-arrows-collapse"></i> Collapse All
+                    </button>
                 </div>
-                <div class="text-end">
-                    <span style="font-size:13px;font-weight:700;color:var(--navy)">
-                        GHS {{ number_format($catBudget,2) }}
-                        @if($catSupp > 0)
-                        <span style="color:#10B981;font-size:11px;">
-                            +{{ number_format($catSupp,2) }} supp.
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-success dropdown-toggle" style="font-size:11px"
+                            type="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-download"></i> Export
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" style="font-size:12px">
+                        <li><a class="dropdown-item" href="#"
+                               onclick="tabExportCSV('{{ $altab['id'] }}');return false">
+                            <i class="bi bi-filetype-csv me-1 text-success"></i> CSV
+                        </a></li>
+                        <li><a class="dropdown-item" href="#"
+                               onclick="tabExportExcel('{{ $altab['id'] }}');return false">
+                            <i class="bi bi-file-earmark-excel me-1 text-success"></i> Excel
+                        </a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="#"
+                               onclick="tabPrint('{{ $altab['id'] }}');return false">
+                            <i class="bi bi-printer me-1"></i> Print
+                        </a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="table-responsive" style="max-height:520px;overflow-y:auto">
+            <table id="tbl-{{ $altab['id'] }}" class="table table-sm mb-0" style="font-size:12px;min-width:900px">
+                <thead style="position:sticky;top:0;z-index:2">
+                    <tr style="background:{{ $altab['catBg'] }};color:#fff">
+                        <th style="min-width:220px">Account</th>
+                        <th style="min-width:60px">Type</th>
+                        <th class="text-end" style="min-width:72px">Q1</th>
+                        <th class="text-end" style="min-width:72px">Q2</th>
+                        <th class="text-end" style="min-width:72px">Q3</th>
+                        <th class="text-end" style="min-width:72px">Q4</th>
+                        <th class="text-end" style="min-width:88px">Original</th>
+                        <th class="text-end" style="min-width:80px">Supp.</th>
+                        <th class="text-end" style="min-width:88px">Effective</th>
+                        <th class="text-end" style="min-width:80px">Actual</th>
+                        <th class="text-end" style="min-width:80px">Variance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach($altab['summary'] as $catName => $catData)
+                @php
+                    $cid  = $altab['id'].'-'.($loop->index);
+                    $cBud = $catData['total'];
+                    $cAct = $cEff = $cSupp = 0;
+                    foreach ($catData['items'] as $_ci) {
+                        $cAct  += $actualsPerItem->get($_ci->id, 0);
+                        $cEff  += $_ci->effectiveBudget();
+                        $cSupp += $_ci->approvedSupplementaryTotal();
+                    }
+                    $cUtil = $cEff > 0 ? round(($cAct/$cEff)*100,1) : 0;
+                    $cVar  = $cAct - $cEff;
+                @endphp
+
+                {{-- Category header (clickable) --}}
+                <tr class="cat-hdr" style="background:{{ $altab['catBg'] }};color:#fff;cursor:pointer"
+                    onclick="toggleCat('{{ $cid }}',this)">
+                    <td colspan="11" style="padding:7px 12px;font-size:12px">
+                        <span class="ct-arr"
+                              style="display:inline-block;font-size:10px;margin-right:6px;
+                                     transition:transform .15s">▼</span>
+                        <strong>{{ $catName }}</strong>
+                        <span style="font-size:10px;opacity:.6;margin-left:6px">
+                            ({{ $catData['items']->count() }} items)
                         </span>
-                        @endif
-                    </span>
-                    <span style="font-size:11px;color:#10B981;margin-left:8px">
-                        Actual: GHS {{ number_format($catActual,2) }} ({{ $catUtil }}%)
-                    </span>
-                </div>
+                        <span style="float:right;font-size:11px;opacity:.85">
+                            Eff: GHS {{ number_format($cEff,0) }}
+                            &nbsp;·&nbsp;Act: GHS {{ number_format($cAct,0) }}
+                            &nbsp;·&nbsp;{{ $cUtil }}%
+                            @if($cSupp > 0)
+                            &nbsp;·&nbsp;+{{ number_format($cSupp,0) }} supp
+                            @endif
+                        </span>
+                    </td>
+                </tr>
+
+                {{-- Item rows --}}
+                @foreach($catData['items'] as $item)
+                @php
+                    $iAct  = $actualsPerItem->get($item->id, 0);
+                    $iSupp = $item->approvedSupplementaryTotal();
+                    $iEff  = $item->effectiveBudget();
+                    $iVar  = $iAct - $iEff;
+                @endphp
+                <tr class="ci-{{ $cid }}">
+                    <td style="padding-left:28px">
+                        <div style="font-family:monospace;font-weight:700;font-size:11px;color:var(--navy)">
+                            {{ $item->accountCode->code }}
+                        </div>
+                        <div style="font-size:11px;color:var(--slate)">{{ $item->accountCode->name }}</div>
+                    </td>
+                    <td>
+                        <span style="padding:1px 5px;border-radius:3px;font-size:10px;font-weight:600;
+                                     background:{{ $item->line_type==='revenue'?'#D1FAE5':'#FEE2E2' }};
+                                     color:{{ $item->line_type==='revenue'?'#065F46':'#991B1B' }}">
+                            {{ ucfirst($item->line_type) }}
+                        </span>
+                    </td>
+                    <td class="text-end">{{ number_format($item->q1_amount,2) }}</td>
+                    <td class="text-end">{{ number_format($item->q2_amount,2) }}</td>
+                    <td class="text-end">{{ number_format($item->q3_amount,2) }}</td>
+                    <td class="text-end">{{ number_format($item->q4_amount,2) }}</td>
+                    <td class="text-end">{{ number_format($item->total_amount,2) }}</td>
+                    <td class="text-end" style="color:{{ $iSupp>0?'#10B981':'var(--slate)' }}">
+                        {{ $iSupp>0?'+'.number_format($iSupp,2):'—' }}
+                    </td>
+                    <td class="text-end fw-semibold" style="color:var(--navy)">{{ number_format($iEff,2) }}</td>
+                    <td class="text-end" style="color:#10B981">{{ number_format($iAct,2) }}</td>
+                    <td class="text-end fw-semibold"
+                        style="color:{{ $iVar>0?'#F43F5E':($iVar<0?'#10B981':'inherit') }}">
+                        {{ $iVar>=0?'+':'' }}{{ number_format($iVar,2) }}
+                    </td>
+                </tr>
+                @endforeach
+
+                {{-- Category subtotal --}}
+                <tr class="ci-{{ $cid }}"
+                    style="background:#F8FAFC;font-weight:700;font-size:11px;border-top:1px solid #E2E8F0">
+                    <td colspan="2" style="padding-left:14px;color:var(--slate)">
+                        {{ $catName }} — Subtotal
+                    </td>
+                    <td class="text-end">{{ number_format($catData['items']->sum('q1_amount'),2) }}</td>
+                    <td class="text-end">{{ number_format($catData['items']->sum('q2_amount'),2) }}</td>
+                    <td class="text-end">{{ number_format($catData['items']->sum('q3_amount'),2) }}</td>
+                    <td class="text-end">{{ number_format($catData['items']->sum('q4_amount'),2) }}</td>
+                    <td class="text-end">{{ number_format($cBud,2) }}</td>
+                    <td class="text-end" style="color:{{ $cSupp>0?'#10B981':'inherit' }}">
+                        {{ $cSupp>0?'+'.number_format($cSupp,2):'—' }}
+                    </td>
+                    <td class="text-end" style="color:var(--navy)">{{ number_format($cEff,2) }}</td>
+                    <td class="text-end" style="color:#10B981">{{ number_format($cAct,2) }}</td>
+                    <td class="text-end"
+                        style="color:{{ $cVar>0?'#F43F5E':'#10B981' }}">
+                        {{ $cVar>=0?'+':'' }}{{ number_format($cVar,2) }}
+                    </td>
+                </tr>
+                <tr style="height:3px;background:#F1F5F9"><td colspan="11"></td></tr>
+
+                @endforeach
+
+                {{-- Section total --}}
+                <tr style="background:{{ $altab['totalBg'] }};color:#fff;font-weight:700;
+                            font-size:13px;border-top:2px solid rgba(255,255,255,.2)">
+                    <td colspan="2" style="padding-left:14px">Section Total</td>
+                    <td class="text-end">{{ number_format($tabTotQ1,2) }}</td>
+                    <td class="text-end">{{ number_format($tabTotQ2,2) }}</td>
+                    <td class="text-end">{{ number_format($tabTotQ3,2) }}</td>
+                    <td class="text-end">{{ number_format($tabTotQ4,2) }}</td>
+                    <td class="text-end">{{ number_format($tabTotBudget,2) }}</td>
+                    <td class="text-end"
+                        style="color:{{ $tabTotSupp>0?'#6EE7B7':'rgba(255,255,255,.35)' }}">
+                        {{ $tabTotSupp>0?'+'.number_format($tabTotSupp,2):'—' }}
+                    </td>
+                    <td class="text-end" style="color:#6EE7B7">{{ number_format($tabTotEff,2) }}</td>
+                    <td class="text-end" style="color:#6EE7B7">{{ number_format($tabTotAct,2) }}</td>
+                    <td class="text-end"
+                        style="color:{{ $tabVar>0?'#FCA5A5':'#6EE7B7' }}">
+                        {{ $tabVar>=0?'+':'' }}{{ number_format($tabVar,2) }}
+                    </td>
+                </tr>
+                </tbody>
+            </table>
             </div>
 
-            <div class="progress mb-3" style="height:4px">
-                <div class="progress-bar"
-                     style="width:{{ min($catUtil,100) }}%;
-                            background:{{ $catUtil>90?'#F43F5E':($catUtil>70?'#F59E0B':'#10B981') }}">
-                </div>
+            @else
+            <div class="text-center text-muted py-5">
+                <i class="bi bi-inbox d-block mb-2" style="font-size:2rem;opacity:.3"></i>
+                No items in this section.
             </div>
-
-            <div class="table-responsive">
-                <table class="table table-sm table-hover mb-0" style="font-size:12px">
-                    <thead style="font-size:10px;text-transform:uppercase;
-                                  letter-spacing:.5px;color:var(--slate)">
-                        <tr>
-                            <th>Code</th>
-                            <th>Account Name</th>
-                            <th>Type</th>
-                            <th class="text-end">Q1</th>
-                            <th class="text-end">Q2</th>
-                            <th class="text-end">Q3</th>
-                            <th class="text-end">Q4</th>
-                            <th class="text-end">Original</th>
-                            <th class="text-end">Supplementary</th>
-                            <th class="text-end">Effective</th>
-                            <th class="text-end">Actual</th>
-                            <th class="text-end">Variance</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach($catData['items'] as $item)
-                        @php
-                            $itemActual   = $actualsPerItem->get($item->id, 0);
-                            $itemSupp     = $item->approvedSupplementaryTotal();
-                            $itemEffective = $item->effectiveBudget();
-                            $itemVariance = $itemActual - $itemEffective;
-                        @endphp
-                        <tr>
-                            <td style="font-family:monospace;font-weight:700;color:var(--navy)">
-                                {{ $item->accountCode->code }}
-                            </td>
-                            <td>{{ $item->accountCode->name }}</td>
-                            <td>
-                                <span style="padding:1px 6px;border-radius:4px;font-size:10px;
-                                             font-weight:600;
-                                             background:{{ $item->line_type==='revenue'?'#D1FAE5':'#FEE2E2' }};
-                                             color:{{ $item->line_type==='revenue'?'#065F46':'#991B1B' }}">
-                                    {{ ucfirst($item->line_type) }}
-                                </span>
-                            </td>
-                            <td class="text-end">{{ number_format($item->q1_amount,2) }}</td>
-                            <td class="text-end">{{ number_format($item->q2_amount,2) }}</td>
-                            <td class="text-end">{{ number_format($item->q3_amount,2) }}</td>
-                            <td class="text-end">{{ number_format($item->q4_amount,2) }}</td>
-                            <td class="text-end">{{ number_format($item->total_amount,2) }}</td>
-                            <td class="text-end" style="color:{{ $itemSupp > 0 ? '#10B981' : 'inherit' }}">
-                                {{ $itemSupp > 0 ? '+'.number_format($itemSupp,2) : '—' }}
-                            </td>
-                            <td class="text-end fw-semibold" style="color:var(--navy)">
-                                {{ number_format($itemEffective,2) }}
-                            </td>
-                            <td class="text-end" style="color:#10B981">
-                                {{ number_format($itemActual,2) }}
-                            </td>
-                            <td class="text-end fw-semibold"
-                                style="color:{{ $itemVariance>0?'#F43F5E':($itemVariance<0?'#10B981':'inherit') }}">
-                                {{ $itemVariance>=0?'+':'' }}{{ number_format($itemVariance,2) }}
-                            </td>
-                        </tr>
-                        @endforeach
-                    </tbody>
-                    <tfoot style="background:#F8FAFC;font-weight:700;font-size:11px">
-                        <tr>
-                            <td colspan="7">Category Total</td>
-                            <td class="text-end">GHS {{ number_format($catBudget,2) }}</td>
-                            <td class="text-end" style="color:{{ $catSupp > 0 ? '#10B981' : 'inherit' }}">
-                                {{ $catSupp > 0 ? '+'.number_format($catSupp,2) : '—' }}
-                            </td>
-                            <td class="text-end">GHS {{ number_format($catEffective,2) }}</td>
-                            <td class="text-end" style="color:#10B981">
-                                GHS {{ number_format($catActual,2) }}
-                            </td>
-                            <td class="text-end"
-                                style="color:{{ ($catActual-$catEffective)>0?'#F43F5E':'#10B981' }}">
-                                {{ ($catActual-$catEffective)>=0?'+':'' }}
-                                {{ number_format($catActual-$catEffective,2) }}
-                            </td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        </div>
-        @empty
-        <div class="text-center text-muted py-5">
-            <i class="bi bi-inbox d-block mb-2" style="font-size:2rem;opacity:.3"></i>
-            No items in this section yet.
-        </div>
-        @endforelse
+            @endif
         </div>
         @endif
         @endforeach
@@ -428,7 +538,7 @@
     </div>
 
     {{-- ── Right: Approval + Supplementary ── --}}
-    <div class="col-lg-4">
+    <div class="col-lg-3">
 
         {{-- Approval progress --}}
         <div class="chart-card mb-4">
@@ -570,7 +680,7 @@
                    class="btn btn-sm text-start"
                    style="background:var(--surface);border:1px solid var(--border);
                           border-radius:8px;padding:10px 14px;font-size:13px;color:var(--navy)">
-                    🏢 &nbsp; All Versions — {{ $budgetVersion->department->name }}
+                    🏢 &nbsp; All Versions
                 </a>
 
                 <a href="{{ route('reports.department', ['department_id'=>$budgetVersion->department_id,'period_id'=>$budgetVersion->budget_period_id]) }}"
@@ -593,50 +703,48 @@
 </div>
 
 {{-- Charts JS --}}
-@if(count($catNames) > 0)
+@if(!empty($typeAgg))
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-const COLORS = ['#1B2A4A','#C9A84C','#10B981','#6366F1','#F59E0B',
-                '#EC4899','#14B8A6','#8B5CF6','#F97316','#06B6D4'];
+const fmt = v => v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000).toFixed(0)+'K':v;
 
-new Chart(document.getElementById('catDonut'), {
+// Budget by Type — donut
+new Chart(document.getElementById('typeDonut'), {
     type: 'doughnut',
     data: {
-        labels:   {!! json_encode($catNames) !!},
+        labels:   {!! json_encode($btLabels) !!},
         datasets: [{
-            data:            {!! json_encode($catEffective) !!},
-            backgroundColor: COLORS,
-            borderWidth:     2,
-            borderColor:     '#fff',
-            hoverOffset:     6,
+            data:            {!! json_encode($btEffective) !!},
+            backgroundColor: {!! json_encode($btColors) !!},
+            borderWidth: 3, borderColor: '#fff', hoverOffset: 6,
         }]
     },
     options: {
         cutout: '65%',
         plugins: {
-            legend: { position:'bottom', labels:{ font:{size:10}, padding:8, boxWidth:10 } }
+            legend: { position:'bottom', labels:{ font:{size:10}, padding:8, boxWidth:10 } },
+            tooltip: { callbacks: { label: ctx => 'GHS ' + ctx.parsed.toLocaleString('en-GH', {minimumFractionDigits:0}) } }
         }
     }
 });
 
-new Chart(document.getElementById('catBar'), {
+// Budget vs Actual by Type — bar
+new Chart(document.getElementById('typeBar'), {
     type: 'bar',
     data: {
-        labels:   {!! json_encode($catNames) !!},
+        labels:   {!! json_encode($btLabels) !!},
         datasets: [
             {
                 label: 'Effective Budget',
-                data:  {!! json_encode($catEffective) !!},
-                backgroundColor: '#1B2A4A',
-                borderRadius: 4,
-                borderSkipped: false,
+                data:  {!! json_encode($btEffective) !!},
+                backgroundColor: {!! json_encode($btColors) !!},
+                borderRadius: 4, borderSkipped: false,
             },
             {
-                label: 'Actual',
-                data:  {!! json_encode($catActuals) !!},
+                label: 'Actual (YTD)',
+                data:  {!! json_encode($btActuals) !!},
                 backgroundColor: '#10B981',
-                borderRadius: 4,
-                borderSkipped: false,
+                borderRadius: 4, borderSkipped: false,
             },
         ]
     },
@@ -644,19 +752,112 @@ new Chart(document.getElementById('catBar'), {
         responsive: true,
         plugins: { legend:{ position:'top', labels:{ font:{size:11}, boxWidth:12 } } },
         scales: {
-            y: {
-                beginAtZero: true,
-                grid: { color:'#F1F5F9' },
-                ticks: {
-                    font: { size:10 },
-                    callback: v => v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000).toFixed(0)+'K':v
-                }
-            },
+            y: { beginAtZero:true, grid:{ color:'#F1F5F9' },
+                 ticks:{ font:{size:10}, callback: fmt } },
             x: { grid:{ display:false }, ticks:{ font:{ size:10 } } }
         }
     }
 });
 </script>
 @endif
+
+<script>
+/* ── Category toggle ── */
+function toggleCat(id, hdrEl) {
+    const rows = document.querySelectorAll('.ci-' + id);
+    if (!rows.length) return;
+    const isHidden = rows[0].style.display === 'none';
+    rows.forEach(r => r.style.display = isHidden ? '' : 'none');
+    const arrow = hdrEl.querySelector('.ct-arr');
+    if (arrow) arrow.style.transform = isHidden ? '' : 'rotate(-90deg)';
+}
+
+/* ── Expand / Collapse all within a tab ── */
+function expandAll(tabId) {
+    document.querySelectorAll('#' + tabId + ' tr[class*="ci-' + tabId + '"]')
+            .forEach(r => r.style.display = '');
+    document.querySelectorAll('#' + tabId + ' .ct-arr')
+            .forEach(a => a.style.transform = '');
+}
+function collapseAll(tabId) {
+    document.querySelectorAll('#' + tabId + ' tr[class*="ci-' + tabId + '"]')
+            .forEach(r => r.style.display = 'none');
+    document.querySelectorAll('#' + tabId + ' .ct-arr')
+            .forEach(a => a.style.transform = 'rotate(-90deg)');
+}
+
+/* ── Export helpers ── */
+function _tabShowAll(tabId) {
+    const hidden = [];
+    document.querySelectorAll('#' + tabId + ' tr[class*="ci-' + tabId + '"]').forEach(r => {
+        if (r.style.display === 'none') { hidden.push(r); r.style.display = ''; }
+    });
+    return hidden;
+}
+function _tabHide(hidden) { hidden.forEach(r => r.style.display = 'none'); }
+
+function _tabRows(tabId) {
+    const tbl = document.getElementById('tbl-' + tabId);
+    if (!tbl) return [];
+    const rows = [];
+    tbl.querySelectorAll('tr').forEach(tr => {
+        const cells = tr.querySelectorAll('th,td');
+        if (!cells.length) return;
+        // skip pure spacer rows (single td, no text)
+        if (cells.length === 1 && !cells[0].textContent.trim()) return;
+        const row = [];
+        cells.forEach(td => row.push(td.textContent.trim().replace(/\s+/g, ' ')));
+        rows.push(row);
+    });
+    return rows;
+}
+
+function tabExportCSV(tabId) {
+    const hidden = _tabShowAll(tabId);
+    const rows   = _tabRows(tabId);
+    _tabHide(hidden);
+    const csv = rows.map(r => r.map(c => '"' + c.replace(/"/g,'""') + '"').join(',')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = tabId + '.csv';
+    a.click();
+}
+
+function tabExportExcel(tabId) {
+    const hidden = _tabShowAll(tabId);
+    const tbl    = document.getElementById('tbl-' + tabId);
+    if (!tbl) { _tabHide(hidden); return; }
+    const xls = '<html xmlns:o="urn:schemas-microsoft-com:office:office" '
+              + 'xmlns:x="urn:schemas-microsoft-com:office:excel">'
+              + '<head><meta charset="UTF-8">'
+              + '<style>th{background:#1B2A4A;color:#fff;font-weight:bold}'
+              + 'td,th{border:1px solid #ccc;padding:4px 8px;font-size:11px}'
+              + '</style></head><body>' + tbl.outerHTML + '</body></html>';
+    _tabHide(hidden);
+    const blob = new Blob([xls], { type: 'application/vnd.ms-excel' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = tabId + '.xls';
+    a.click();
+}
+
+function tabPrint(tabId) {
+    const hidden = _tabShowAll(tabId);
+    const tbl    = document.getElementById('tbl-' + tabId);
+    if (!tbl) { _tabHide(hidden); return; }
+    const clone = tbl.cloneNode(true);
+    _tabHide(hidden);
+    const w = window.open('', '_blank', 'width=1100,height=700');
+    w.document.write('<html><head><title>Budget — {{ $budgetVersion->department->name }} — {{ $budgetVersion->period->name }}</title>'
+        + '<style>*{font-family:sans-serif}table{border-collapse:collapse;width:100%;font-size:10px}'
+        + 'th,td{border:1px solid #ccc;padding:3px 6px}'
+        + 'th{background:#1B2A4A;color:#fff}'
+        + '@media print{@page{size:landscape}}</style></head>'
+        + '<body>' + clone.outerHTML + '</body></html>');
+    w.document.close();
+    w.focus();
+    w.print();
+}
+</script>
 
 @endsection

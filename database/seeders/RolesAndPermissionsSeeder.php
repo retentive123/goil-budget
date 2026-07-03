@@ -52,6 +52,9 @@ class RolesAndPermissionsSeeder extends Seeder
 
             // System settings
             'manage system settings',
+
+            // Two-factor authentication
+            'disable two factor',
         ];
 
         foreach ($permissions as $permission) {
@@ -132,6 +135,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'view reports',
             'export reports',
             'view audit log',
+            'disable two factor',
         ]);
 
         // 7. Super Admin — unrestricted access

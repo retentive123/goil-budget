@@ -57,10 +57,9 @@
     </form>
 </div>
 
-{{-- Disable 2FA if already enabled --}}
-@if(Auth::user()->two_factor_enabled)
-<div class="chart-card mt-4"
-     style="border-left:4px solid #F43F5E">
+{{-- Disable 2FA — only shown to users with explicit permission --}}
+@if(Auth::user()->two_factor_enabled && Auth::user()->can('disable two factor'))
+<div class="chart-card mt-4" style="border-left:4px solid #F43F5E">
     <div style="font-size:13px;font-weight:600;color:#991B1B;margin-bottom:8px">
         Disable Two-Factor Authentication
     </div>
@@ -79,12 +78,20 @@
                     <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
-            <button type="submit" class="btn btn-sm btn-danger"
-                    style="border-radius:8px">
+            <button type="submit" class="btn btn-sm btn-danger" style="border-radius:8px">
                 Disable 2FA
             </button>
         </div>
     </form>
+</div>
+@elseif(Auth::user()->two_factor_enabled)
+<div class="chart-card mt-4" style="border-left:4px solid #94A3B8">
+    <div class="d-flex gap-2 align-items-center">
+        <i class="fas fa-lock" style="color:#94A3B8"></i>
+        <span style="font-size:13px;color:#64748B">
+            Two-factor authentication is active. Contact your administrator if you need it removed.
+        </span>
+    </div>
 </div>
 @endif
 

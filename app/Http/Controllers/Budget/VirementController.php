@@ -93,6 +93,10 @@ class VirementController extends Controller
             return back()->with('error', 'Invalid line item selection.');
         }
 
+        if ($toItem->budget_version_id !== $version->id) {
+            return back()->with('error', 'Invalid destination line item selection.');
+        }
+
         // Enforce 10% rule
         $maxAllowed = $fromItem->maxVirementAmount();
         if ($request->amount > $maxAllowed) {

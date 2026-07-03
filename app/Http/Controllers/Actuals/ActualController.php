@@ -159,13 +159,15 @@ class ActualController extends Controller
             'period_id'              => ['required', 'exists:budget_periods,id'],
             'department_id'          => ['required', 'exists:departments,id'],
             'month'                  => ['required', 'integer', 'min:1', 'max:12'],
-            'year'                   => ['required', 'integer'],
+            'year'                   => ['required', 'integer', 'min:2000', 'max:2100'],
             'actuals'                => ['required', 'array'],
             'actuals.*.line_item_id' => ['required', 'exists:budget_line_items,id'],
             'actuals.*.amount'       => ['nullable', 'numeric', 'min:0'],
             'actuals.*.reference'    => ['nullable', 'string', 'max:100'],
             'actuals.*.description'  => ['nullable', 'string', 'max:500'],
         ]);
+
+        $this->assertDeptOwnership($request->department_id);
 
         $overBudgetItems = [];
 
@@ -278,6 +280,66 @@ class ActualController extends Controller
         ])->with('success', "{$saved} actuals saved as draft for {$monthName} {$request->year}.");
     }
 
+    /**
+     * Autosave actuals — JSON endpoint, no over-budget block, returns saved_at timestamp.
+     */
+    public function autosave(Request $request)
+    {
+        $request->validate([
+            'period_id'              => ['required', 'exists:budget_periods,id'],
+            'department_id'          => ['required', 'exists:departments,id'],
+            'month'                  => ['required', 'integer', 'min:1', 'max:12'],
+            'year'                   => ['required', 'integer', 'min:2000', 'max:2100'],
+            'actuals'                => ['required', 'array'],
+            'actuals.*.line_item_id' => ['required', 'exists:budget_line_items,id'],
+            'actuals.*.amount'       => ['nullable', 'numeric', 'min:0'],
+            'actuals.*.reference'    => ['nullable', 'string', 'max:100'],
+            'actuals.*.description'  => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $this->assertDeptOwnership($request->department_id);
+
+        $saved = 0;
+
+        DB::transaction(function () use ($request, &$saved) {
+            foreach ($request->actuals as $item) {
+                // Skip if no amount provided
+                if (!array_key_exists('amount', $item) || $item['amount'] === '' || is_null($item['amount'])) {
+                    continue;
+                }
+
+                $lineItem = BudgetLineItem::find($item['line_item_id']);
+                if (!$lineItem) continue;
+
+                BudgetActual::updateOrCreate(
+                    [
+                        'budget_line_item_id' => (int) $item['line_item_id'],
+                        'month'               => (int) $request->month,
+                        'year'                => (int) $request->year,
+                    ],
+                    [
+                        'budget_period_id' => (int) $request->period_id,
+                        'department_id'    => (int) $request->department_id,
+                        'account_code_id'  => $lineItem->account_code_id,
+                        'amount'           => (float) $item['amount'],
+                        'reference'        => $item['reference']   ?? null,
+                        'description'      => $item['description'] ?? null,
+                        'recorded_by'      => auth()->id(),
+                        'status'           => 'draft',
+                    ]
+                );
+
+                $saved++;
+            }
+        });
+
+        return response()->json([
+            'success'  => true,
+            'saved'    => $saved,
+            'saved_at' => now()->format('H:i:s'),
+        ]);
+    }
+
     // Confirm (lock) a month's actuals
     public function confirm(Request $request)
     {
@@ -285,8 +347,10 @@ class ActualController extends Controller
             'period_id'     => ['required', 'exists:budget_periods,id'],
             'department_id' => ['required', 'exists:departments,id'],
             'month'         => ['required', 'integer', 'min:1', 'max:12'],
-            'year'          => ['required', 'integer'],
+            'year'          => ['required', 'integer', 'min:2000', 'max:2100'],
         ]);
+
+        $this->assertDeptOwnership($request->department_id);
 
         // Segregation of duties — confirmer cannot have recorded any of these drafts
         if (\App\Services\SegregationService::enabled()) {
@@ -384,5 +448,15 @@ class ActualController extends Controller
         return view('actuals.overview', compact(
             'period', 'periods', 'departments', 'grid'
         ));
+    }
+
+    private function assertDeptOwnership(int|string $requestedDeptId): void
+    {
+        $user = auth()->user();
+        if ($user->hasAnyRole(['finance_reviewer', 'bdu_admin', 'super_admin'])) {
+            return;
+        }
+        abort_unless((int) $requestedDeptId === (int) $user->department_id, 403,
+            'You can only record actuals for your own department.');
     }
 }

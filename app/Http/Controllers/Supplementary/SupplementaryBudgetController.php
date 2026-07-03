@@ -29,12 +29,18 @@ class SupplementaryBudgetController extends Controller
             )
             ->when($request->status, fn($q) => $q->where('status', $request->status))
             ->when($request->period_id, fn($q) => $q->where('budget_period_id', $request->period_id))
-            ->orderByDesc('created_at');
+            ->orderByDesc('submitted_at')
+            ->orderByDesc('id');
 
-        $supplementaries = $query->paginate(20);
+        $supplementaries = $query->paginate(50);
         $periods         = BudgetPeriod::orderByDesc('year')->get();
 
-        return view('supplementary.index', compact('supplementaries','periods'));
+        // Group current page into batches (null batch_id → each record is its own batch)
+        $batches = $supplementaries->getCollection()
+            ->groupBy(fn($s) => $s->batch_id ?? ('solo_' . $s->id))
+            ->values();
+
+        return view('supplementary.index', compact('supplementaries','batches','periods'));
     }
 
     public function create(Request $request)
@@ -89,67 +95,96 @@ class SupplementaryBudgetController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'budget_period_id'    => ['required','exists:budget_periods,id'],
-            'department_id'       => ['required','exists:departments,id'],
-            'budget_line_item_id' => ['required','exists:budget_line_items,id'],
-            'requested_amount'    => ['required','numeric','min:1'],
-            'justification'       => ['required','string','min:20','max:2000'],
-            'supporting_evidence' => ['nullable','string','max:2000'],
+            'budget_period_id'              => ['required','exists:budget_periods,id'],
+            'department_id'                 => ['required','exists:departments,id'],
+            'justification'                 => ['required','string','min:20','max:2000'],
+            'supporting_evidence'           => ['nullable','string','max:2000'],
+            'items'                         => ['required','array','min:1'],
+            'items.*.budget_line_item_id'   => ['required','exists:budget_line_items,id'],
+            'items.*.requested_amount'      => ['required','numeric','min:1'],
         ]);
 
-        $lineItem = BudgetLineItem::with('accountCode')->findOrFail($request->budget_line_item_id);
-
-        // Check if there's already a pending request for this line item
-        $existing = SupplementaryBudget::where('budget_line_item_id', $lineItem->id)
-            ->whereIn('status', ['draft','submitted','under_review'])
+        // Resolve the dept's approved version and collect valid line item IDs
+        $approvedVersion = BudgetVersion::where('department_id', $request->department_id)
+            ->where('budget_period_id', $request->budget_period_id)
+            ->where('status', 'approved')
             ->first();
 
-        if ($existing) {
-            return back()->withInput()->with('error',
-                "There is already a pending supplementary request for {$lineItem->accountCode->code}. " .
-                "Wait for it to be processed before submitting another."
-            );
+        if (!$approvedVersion) {
+            return back()->withInput()->with('error', 'No approved budget version found for this department and period.');
         }
 
-        DB::transaction(function () use ($request, $lineItem) {
-            $supplementary = SupplementaryBudget::create([
-                'budget_period_id'    => $request->budget_period_id,
-                'department_id'       => $request->department_id,
-                'budget_line_item_id' => $request->budget_line_item_id,
-                'account_code_id'     => $lineItem->account_code_id,
-                'line_type'           => $lineItem->line_type,
-                'original_amount'     => $lineItem->total_amount,
-                'requested_amount'    => $request->requested_amount,
-                'justification'       => $request->justification,
-                'supporting_evidence' => $request->supporting_evidence,
-                'status'              => 'submitted',
-                'requested_by'        => auth()->id(),
-                'submitted_at'        => now(),
-            ]);
+        $validItemIds = $approvedVersion->lineItems()->pluck('id')->toArray();
 
-            // Notify finance reviewers
-            $this->notifyFinanceOfSupplementary($supplementary->fresh()->load(
-                'department','accountCode','period','requestedBy'
-            ));
+        // Check for existing pending requests before creating anything
+        $blockErrors = [];
+        foreach ($request->items as $data) {
+            if (!in_array((int) $data['budget_line_item_id'], $validItemIds)) {
+                return back()->withInput()->with('error', 'One or more selected items do not belong to your approved budget.');
+            }
 
-            \App\Services\AuditLogger::record(
-                'supplementary_submitted', 'budget', 'created',
-                [
-                    'subject_label' => "Supplementary: {$lineItem->accountCode->code} — " .
-                                       "GHS " . number_format($request->requested_amount, 2),
-                    'severity'      => 'info',
-                ]
-            );
+            $lineItem = BudgetLineItem::with('accountCode')->find($data['budget_line_item_id']);
+            $existing = SupplementaryBudget::where('budget_line_item_id', $lineItem->id)
+                ->whereIn('status', ['draft','submitted','under_review'])
+                ->first();
+            if ($existing) {
+                $blockErrors[] = "A pending request already exists for {$lineItem->accountCode->code} — wait for it to be processed.";
+            }
+        }
+
+        if (!empty($blockErrors)) {
+            return back()->withInput()->with('error', implode(' ', $blockErrors));
+        }
+
+        $batchId = (string) \Illuminate\Support\Str::uuid();
+        $created = [];
+        DB::transaction(function () use ($request, $batchId, &$created) {
+            foreach ($request->items as $data) {
+                $lineItem = BudgetLineItem::with('accountCode')->find($data['budget_line_item_id']);
+                $supp = SupplementaryBudget::create([
+                    'batch_id'            => $batchId,
+                    'budget_period_id'    => $request->budget_period_id,
+                    'department_id'       => $request->department_id,
+                    'budget_line_item_id' => $lineItem->id,
+                    'account_code_id'     => $lineItem->account_code_id,
+                    'line_type'           => $lineItem->line_type,
+                    'original_amount'     => $lineItem->total_amount,
+                    'requested_amount'    => $data['requested_amount'],
+                    'justification'       => $request->justification,
+                    'supporting_evidence' => $request->supporting_evidence,
+                    'status'              => 'submitted',
+                    'requested_by'        => auth()->id(),
+                    'submitted_at'        => now(),
+                ]);
+                $created[] = $supp->fresh()->load('department','accountCode','period','requestedBy');
+            }
         });
 
+        $this->notifyFinanceOfBatch($created);
+
+        \App\Services\AuditLogger::record(
+            'supplementary_submitted', 'budget', 'created',
+            [
+                'subject_label' => count($created) . ' supplementary request(s) submitted — GHS ' .
+                                   number_format(array_sum(array_column($request->items, 'requested_amount')), 2),
+                'severity'      => 'info',
+            ]
+        );
+
+        $count = count($created);
         return redirect()->route('supplementary.index')
             ->with('success',
-                'Supplementary budget request submitted. Finance has been notified.'
+                "{$count} supplementary budget request(s) submitted. Finance has been notified."
             );
     }
 
     public function show(SupplementaryBudget $supplementary)
     {
+        $user = auth()->user();
+        if (!$user->hasAnyRole(['finance_reviewer', 'bdu_admin', 'super_admin'])) {
+            abort_unless($supplementary->department_id === $user->department_id, 403);
+        }
+
         $supplementary->load(
             'department','accountCode.category','period',
             'lineItem','requestedBy','reviewedBy','approvedBy'
@@ -252,6 +287,154 @@ class SupplementaryBudgetController extends Controller
             ->with('success', 'Supplementary budget request rejected. Department notified.');
     }
 
+    public function destroyBatch(string $batchId)
+    {
+        $user  = auth()->user();
+        $items = SupplementaryBudget::where('batch_id', $batchId)
+            ->when(
+                !$user->hasAnyRole(['finance_reviewer', 'bdu_admin', 'super_admin']),
+                fn($q) => $q->where('department_id', $user->department_id)
+            )
+            ->whereIn('status', ['submitted','under_review','draft'])
+            ->get();
+
+        if ($items->isEmpty()) {
+            return back()->with('error', 'No deletable items found for this batch.');
+        }
+
+        $count = $items->count();
+        $dept  = $items->first()->load('department')->department->name;
+
+        SupplementaryBudget::where('batch_id', $batchId)
+            ->whereIn('status', ['submitted','under_review','draft'])
+            ->delete();
+
+        \App\Services\AuditLogger::record(
+            'supplementary_batch_deleted', 'budget', 'deleted',
+            [
+                'subject_label' => "Supplementary batch deleted: {$count} item(s) — {$dept}",
+                'severity'      => 'warning',
+            ]
+        );
+
+        return back()->with('success', "{$count} supplementary request(s) deleted.");
+    }
+
+    public function destroy(SupplementaryBudget $supplementary)
+    {
+        if (!in_array($supplementary->status, ['submitted','under_review','draft'])) {
+            return back()->with('error', 'Only pending requests can be deleted.');
+        }
+
+        $code = $supplementary->accountCode->code ?? '—';
+
+        $supplementary->delete();
+
+        \App\Services\AuditLogger::record(
+            'supplementary_deleted', 'budget', 'deleted',
+            [
+                'subject_label' => "Supplementary request deleted: {$code}",
+                'severity'      => 'warning',
+            ]
+        );
+
+        return back()->with('success', "Supplementary request for {$code} has been deleted.");
+    }
+
+    public function approveBatch(Request $request, string $batchId)
+    {
+        $request->validate([
+            'review_notes' => ['nullable','string','max:1000'],
+            'amounts'      => ['nullable','array'],
+            'amounts.*'    => ['nullable','numeric','min:1'],
+        ]);
+
+        $user  = auth()->user();
+        $items = SupplementaryBudget::with('accountCode','department','period','requestedBy')
+            ->where('batch_id', $batchId)
+            ->when(
+                !$user->hasAnyRole(['finance_reviewer', 'bdu_admin', 'super_admin']),
+                fn($q) => $q->where('department_id', $user->department_id)
+            )
+            ->whereIn('status', ['submitted','under_review'])
+            ->get();
+
+        if ($items->isEmpty()) {
+            return back()->with('error', 'No pending items found for this batch.');
+        }
+
+        foreach ($items as $item) {
+            \App\Services\SegregationService::check($item->requested_by, 'approve this supplementary budget request');
+        }
+
+        $amounts = $request->amounts ?? [];
+
+        DB::transaction(function () use ($request, $items, $amounts) {
+            foreach ($items as $item) {
+                // Use the value entered in the table; fall back to requested_amount
+                $approvedAmt = (isset($amounts[$item->id]) && (float)$amounts[$item->id] > 0)
+                    ? (float)$amounts[$item->id]
+                    : $item->requested_amount;
+
+                $item->update([
+                    'status'          => 'approved',
+                    'approved_amount' => $approvedAmt,
+                    'reviewed_by'     => auth()->id(),
+                    'approved_by'     => auth()->id(),
+                    'reviewed_at'     => now(),
+                    'approved_at'     => now(),
+                ]);
+                $this->notifyDepartmentOfDecision($item, 'approved', $request->review_notes);
+            }
+        });
+
+        $count = $items->count();
+        \App\Services\AuditLogger::record('supplementary_batch_approved', 'budget', 'approved', [
+            'subject_label' => "Batch approved: {$count} item(s) — " . $items->first()->department->name,
+            'severity'      => 'info',
+        ]);
+
+        return back()->with('success', "{$count} supplementary request(s) approved.");
+    }
+
+    public function rejectBatch(Request $request, string $batchId)
+    {
+        $request->validate(['rejection_reason' => ['required','string','min:10','max:1000']]);
+
+        $items = SupplementaryBudget::with('accountCode','department','period','requestedBy')
+            ->where('batch_id', $batchId)
+            ->whereIn('status', ['submitted','under_review'])
+            ->get();
+
+        if ($items->isEmpty()) {
+            return back()->with('error', 'No pending items found for this batch.');
+        }
+
+        foreach ($items as $item) {
+            \App\Services\SegregationService::check($item->requested_by, 'reject this supplementary budget request');
+        }
+
+        DB::transaction(function () use ($request, $items) {
+            foreach ($items as $item) {
+                $item->update([
+                    'status'           => 'rejected',
+                    'rejection_reason' => $request->rejection_reason,
+                    'reviewed_by'      => auth()->id(),
+                    'reviewed_at'      => now(),
+                ]);
+                $this->notifyDepartmentOfDecision($item, 'rejected', $request->rejection_reason);
+            }
+        });
+
+        $count = $items->count();
+        \App\Services\AuditLogger::record('supplementary_batch_rejected', 'budget', 'rejected', [
+            'subject_label' => "Batch rejected: {$count} item(s) — " . $items->first()->department->name,
+            'severity'      => 'warning',
+        ]);
+
+        return back()->with('success', "{$count} supplementary request(s) rejected.");
+    }
+
     public function pending()
     {
         $pending = SupplementaryBudget::with(
@@ -259,29 +442,47 @@ class SupplementaryBudgetController extends Controller
             )
             ->whereIn('status', ['submitted','under_review'])
             ->orderByDesc('submitted_at')
-            ->paginate(20);
+            ->orderByDesc('id')
+            ->paginate(60);
 
-        return view('supplementary.pending', compact('pending'));
+        $batches = $pending->getCollection()
+            ->groupBy(fn($s) => $s->batch_id ?? ('solo_' . $s->id))
+            ->values();
+
+        return view('supplementary.pending', compact('pending', 'batches'));
     }
 
-    private function notifyFinanceOfSupplementary(SupplementaryBudget $s): void
+    private function notifyFinanceOfBatch(array $items): void
     {
+        if (empty($items)) return;
+
         $financeUsers = \App\Models\User::role('finance_reviewer')
                                         ->where('is_active', true)->get();
+
+        $first  = $items[0];
+        $dept   = $first->department->name;
+        $period = $first->period->name;
+        $count  = count($items);
+        $total  = array_sum(array_map(fn($s) => $s->requested_amount, $items));
+        $codes  = implode(', ', array_map(fn($s) => $s->accountCode->code, $items));
 
         foreach ($financeUsers as $user) {
             \App\Models\BudgetNotification::create([
                 'user_id'         => $user->id,
                 'type'            => 'supplementary_pending',
-                'subject'         => "Supplementary budget request — {$s->department->name}",
-                'message'         => "{$s->department->name} has requested a supplementary budget of " .
-                                     "GHS " . number_format($s->requested_amount, 2) .
-                                     " for {$s->accountCode->code} ({$s->accountCode->name}) " .
-                                     "in {$s->period->name}.",
-                'notifiable_id'   => $s->id,
+                'subject'         => "Supplementary budget request — {$dept} ({$count} item(s))",
+                'message'         => "{$dept} has submitted {$count} supplementary budget request(s) " .
+                                     "totalling GHS " . number_format($total, 2) .
+                                     " for {$period}. Items: {$codes}.",
+                'notifiable_id'   => $first->id,
                 'notifiable_type' => SupplementaryBudget::class,
             ]);
         }
+    }
+
+    private function notifyFinanceOfSupplementary(SupplementaryBudget $s): void
+    {
+        $this->notifyFinanceOfBatch([$s]);
     }
 
     private function notifyDepartmentOfDecision(

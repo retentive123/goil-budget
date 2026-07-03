@@ -110,11 +110,11 @@
         </div>
     </div>
 
-    {{-- Category donut --}}
+    {{-- Type donut --}}
     <div class="col-md-3">
         <div class="chart-card h-100">
-            <div class="chart-title">By Category</div>
-            <canvas id="catDonut" height="200"></canvas>
+            <div class="chart-title">By Type</div>
+            <canvas id="typeDonut" height="200"></canvas>
         </div>
     </div>
 
@@ -139,6 +139,17 @@
     $grandTotal        = $quarterSums['total'];
     $codeExplorerUrl   = route('reports.code-explorer');
     $categoriesData    = [];
+    $byType            = [];
+
+    $typeLabels = [
+        'revenue' => 'Revenue',
+        'expense' => 'Expense',
+        'capex'   => 'CapEx',
+        'asset'   => 'Asset',
+        'liability' => 'Liability',
+    ];
+
+    $typesData = [];
 
     foreach ($byCategory as $catName => $catData) {
         $catSupp  = $catData['supplementary'] ?? 0;
@@ -147,10 +158,14 @@
             $supp = $item->approvedSupplementaryTotal();
             $eff  = $item->effectiveBudget();
             $pct  = $grandTotal > 0 ? round(($eff / $grandTotal) * 100, 1) : 0;
-            $items[] = [
+            $type = $typeLabels[$item->line_type ?? 'expense'] ?? ucfirst($item->line_type ?? 'Expense');
+            $byType[$type] = ($byType[$type] ?? 0) + $eff;
+            $row = [
                 'code'      => $item->accountCode->code,
                 'name'      => $item->accountCode->name,
                 'code_id'   => $item->account_code_id,
+                'line_type' => $type,
+                'category'  => $catName,
                 'q1'        => $item->q1_amount,
                 'q2'        => $item->q2_amount,
                 'q3'        => $item->q3_amount,
@@ -159,6 +174,19 @@
                 'effective' => $eff,
                 'pct'       => $pct,
             ];
+            $items[] = $row;
+
+            // Group by type for the type-tabs
+            if (!isset($typesData[$type])) {
+                $typesData[$type] = ['name'=>$type,'total'=>0,'supp'=>0,'q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0,'items'=>[]];
+            }
+            $typesData[$type]['total'] += $eff;
+            $typesData[$type]['supp']  += $supp;
+            $typesData[$type]['q1']    += $item->q1_amount;
+            $typesData[$type]['q2']    += $item->q2_amount;
+            $typesData[$type]['q3']    += $item->q3_amount;
+            $typesData[$type]['q4']    += $item->q4_amount;
+            $typesData[$type]['items'][] = $row;
         }
         $categoriesData[] = [
             'name'  => $catName,
@@ -171,6 +199,7 @@
             'items' => $items,
         ];
     }
+    $typesData = array_values($typesData);
 @endphp
 
 {{-- Search + export toolbar --}}
@@ -236,98 +265,152 @@
     </div>
 </div>
 
-{{-- Category cards — static shells; rows injected by JS --}}
-@foreach($categoriesData as $catIndex => $catInfo)
-@php $catSupp = $catInfo['supp']; @endphp
-<div class="chart-card mb-3 dept-cat-card" id="cat_card_{{ $catIndex }}">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div class="chart-title mb-0">{{ $catInfo['name'] }}</div>
-        <div style="font-size:13px;font-weight:600;color:var(--navy)">
-            {{ currency() }} {{ number_format($catInfo['total'],2) }}
-            @if($catSupp > 0)
-            <span style="font-size:11px;color:#10B981;font-weight:400">
-                (+{{ number_format($catSupp,2) }} supp.)
-            </span>
-            @endif
-            <span style="font-size:11px;color:var(--slate);font-weight:400">
-                &nbsp;(Q1: {{ number_format($catInfo['q1'],0) }}
-                / Q2: {{ number_format($catInfo['q2'],0) }}
-                / Q3: {{ number_format($catInfo['q3'],0) }}
-                / Q4: {{ number_format($catInfo['q4'],0) }})
-            </span>
+{{-- Category tabs --}}
+<div class="chart-card p-0 dept-cats-wrap" style="overflow:hidden">
+
+    {{-- Tab nav --}}
+    <div style="overflow-x:auto;border-bottom:1px solid #E2E8F0">
+        <ul class="nav nav-tabs border-0 flex-nowrap px-3 pt-2" id="catTabs" style="white-space:nowrap">
+            @foreach($typesData as $catIndex => $catInfo)
+            <li class="nav-item">
+                <button class="nav-link {{ $catIndex === 0 ? 'active' : '' }} px-3 py-2"
+                        style="font-size:12px;font-weight:600;white-space:nowrap;
+                               border-radius:6px 6px 0 0"
+                        data-bs-toggle="tab"
+                        data-bs-target="#catPane_{{ $catIndex }}"
+                        onclick="initCatTab({{ $catIndex }})">
+                    {{ $catInfo['name'] }}
+                    <span class="ms-1" style="font-size:10px;color:var(--slate);font-weight:400">
+                        ({{ count($catInfo['items']) }})
+                    </span>
+                </button>
+            </li>
+            @endforeach
+        </ul>
+    </div>
+
+    {{-- Tab panes --}}
+    <div class="tab-content">
+        @foreach($typesData as $catIndex => $catInfo)
+        @php $catSupp = $catInfo['supp']; @endphp
+        <div class="tab-pane fade {{ $catIndex === 0 ? 'show active' : '' }}"
+             id="catPane_{{ $catIndex }}">
+
+            {{-- Pane header --}}
+            <div class="d-flex justify-content-between align-items-center px-4 py-3"
+                 style="background:#FAFAFA;border-bottom:1px solid #F1F5F9">
+                <div style="font-size:13px;font-weight:600;color:var(--navy)">
+                    {{ currency() }} {{ number_format($catInfo['total'],2) }}
+                    @if($catSupp > 0)
+                    <span style="font-size:11px;color:#10B981;font-weight:400">
+                        +{{ number_format($catSupp,2) }} supp.
+                    </span>
+                    @endif
+                </div>
+                <div style="font-size:11px;color:var(--slate)">
+                    Q1 {{ number_format($catInfo['q1'],0) }}
+                    &nbsp;·&nbsp; Q2 {{ number_format($catInfo['q2'],0) }}
+                    &nbsp;·&nbsp; Q3 {{ number_format($catInfo['q3'],0) }}
+                    &nbsp;·&nbsp; Q4 {{ number_format($catInfo['q4'],0) }}
+                </div>
+            </div>
+
+            {{-- Table --}}
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead style="font-size:11px;text-transform:uppercase;
+                                  letter-spacing:.5px;color:var(--slate);background:#F8FAFC">
+                        <tr>
+                            <th class="ps-4">Code</th>
+                            <th>Account Name</th>
+                            <th>Category</th>
+                            <th class="text-end">Q1</th>
+                            <th class="text-end">Q2</th>
+                            <th class="text-end">Q3</th>
+                            <th class="text-end">Q4</th>
+                            <th class="text-end">Supplementary</th>
+                            <th class="text-end">Total</th>
+                            <th>Split</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody_cat_{{ $catIndex }}"></tbody>
+                    <tfoot style="background:#F8FAFC;font-weight:700;font-size:12px">
+                        <tr>
+                            <td class="ps-4" colspan="3">Type Total</td>
+                            <td class="text-end">{{ number_format($catInfo['q1'],2) }}</td>
+                            <td class="text-end">{{ number_format($catInfo['q2'],2) }}</td>
+                            <td class="text-end">{{ number_format($catInfo['q3'],2) }}</td>
+                            <td class="text-end">{{ number_format($catInfo['q4'],2) }}</td>
+                            <td class="text-end" style="color:{{ $catSupp > 0 ? '#10B981' : 'inherit' }}">
+                                {{ $catSupp > 0 ? '+'.number_format($catSupp,2) : '—' }}
+                            </td>
+                            <td class="text-end">{{ number_format($catInfo['total'],2) }}</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            {{-- Pagination bar --}}
+            <div class="d-flex align-items-center justify-content-between px-4 py-2"
+                 style="border-top:1px solid #F1F5F9">
+                <span style="font-size:11px;color:var(--slate)" id="cat_info_{{ $catIndex }}"></span>
+                <div class="d-flex align-items-center gap-2" id="cat_pager_{{ $catIndex }}">
+                    <button class="btn btn-sm btn-outline-secondary"
+                            style="font-size:11px;padding:2px 10px"
+                            id="cat_prev_{{ $catIndex }}"
+                            onclick="catPrev({{ $catIndex }})" disabled>
+                        ← Prev
+                    </button>
+                    <span style="font-size:11px;color:var(--slate)" id="cat_page_{{ $catIndex }}"></span>
+                    <button class="btn btn-sm btn-outline-secondary"
+                            style="font-size:11px;padding:2px 10px"
+                            id="cat_next_{{ $catIndex }}"
+                            onclick="catNext({{ $catIndex }})">
+                        Next →
+                    </button>
+                </div>
+            </div>
+
         </div>
-    </div>
-    <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0">
-            <thead style="font-size:11px;text-transform:uppercase;
-                          letter-spacing:.5px;color:var(--slate)">
-                <tr>
-                    <th>Code</th>
-                    <th>Account Name</th>
-                    <th class="text-end">Q1</th>
-                    <th class="text-end">Q2</th>
-                    <th class="text-end">Q3</th>
-                    <th class="text-end">Q4</th>
-                    <th class="text-end">Supplementary</th>
-                    <th class="text-end">Total</th>
-                    <th>Split</th>
-                </tr>
-            </thead>
-            <tbody id="tbody_cat_{{ $catIndex }}"></tbody>
-            <tfoot style="background:#F8FAFC;font-weight:700;font-size:12px">
-                <tr>
-                    <td colspan="2">Category Total</td>
-                    <td class="text-end">{{ number_format($catInfo['q1'], 2) }}</td>
-                    <td class="text-end">{{ number_format($catInfo['q2'], 2) }}</td>
-                    <td class="text-end">{{ number_format($catInfo['q3'], 2) }}</td>
-                    <td class="text-end">{{ number_format($catInfo['q4'], 2) }}</td>
-                    <td class="text-end" style="color:{{ $catSupp > 0 ? '#10B981' : 'inherit' }}">
-                        {{ $catSupp > 0 ? '+'.number_format($catSupp, 2) : '—' }}
-                    </td>
-                    <td class="text-end">{{ number_format($catInfo['total'], 2) }}</td>
-                    <td></td>
-                </tr>
-            </tfoot>
-        </table>
-    </div>
-    {{-- Show more / show less toggle --}}
-    <div class="d-flex justify-content-between align-items-center mt-2"
-         id="cat_footer_{{ $catIndex }}">
-        <span class="small text-muted" id="cat_info_{{ $catIndex }}"></span>
-        <button class="btn btn-sm btn-outline-secondary" style="font-size:12px"
-                id="cat_toggle_{{ $catIndex }}"
-                onclick="toggleCat({{ $catIndex }})"></button>
+        @endforeach
     </div>
 </div>
-@endforeach
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-// ── Category row renderer ──────────────────────────────────────────────────
-const DEPT_CATS        = @json($categoriesData);
+// ── Constants ─────────────────────────────────────────────────────────────
+const DEPT_CATS         = @json($typesData);
 const CODE_EXPLORER_URL = @json($codeExplorerUrl);
-const DEPT_PERIOD_ID   = {{ $period->id }};
-const CAT_INITIAL      = 10;
+const DEPT_PERIOD_ID    = {{ $period->id }};
+const PAGE_SIZE         = 15;
 
-const catExpanded = new Array(DEPT_CATS.length).fill(false);
+// Per-tab current page
+const catPages    = new Array(DEPT_CATS.length).fill(0);
+const catInited   = new Array(DEPT_CATS.length).fill(false);
 
+// ── Helpers ───────────────────────────────────────────────────────────────
 function numFmt(n) {
-    return Number(n ?? 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return Number(n ?? 0).toLocaleString('en-GH', { minimumFractionDigits:2, maximumFractionDigits:2 });
 }
 function esc(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function buildRow(item, catName) {
-    const link = `${CODE_EXPLORER_URL}?period_id=${DEPT_PERIOD_ID}&account_code_id=${item.code_id}`;
+function buildRow(item, showCat) {
+    const link     = `${CODE_EXPLORER_URL}?period_id=${DEPT_PERIOD_ID}&account_code_id=${item.code_id}`;
     const suppCell = item.supp > 0
         ? `<td class="text-end small" style="color:#10B981">+${numFmt(item.supp)}</td>`
-        : `<td class="text-end small">—</td>`;
-    const catCell  = catName !== undefined ? `<td class="small text-muted">${esc(catName)}</td>` : '';
+        : `<td class="text-end small text-muted">—</td>`;
+    // In tab panes (showCat undefined): show item.category; in search: showCat is the type label
+    const thirdCell = showCat !== undefined
+        ? `<td class="small text-muted">${esc(showCat)}</td>`
+        : `<td class="small text-muted">${esc(item.category??'')}</td>`;
     return `<tr>
-        <td><a href="${link}" style="color:var(--navy);font-weight:600;font-size:12px;font-family:monospace">${esc(item.code)}</a></td>
+        <td class="ps-4"><a href="${link}" style="color:var(--navy);font-weight:600;
+                font-size:12px;font-family:monospace">${esc(item.code)}</a></td>
         <td class="small">${esc(item.name)}</td>
-        ${catCell}
+        ${thirdCell}
         <td class="text-end small">${numFmt(item.q1)}</td>
         <td class="text-end small">${numFmt(item.q2)}</td>
         <td class="text-end small">${numFmt(item.q3)}</td>
@@ -343,63 +426,75 @@ function buildRow(item, catName) {
     </tr>`;
 }
 
-function renderCat(idx) {
-    const cat      = DEPT_CATS[idx];
-    const expanded = catExpanded[idx];
-    const items    = cat.items;
-    const shown    = expanded ? items : items.slice(0, CAT_INITIAL);
+// ── Tab pagination ────────────────────────────────────────────────────────
+function renderCatPage(idx) {
+    const cat        = DEPT_CATS[idx];
+    const items      = cat.items;
+    const total      = items.length;
+    const page       = catPages[idx];
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const start      = page * PAGE_SIZE;
+    const end        = Math.min(start + PAGE_SIZE, total);
 
     document.getElementById(`tbody_cat_${idx}`).innerHTML =
-        shown.length ? shown.map(r => buildRow(r)).join('')
-                     : '<tr><td colspan="9" class="text-muted text-center py-3">No items.</td></tr>';
+        items.length
+            ? items.slice(start, end).map(r => buildRow(r)).join('')
+            : '<tr><td colspan="10" class="text-muted text-center py-3">No items.</td></tr>';
 
-    const footer   = document.getElementById(`cat_footer_${idx}`);
     const infoEl   = document.getElementById(`cat_info_${idx}`);
-    const toggleEl = document.getElementById(`cat_toggle_${idx}`);
+    const prevEl   = document.getElementById(`cat_prev_${idx}`);
+    const nextEl   = document.getElementById(`cat_next_${idx}`);
+    const pageEl   = document.getElementById(`cat_page_${idx}`);
+    const pagerEl  = document.getElementById(`cat_pager_${idx}`);
 
-    if (items.length <= CAT_INITIAL) {
-        footer.style.display = 'none';
-    } else {
-        footer.style.display = '';
-        infoEl.textContent   = expanded
-            ? `All ${items.length} items shown`
-            : `Showing ${CAT_INITIAL} of ${items.length} items`;
-        toggleEl.textContent = expanded
-            ? 'Show less'
-            : `Show all ${items.length} items`;
-    }
+    if (infoEl) infoEl.textContent =
+        total > 0 ? `Showing ${start + 1}–${end} of ${total} items` : '';
+
+    if (pagerEl) pagerEl.style.display = totalPages <= 1 ? 'none' : '';
+    if (prevEl)  prevEl.disabled  = page === 0;
+    if (nextEl)  nextEl.disabled  = page >= totalPages - 1;
+    if (pageEl)  pageEl.textContent = `Page ${page + 1} of ${totalPages}`;
+
+    catInited[idx] = true;
 }
 
-function toggleCat(idx) {
-    catExpanded[idx] = !catExpanded[idx];
-    renderCat(idx);
+function catPrev(idx) {
+    if (catPages[idx] > 0) { catPages[idx]--; renderCatPage(idx); }
+}
+function catNext(idx) {
+    const totalPages = Math.ceil(DEPT_CATS[idx].items.length / PAGE_SIZE);
+    if (catPages[idx] < totalPages - 1) { catPages[idx]++; renderCatPage(idx); }
 }
 
-// Initial render
-DEPT_CATS.forEach((_, i) => renderCat(i));
+function initCatTab(idx) {
+    if (!catInited[idx]) renderCatPage(idx);
+}
+
+// Render first tab on load
+renderCatPage(0);
 
 // ── Global search ──────────────────────────────────────────────────────────
 document.getElementById('deptSearch').addEventListener('input', function () {
-    const q           = this.value.trim().toLowerCase();
-    const catCards    = document.querySelectorAll('.dept-cat-card');
-    const resultsDiv  = document.getElementById('deptSearchResults');
-    const infoEl      = document.getElementById('deptSearchInfo');
+    const q          = this.value.trim().toLowerCase();
+    const catsWrap   = document.querySelector('.dept-cats-wrap');
+    const resultsDiv = document.getElementById('deptSearchResults');
+    const infoEl     = document.getElementById('deptSearchInfo');
 
     if (!q) {
-        catCards.forEach(el => el.style.display = '');
+        if (catsWrap) catsWrap.style.display = '';
         resultsDiv.style.display = 'none';
         infoEl.textContent = '';
         return;
     }
 
-    catCards.forEach(el => el.style.display = 'none');
+    if (catsWrap) catsWrap.style.display = 'none';
     resultsDiv.style.display = '';
 
     const matches = [];
     DEPT_CATS.forEach(cat => {
         cat.items.forEach(item => {
             if (item.code.toLowerCase().includes(q) || item.name.toLowerCase().includes(q)) {
-                matches.push({ ...item, _cat: cat.name });
+                matches.push({ ...item, _cat: cat.name }); // cat.name is the type label
             }
         });
     });
@@ -493,14 +588,14 @@ new Chart(document.getElementById('quarterSplit'), {
     }
 });
 
-// Category donut
-@php $catNames=[]; $catVals=[]; foreach($byCategory as $c=>$d){$catNames[]=$c; $catVals[]=$d['total'];} @endphp
-new Chart(document.getElementById('catDonut'), {
+// Type donut
+@php $typeNames=[]; $typeVals=[]; foreach($byType as $t=>$v){$typeNames[]=$t; $typeVals[]=$v;} @endphp
+new Chart(document.getElementById('typeDonut'), {
     type: 'doughnut',
     data: {
-        labels: {!! json_encode($catNames) !!},
+        labels: {!! json_encode($typeNames) !!},
         datasets: [{
-            data: {!! json_encode($catVals) !!},
+            data: {!! json_encode($typeVals) !!},
             backgroundColor: COLORS,
             borderWidth: 2, borderColor: '#fff',
         }]

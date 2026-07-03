@@ -11,6 +11,7 @@ class SupplementaryBudget extends Model
     use LogsActivity;
 
     protected $fillable = [
+        'batch_id',
         'budget_period_id','department_id','budget_line_item_id',
         'account_code_id','line_type',
         'original_amount','requested_amount','approved_amount',
