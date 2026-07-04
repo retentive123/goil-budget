@@ -43,6 +43,16 @@ class RolesAndPermissionsSeeder extends Seeder
             'request virement',
             'approve virement',
 
+            // Supplementary budget
+            'request supplementary budget',
+            'approve supplementary budget',
+
+            // Deadline overrides
+            'grant deadline override',
+
+            // Account categories
+            'manage categories',
+
             // Reports
             'view reports',
             'export reports',
@@ -71,6 +81,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'submit budget',
             'view own department budget',
             'request virement',
+            'request supplementary budget',
             'view reports',
         ]);
 
@@ -84,6 +95,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'approve budget',
             'reject budget',
             'request virement',
+            'request supplementary budget',
             'view reports',
             'export reports',
         ]);
@@ -96,8 +108,11 @@ class RolesAndPermissionsSeeder extends Seeder
             'approve budget',
             'reject budget',
             'manage account codes',
+            'manage categories',
             'manage department mappings',
             'approve virement',
+            'approve supplementary budget',
+            'grant deadline override',
             'view reports',
             'export reports',
         ]);
@@ -129,9 +144,12 @@ class RolesAndPermissionsSeeder extends Seeder
             'view all budgets',
             'manage departments',
             'manage account codes',
+            'manage categories',
             'manage department mappings',
             'manage users',
             'approve virement',
+            'approve supplementary budget',
+            'grant deadline override',
             'view reports',
             'export reports',
             'view audit log',
