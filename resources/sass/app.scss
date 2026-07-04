@@ -23,6 +23,58 @@
 .text-navy { color: var(--navy); }
 .text-gold { color: var(--gold); }
 
+// ── Global button colour: #E65C00 ─────────────────────────────
+// Bootstrap's contrast checker picks black text on #E65C00 (ratio ~3.5).
+// Override to force white text on all orange buttons.
+.btn-primary {
+    --bs-btn-color:        #fff;
+    --bs-btn-hover-color:  #fff;
+    --bs-btn-active-color: #fff;
+    --bs-btn-disabled-color: #fff;
+}
+.btn-outline-primary {
+    --bs-btn-hover-color:  #fff;
+    --bs-btn-active-color: #fff;
+}
+// btn-primary is covered by $primary Bootstrap override above.
+// Below we handle warning buttons used as action/navigation buttons,
+// the bg-goil-orange utility, and outline variants.
+
+.btn-warning {
+    --bs-btn-bg:           #E65C00;
+    --bs-btn-border-color: #E65C00;
+    --bs-btn-color:        #fff;
+    --bs-btn-hover-bg:           #C44D00;
+    --bs-btn-hover-border-color: #C44D00;
+    --bs-btn-hover-color:        #fff;
+    --bs-btn-active-bg:          #C44D00;
+    --bs-btn-active-border-color:#C44D00;
+    --bs-btn-active-color:       #fff;
+    --bs-btn-focus-shadow-rgb:   230, 92, 0;
+}
+
+.btn-outline-warning {
+    --bs-btn-color:              #E65C00;
+    --bs-btn-border-color:       #E65C00;
+    --bs-btn-hover-bg:           #E65C00;
+    --bs-btn-hover-border-color: #E65C00;
+    --bs-btn-hover-color:        #fff;
+    --bs-btn-active-bg:          #C44D00;
+    --bs-btn-active-border-color:#C44D00;
+    --bs-btn-active-color:       #fff;
+}
+
+// Utility class used directly in some blade files
+.bg-goil-orange {
+    background-color: #E65C00 !important;
+    color: #fff !important;
+    border-color: #E65C00 !important;
+    &:hover {
+        background-color: #C44D00 !important;
+        border-color: #C44D00 !important;
+    }
+}
+
 // Fix for badge opacity
 .badge.bg-opacity-10 {
     background-color: rgba(var(--bs-primary-rgb), 0.1) !important;

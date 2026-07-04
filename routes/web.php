@@ -225,17 +225,22 @@ Route::middleware('auth')->group(function () {
     // Virement routes
     // -------------------------------------------------------
     Route::prefix('virements')->name('virements.')->group(function () {
+        // Static routes must come before /{virement} wildcard
         Route::middleware('permission:request virement')->group(function () {
-            Route::get('/',           [VirementController::class, 'index'])->name('index');
-            Route::get('/create',     [VirementController::class, 'create'])->name('create');
-            Route::post('/',          [VirementController::class, 'store'])->name('store');
-            Route::get('/{virement}', [VirementController::class, 'show'])->name('show');
+            Route::get('/',       [VirementController::class, 'index'])->name('index');
+            Route::get('/create', [VirementController::class, 'create'])->name('create');
+            Route::post('/',      [VirementController::class, 'store'])->name('store');
         });
 
         Route::middleware('permission:approve virement')->group(function () {
-            Route::get('/pending',              [VirementController::class, 'pending'])->name('pending');
-            Route::post('/{virement}/approve',  [VirementController::class, 'approve'])->name('approve');
-            Route::post('/{virement}/reject',   [VirementController::class, 'reject'])->name('reject');
+            Route::get('/pending',             [VirementController::class, 'pending'])->name('pending');
+            Route::post('/{virement}/approve', [VirementController::class, 'approve'])->name('approve');
+            Route::post('/{virement}/reject',  [VirementController::class, 'reject'])->name('reject');
+        });
+
+        // Wildcard last so it doesn't swallow static routes above
+        Route::middleware('permission:request virement')->group(function () {
+            Route::get('/{virement}', [VirementController::class, 'show'])->name('show');
         });
     });
 
