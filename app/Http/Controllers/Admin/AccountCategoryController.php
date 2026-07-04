@@ -11,8 +11,8 @@ class AccountCategoryController extends Controller
     public function index()
     {
         $categories = AccountCategory::withCount('accountCodes')
-                                     ->orderBy('name')
-                                     ->paginate(20);
+                                     ->orderBy('code')
+                                     ->get();
 
         return view('admin.account-categories.index', compact('categories'));
     }
