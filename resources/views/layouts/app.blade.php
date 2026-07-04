@@ -649,6 +649,7 @@
             display: block;
         }
     </style>
+    @stack('styles')
 </head>
 <body>
 
@@ -916,6 +917,13 @@
 
         </div>
         @endcan
+
+        <div class="nav-section-label">Help</div>
+        <a href="{{ route('docs.index') }}"
+           class="sidebar-link {{ request()->routeIs('docs.*') ? 'active' : '' }}">
+            <i class="fas fa-book-open nav-icon"></i>
+            <span class="link-text">Documentation</span>
+        </a>
 
     </div>
 

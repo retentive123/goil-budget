@@ -2,26 +2,128 @@
 @section('title', 'Account Categories')
 @section('content')
 
+@php
+$typeConfig = [
+    'revenue'             => ['label' => 'Revenue',             'bg' => '#D1FAE5', 'color' => '#065F46'],
+    'expense'             => ['label' => 'Expense',             'bg' => '#FEE2E2', 'color' => '#991B1B'],
+    'both'                => ['label' => 'Both',                'bg' => '#DBEAFE', 'color' => '#1E40AF'],
+    'assets'              => ['label' => 'Assets',              'bg' => '#EDE9FE', 'color' => '#5B21B6'],
+    'liabilities'         => ['label' => 'Liabilities',         'bg' => '#F3E8FF', 'color' => '#7C3AED'],
+    'capital_expenditure' => ['label' => 'Capital Expenditure', 'bg' => '#FEF3C7', 'color' => '#92400E'],
+];
+$usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
+@endphp
+
+{{-- Page header --}}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h5 class="fw-bold mb-0">Account Categories</h5>
+    <div>
+        <h5 class="fw-bold mb-0">Account Categories</h5>
+        <p class="text-muted small mb-0" id="catCount"></p>
+    </div>
     <a href="{{ route('admin.account-categories.create') }}"
-       class="btn btn-primary btn-sm">+ Add Category</a>
-</div>
-
-{{-- Import/Export buttons --}}
-<div class="d-flex gap-2 mb-3">
-    <a href="{{ route('ie.categories.download') }}"
-       class="btn btn-sm btn-outline-success">
-        ↓ Download Template
+       class="btn btn-sm" style="background:var(--navy);color:#fff;border-radius:8px">
+        + Add Category
     </a>
-    <button type="button"
-            onclick="document.getElementById('catUpload').classList.toggle('d-none')"
-            class="btn btn-sm btn-outline-primary">
-        ↑ Import from Excel
-    </button>
 </div>
 
-<div id="catUpload" class="d-none chart-card mb-4">
+@if(session('success'))
+<div class="alert alert-success alert-dismissible fade show py-2 mb-3">
+    {{ session('success') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+@endif
+@if(session('error'))
+<div class="alert alert-danger alert-dismissible fade show py-2 mb-3">
+    {{ session('error') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+@endif
+
+{{-- Toolbar --}}
+<div class="chart-card mb-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+
+        {{-- Left: search + type pills --}}
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <div class="position-relative">
+                <i class="fas fa-search position-absolute"
+                   style="left:10px;top:50%;transform:translateY(-50%);color:#94A3B8;font-size:12px"></i>
+                <input type="text" id="catSearch"
+                       class="form-control form-control-sm"
+                       placeholder="Search code, name, description…"
+                       style="padding-left:30px;width:260px"
+                       oninput="applyFilters()">
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap" id="typeFilterBtns">
+                <button type="button" class="cat-type-btn"
+                        data-type="" onclick="setType('')"
+                        style="font-size:11px;font-weight:600;padding:3px 14px;
+                               border-radius:20px;border:1.5px solid var(--navy);
+                               background:var(--navy);color:#fff;cursor:pointer">
+                    All Types
+                </button>
+                @foreach($usedTypes as $t)
+                @php $tc = $typeConfig[$t] ?? ['label' => ucfirst($t), 'bg' => '#F1F5F9', 'color' => '#475569']; @endphp
+                <button type="button" class="cat-type-btn"
+                        data-type="{{ $t }}" onclick="setType('{{ $t }}')"
+                        style="font-size:11px;font-weight:600;padding:3px 14px;
+                               border-radius:20px;border:1.5px solid #E2E8F0;
+                               background:#F8FAFC;color:#475569;cursor:pointer">
+                    {{ $tc['label'] }}
+                </button>
+                @endforeach
+            </div>
+        </div>
+
+        {{-- Right: export + import --}}
+        <div class="d-flex gap-2">
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                        data-bs-toggle="dropdown" style="font-size:12px">
+                    <i class="fas fa-download me-1"></i>Export
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="font-size:13px">
+                    <li>
+                        <a class="dropdown-item" href="#"
+                           onclick="exportCats('csv');return false">
+                            <i class="fas fa-file-csv me-2 text-success"></i>CSV
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="#"
+                           onclick="exportCats('json');return false">
+                            <i class="fas fa-file-code me-2 text-primary"></i>JSON
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider my-1"></li>
+                    <li>
+                        <a class="dropdown-item" href="#" id="catCopyBtn"
+                           onclick="exportCats('copy');return false">
+                            <i class="fas fa-copy me-2 text-muted"></i>Copy (TSV)
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider my-1"></li>
+                    <li>
+                        <a class="dropdown-item" href="{{ route('ie.categories.download') }}">
+                            <i class="fas fa-file-excel me-2" style="color:#10B981"></i>Download Template
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <button type="button"
+                    onclick="document.getElementById('catUpload').classList.toggle('d-none')"
+                    class="btn btn-sm btn-outline-primary" style="font-size:12px">
+                <i class="fas fa-upload me-1"></i>Import
+            </button>
+        </div>
+    </div>
+</div>
+
+{{-- Import panel --}}
+<div id="catUpload" class="d-none chart-card mb-3"
+     style="border-left:4px solid var(--navy)">
     <div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:8px">
         Import Categories from Excel
     </div>
@@ -34,13 +136,14 @@
                        class="form-control form-control-sm">
             </div>
             <button type="submit" class="btn btn-sm btn-primary">Upload</button>
+            <button type="button"
+                    onclick="document.getElementById('catUpload').classList.add('d-none')"
+                    class="btn btn-sm btn-outline-secondary">Cancel</button>
         </div>
         <div class="form-text">
-            Existing categories with the same code will be updated.
-            Download the template first to see the correct format.
+            Existing categories with the same code will be updated. Download the template first.
         </div>
     </form>
-
     @if(session('import_errors'))
     <div class="mt-2">
         @foreach(session('import_errors') as $err)
@@ -50,43 +153,49 @@
     @endif
 </div>
 
-<div class="card shadow-sm">
-    <div class="card-body p-0">
-        <table class="table table-hover mb-0">
-            <thead class="table-light">
+{{-- Table --}}
+<div class="chart-card p-0" style="overflow:hidden">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0" id="catTable">
+            <thead style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;
+                          color:var(--slate);background:#F8FAFC">
                 <tr>
-                    <th>Code</th>
+                    <th class="ps-4">Code</th>
                     <th>Name</th>
-                    <th>Budget Type</th>
+                    <th>Type</th>
                     <th>Description</th>
                     <th class="text-center">Codes</th>
                     <th>Status</th>
                     <th></th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="catTbody">
                 @forelse($categories as $category)
                 @php
-                    $typeConfig = match($category->budget_type) {
-                        'revenue'             => ['label' => 'Revenue',             'bg' => '#D1FAE5', 'color' => '#065F46'],
-                        'expense'             => ['label' => 'Expense',             'bg' => '#FEE2E2', 'color' => '#991B1B'],
-                        'both'                => ['label' => 'Both',                'bg' => '#DBEAFE', 'color' => '#1E40AF'],
-                        'assets'              => ['label' => 'Assets',              'bg' => '#EDE9FE', 'color' => '#5B21B6'],
-                        'liabilities'         => ['label' => 'Liabilities',         'bg' => '#F3E8FF', 'color' => '#7C3AED'],
-                        'capital_expenditure' => ['label' => 'Capital Expenditure', 'bg' => '#FEF3C7', 'color' => '#92400E'],
-                        default               => ['label' => ucfirst($category->budget_type), 'bg' => '#F1F5F9', 'color' => '#475569'],
-                    };
+                    $tc  = $typeConfig[$category->budget_type]
+                           ?? ['label' => ucfirst($category->budget_type), 'bg' => '#F1F5F9', 'color' => '#475569'];
                 @endphp
-                <tr>
-                    <td><code>{{ $category->code }}</code></td>
+                <tr class="cat-row"
+                    data-code="{{ strtolower($category->code) }}"
+                    data-name="{{ strtolower($category->name) }}"
+                    data-desc="{{ strtolower($category->description ?? '') }}"
+                    data-type="{{ $category->budget_type }}">
+                    <td class="ps-4">
+                        <code style="font-size:12px;color:var(--navy);font-weight:600">
+                            {{ $category->code }}
+                        </code>
+                    </td>
                     <td class="fw-semibold small">{{ $category->name }}</td>
                     <td>
-                        <span class="badge"
-                              style="background:{{ $typeConfig['bg'] }};color:{{ $typeConfig['color'] }};font-weight:600">
-                            {{ $typeConfig['label'] }}
+                        <span style="font-size:11px;font-weight:600;padding:2px 10px;
+                                     border-radius:20px;
+                                     background:{{ $tc['bg'] }};color:{{ $tc['color'] }}">
+                            {{ $tc['label'] }}
                         </span>
                     </td>
-                    <td class="small text-muted">{{ $category->description ?? '—' }}</td>
+                    <td class="small text-muted" style="max-width:240px">
+                        {{ $category->description ?? '—' }}
+                    </td>
                     <td class="text-center">
                         <span class="badge bg-secondary">{{ $category->account_codes_count }}</span>
                     </td>
@@ -95,17 +204,20 @@
                             {{ $category->is_active ? 'Active' : 'Inactive' }}
                         </span>
                     </td>
-                    <td>
-                        <div class="d-flex gap-1">
+                    <td class="pe-3">
+                        <div class="d-flex gap-1 justify-content-end">
                             <a href="{{ route('admin.account-categories.show', $category) }}"
-                               class="btn btn-sm btn-outline-secondary">View</a>
+                               class="btn btn-sm btn-outline-secondary"
+                               style="font-size:11px;padding:2px 10px">View</a>
                             <a href="{{ route('admin.account-categories.edit', $category) }}"
-                               class="btn btn-sm btn-outline-primary">Edit</a>
+                               class="btn btn-sm btn-outline-primary"
+                               style="font-size:11px;padding:2px 10px">Edit</a>
                             @if($category->account_codes_count === 0)
                             <form method="POST"
                                   action="{{ route('admin.account-categories.destroy', $category) }}">
                                 @csrf @method('DELETE')
                                 <button class="btn btn-sm btn-outline-danger"
+                                        style="font-size:11px;padding:2px 10px"
                                         onclick="return confirm('Delete this category?')">
                                     Delete
                                 </button>
@@ -115,7 +227,7 @@
                     </td>
                 </tr>
                 @empty
-                <tr>
+                <tr id="emptyRow">
                     <td colspan="7" class="text-center text-muted py-4">
                         No categories yet.
                         <a href="{{ route('admin.account-categories.create') }}">Add one</a>.
@@ -125,9 +237,220 @@
             </tbody>
         </table>
     </div>
+
+    {{-- No-results row (hidden by default) --}}
+    <div id="noResults" class="text-center py-4 text-muted" style="display:none;font-size:13px">
+        No categories match your search.
+    </div>
+
+    {{-- Pagination bar --}}
+    <div class="d-flex justify-content-between align-items-center px-4 py-3 flex-wrap gap-2"
+         style="border-top:1px solid #F1F5F9" id="catPagerBar">
+        <div class="d-flex align-items-center gap-2">
+            <span style="font-size:12px;color:var(--slate)">Show</span>
+            <select id="catPageSize" class="form-select form-select-sm" style="width:auto;font-size:12px"
+                    onchange="setPageSize(this.value)">
+                <option value="10">10</option>
+                <option value="20" selected>20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="all">All</option>
+            </select>
+            <span style="font-size:12px;color:var(--slate)" id="catPageInfo"></span>
+        </div>
+        <div class="d-flex gap-1" id="catPageBtns"></div>
+    </div>
 </div>
 
-<div class="mt-3">
-    {{ $categories->appends(request()->query())->links('pagination::bootstrap-5') }}
-</div>
+@php
+$catExportData = $categories->map(fn($c) => [
+    'code'        => $c->code,
+    'name'        => $c->name,
+    'budget_type' => $c->budget_type,
+    'description' => $c->description ?? '',
+    'codes_count' => $c->account_codes_count,
+    'is_active'   => $c->is_active ? 'Active' : 'Inactive',
+]);
+$typeLabelsJson = collect($typeConfig)->map(fn($v) => $v['label']);
+@endphp
+
+{{-- Export data --}}
+<script>
+const CAT_DATA    = @json($catExportData);
+const TYPE_LABELS = @json($typeLabelsJson);
+
+let pageSize     = 20;
+let activeType   = '';
+let currentPage  = 1;
+let filteredRows = [];
+
+function setPageSize(val) {
+    pageSize    = val === 'all' ? Infinity : parseInt(val);
+    currentPage = 1;
+    renderPage();
+}
+
+// ── Type filter ──────────────────────────────────────────────────────────
+function setType(type) {
+    activeType = type;
+    document.querySelectorAll('.cat-type-btn').forEach(b => {
+        const on = b.dataset.type === type;
+        b.style.background  = on ? 'var(--navy)' : '#F8FAFC';
+        b.style.color       = on ? '#fff'        : '#475569';
+        b.style.borderColor = on ? 'var(--navy)' : '#E2E8F0';
+    });
+    currentPage = 1;
+    applyFilters();
+}
+
+// ── Search + filter + paginate ───────────────────────────────────────────
+function applyFilters() {
+    const q    = document.getElementById('catSearch').value.toLowerCase().trim();
+    const rows = Array.from(document.querySelectorAll('.cat-row'));
+
+    filteredRows = rows.filter(row => {
+        const typeMatch   = !activeType || row.dataset.type === activeType;
+        const searchMatch = !q
+            || row.dataset.code.includes(q)
+            || row.dataset.name.includes(q)
+            || row.dataset.desc.includes(q);
+        return typeMatch && searchMatch;
+    });
+
+    renderPage();
+}
+
+function renderPage() {
+    const total      = filteredRows.length;
+    const allRows    = document.querySelectorAll('.cat-row');
+    const isAll      = pageSize === Infinity;
+    const totalPages = isAll ? 1 : Math.max(1, Math.ceil(total / pageSize));
+    if (currentPage > totalPages) currentPage = totalPages;
+
+    const start = isAll ? 0 : (currentPage - 1) * pageSize;
+    const end   = isAll ? total : Math.min(start + pageSize, total);
+
+    // Show/hide rows
+    allRows.forEach(r => r.style.display = 'none');
+    filteredRows.slice(start, end).forEach(r => r.style.display = '');
+
+    // Count label
+    const grandTotal = allRows.length;
+    document.getElementById('catCount').textContent =
+        total === grandTotal
+            ? `${grandTotal} categories`
+            : `${total} of ${grandTotal} categories`;
+
+    // No-results
+    document.getElementById('noResults').style.display =
+        total === 0 ? '' : 'none';
+
+    // Pagination bar
+    const bar      = document.getElementById('catPagerBar');
+    const infoEl   = document.getElementById('catPageInfo');
+    const btnsEl   = document.getElementById('catPageBtns');
+
+    if (total === 0 || totalPages <= 1) {
+        bar.style.display = total === 0 ? 'none' : '';
+        infoEl.textContent = total > 0 ? `${total} categories` : '';
+        btnsEl.innerHTML   = '';
+        return;
+    }
+
+    bar.style.display  = '';
+    infoEl.textContent = `Showing ${start + 1}–${end} of ${total}`;
+
+    // Page buttons (window of 7)
+    const pages = (() => {
+        if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+        if (currentPage <= 4)             return [1,2,3,4,5,'…',totalPages];
+        if (currentPage >= totalPages - 3) return [1,'…',totalPages-4,totalPages-3,totalPages-2,totalPages-1,totalPages];
+        return [1,'…',currentPage-1,currentPage,currentPage+1,'…',totalPages];
+    })();
+
+    const navBtn = (label, page, disabled) =>
+        `<button class="btn btn-sm btn-outline-secondary" ${disabled ? 'disabled' : ''}
+         onclick="goPage(${page})" style="padding:2px 8px;font-size:12px">${label}</button>`;
+
+    const pageBtn = p => p === '…'
+        ? `<span class="btn btn-sm disabled" style="padding:2px 6px;font-size:12px">…</span>`
+        : `<button class="btn btn-sm" onclick="goPage(${p})"
+               style="padding:2px 8px;font-size:12px;${p === currentPage ? 'background:var(--navy);color:#fff' : ''}">${p}</button>`;
+
+    btnsEl.innerHTML =
+        navBtn('‹', currentPage - 1, currentPage === 1) +
+        pages.map(pageBtn).join('') +
+        navBtn('›', currentPage + 1, currentPage === totalPages);
+}
+
+function goPage(p) {
+    currentPage = p;
+    renderPage();
+}
+
+// ── Export ───────────────────────────────────────────────────────────────
+function getVisibleData() {
+    const q = document.getElementById('catSearch').value.toLowerCase().trim();
+    return CAT_DATA.filter(r => {
+        const typeMatch   = !activeType || r.budget_type === activeType;
+        const searchMatch = !q
+            || r.code.toLowerCase().includes(q)
+            || r.name.toLowerCase().includes(q)
+            || r.description.toLowerCase().includes(q);
+        return typeMatch && searchMatch;
+    });
+}
+
+function exportCats(format) {
+    const data    = getVisibleData();
+    const headers = ['Code', 'Name', 'Type', 'Description', 'Account Codes', 'Status'];
+    const row     = r => [
+        r.code,
+        r.name,
+        TYPE_LABELS[r.budget_type] ?? r.budget_type,
+        r.description,
+        r.codes_count,
+        r.is_active,
+    ];
+    const datestamp = new Date().toISOString().slice(0, 10);
+    const filename  = `account-categories-${datestamp}`;
+
+    if (format === 'csv') {
+        const csv = [headers, ...data.map(row)]
+            .map(cells => cells.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
+            .join('\n');
+        dlBlob(csv, filename + '.csv', 'text/csv;charset=utf-8;');
+    }
+    if (format === 'json') {
+        const json = JSON.stringify(
+            data.map(r => Object.fromEntries(headers.map((h, i) => [h, row(r)[i]]))),
+            null, 2
+        );
+        dlBlob(json, filename + '.json', 'application/json');
+    }
+    if (format === 'copy') {
+        const tsv = [headers, ...data.map(row)].map(c => c.join('\t')).join('\n');
+        navigator.clipboard.writeText(tsv).then(() => {
+            const btn  = document.getElementById('catCopyBtn');
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check me-2 text-success"></i>Copied!';
+            setTimeout(() => { btn.innerHTML = orig; }, 2000);
+        });
+    }
+}
+
+function dlBlob(content, filename, mime) {
+    const a = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(new Blob([content], { type: mime })),
+        download: filename,
+    });
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+// Init count
+document.addEventListener('DOMContentLoaded', () => applyFilters());
+</script>
+
 @endsection

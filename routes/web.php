@@ -27,6 +27,7 @@ use App\Http\Controllers\Auth\TwoFactorController;
 use App\Http\Controllers\Supplementary\SupplementaryBudgetController;
 use App\Http\Controllers\Admin\DeadlineOverrideController;
 use App\Http\Controllers\Budget\AllBudgetsController;
+use App\Http\Controllers\DocsController;
 
 
 // Guest routes
@@ -42,6 +43,7 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/docs', [DocsController::class, 'index'])->name('docs.index');
     Route::get('/password/change',  [PasswordController::class, 'showChangeForm'])->name('password.change');
     Route::post('/password/change', [PasswordController::class, 'update'])->name('password.update');
     Route::get('/2fa/setup',    [TwoFactorController::class, 'setup'])->name('2fa.setup');
