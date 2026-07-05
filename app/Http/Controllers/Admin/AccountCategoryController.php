@@ -16,7 +16,11 @@ class AccountCategoryController extends Controller
                                      ->orderBy('code')
                                      ->get();
 
-        return view('admin.account-categories.index', compact('categories'));
+        $subCategories = AccountSubCategory::where('is_active', true)
+            ->orderBy('budget_type')->orderBy('sort_order')->orderBy('name')
+            ->get()->groupBy('budget_type');
+
+        return view('admin.account-categories.index', compact('categories', 'subCategories'));
     }
 
     public function create()
@@ -93,6 +97,32 @@ class AccountCategoryController extends Controller
 
         return redirect()->route('admin.account-categories.index')
             ->with('success', 'Account category deleted.');
+    }
+
+    public function bulkAssignSubCategory(Request $request)
+    {
+        $request->validate([
+            'ids'                     => 'required|string',
+            'account_sub_category_id' => 'nullable|exists:account_sub_categories,id',
+        ]);
+
+        $ids = array_filter(explode(',', $request->input('ids', '')));
+
+        if (empty($ids)) {
+            return back()->with('error', 'No categories selected.');
+        }
+
+        $subCatId = $request->input('account_sub_category_id') ?: null;
+
+        AccountCategory::whereIn('id', $ids)->update(['account_sub_category_id' => $subCatId]);
+
+        $count   = count($ids);
+        $subName = $subCatId
+            ? AccountSubCategory::find($subCatId)?->name
+            : 'None';
+
+        return redirect()->route('admin.account-categories.index')
+            ->with('success', "Sub-category set to \"{$subName}\" for {$count} " . str('category')->plural($count) . '.');
     }
 
     public function bulkDestroy(Request $request)

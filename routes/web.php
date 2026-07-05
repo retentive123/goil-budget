@@ -77,8 +77,9 @@ Route::middleware('auth')->group(function () {
 
         // Account sub-categories, categories & codes
         Route::resource('account-sub-categories', AccountSubCategoryController::class);
-        Route::resource('account-categories', AccountCategoryController::class);
         Route::delete('account-categories', [AccountCategoryController::class, 'bulkDestroy'])->name('account-categories.bulk-destroy');
+        Route::post('account-categories/bulk-assign-sub-category', [AccountCategoryController::class, 'bulkAssignSubCategory'])->name('account-categories.bulk-assign-sub-category');
+        Route::resource('account-categories', AccountCategoryController::class);
         Route::resource('account-codes', AccountCodeController::class);
         Route::delete('account-codes', [AccountCodeController::class, 'bulkDestroy'])->name('account-codes.bulk-destroy');
 

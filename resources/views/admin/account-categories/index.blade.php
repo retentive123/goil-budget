@@ -160,6 +160,65 @@ $usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
     <input type="hidden" name="ids" id="bulkIds">
 </form>
 
+{{-- Bulk-assign sub-category form (hidden, submitted by JS) --}}
+<form id="bulkAssignForm" method="POST"
+      action="{{ route('admin.account-categories.bulk-assign-sub-category') }}">
+    @csrf
+    <input type="hidden" name="ids" id="assignIds">
+    <input type="hidden" name="account_sub_category_id" id="assignSubCatId">
+</form>
+
+{{-- Hidden trigger (Bootstrap data-attribute listener handles the show) --}}
+<button id="bulkAssignTrigger" class="d-none"
+        data-bs-toggle="modal" data-bs-target="#bulkAssignModal"></button>
+
+{{-- Bulk assign modal --}}
+<div class="modal fade" id="bulkAssignModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:440px">
+        <div class="modal-content" style="border-radius:12px;border:none;box-shadow:0 8px 32px rgba(0,0,0,.14)">
+            <div class="modal-header" style="background:#1B2A4A;border-radius:12px 12px 0 0;padding:14px 20px">
+                <h6 class="modal-title fw-bold text-white mb-0">
+                    <i class="fas fa-tags me-2"></i>Assign Sub-Category
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="small text-muted mb-3" id="assignModalDesc"></p>
+                <label class="form-label small fw-semibold mb-1">Sub-Category</label>
+                <select id="assignSubCatSel" class="form-select form-select-sm">
+                    <option value="">— None (clear assignment) —</option>
+                    @foreach($subCategories as $type => $subs)
+                    @php
+                        $typeLabels = [
+                            'revenue'             => 'Revenue',
+                            'expense'             => 'Expense',
+                            'both'                => 'Both',
+                            'assets'              => 'Assets',
+                            'liabilities'         => 'Liabilities',
+                            'capital_expenditure' => 'Capital Expenditure',
+                        ];
+                    @endphp
+                    <optgroup label="{{ $typeLabels[$type] ?? ucfirst($type) }}">
+                        @foreach($subs as $sub)
+                        <option value="{{ $sub->id }}">{{ $sub->name }}</option>
+                        @endforeach
+                    </optgroup>
+                    @endforeach
+                </select>
+            </div>
+            <div class="modal-footer border-0 pt-0 pb-3 px-4">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm fw-semibold"
+                        style="background:#1B2A4A;color:#fff;border-radius:8px"
+                        onclick="submitBulkAssign()">
+                    Apply
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {{-- Table --}}
 <div class="chart-card p-0" style="overflow:hidden">
 
@@ -170,6 +229,10 @@ $usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
         <button type="button" class="btn btn-sm btn-danger"
                 style="font-size:12px" onclick="confirmBulkDelete()">
             <i class="fas fa-trash me-1"></i>Delete Selected
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-primary"
+                style="font-size:12px" onclick="openBulkAssign()">
+            <i class="fas fa-tags me-1"></i>Assign Sub-Category
         </button>
         <button type="button" class="btn btn-sm btn-outline-secondary"
                 style="font-size:12px" onclick="clearSelection()">
@@ -552,6 +615,25 @@ function deleteCat(formId, name) {
     }).then(result => {
         if (result.isConfirmed) document.getElementById(formId).submit();
     });
+}
+
+function openBulkAssign() {
+    const checked = [...document.querySelectorAll('.row-cb:checked')];
+    if (checked.length === 0) return;
+    const n = checked.length;
+    document.getElementById('assignModalDesc').textContent =
+        `Choose a sub-category to assign to the ${n} selected ${n === 1 ? 'category' : 'categories'}.`;
+    document.getElementById('assignSubCatSel').value = '';
+    document.getElementById('bulkAssignTrigger').click();
+}
+
+function submitBulkAssign() {
+    const checked  = [...document.querySelectorAll('.row-cb:checked')];
+    const ids      = checked.map(cb => cb.value).join(',');
+    const subCatId = document.getElementById('assignSubCatSel').value;
+    document.getElementById('assignIds').value      = ids;
+    document.getElementById('assignSubCatId').value = subCatId;
+    document.getElementById('bulkAssignForm').submit();
 }
 
 function confirmBulkDelete() {
