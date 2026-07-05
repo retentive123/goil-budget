@@ -111,4 +111,34 @@ class AccountCodeController extends Controller
         return redirect()->route('admin.account-codes.index')
             ->with('success', 'Account code deleted successfully.');
     }
+
+    public function bulkDestroy(Request $request)
+    {
+        $ids = array_filter(explode(',', $request->input('ids', '')));
+
+        if (empty($ids)) {
+            return back()->with('error', 'No codes selected.');
+        }
+
+        $deleted = 0;
+        $skipped = 0;
+
+        foreach (AccountCode::whereIn('id', $ids)->get() as $code) {
+            if ($code->lineItems()->count() > 0) {
+                $skipped++;
+            } else {
+                $code->delete();
+                $deleted++;
+            }
+        }
+
+        $msg = "{$deleted} " . str('code')->plural($deleted) . " deleted.";
+        if ($skipped) {
+            $msg .= " {$skipped} skipped (used in budget entries).";
+        }
+
+        return redirect()->route('admin.account-codes.index')
+            ->with($skipped && !$deleted ? 'error' : 'success', $msg)
+            ->withInput(request()->except('ids', '_method', '_token'));
+    }
 }

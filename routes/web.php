@@ -8,6 +8,8 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\DepartmentController;
 use App\Http\Controllers\Admin\AccountCodeController;
 use App\Http\Controllers\Admin\AccountCategoryController;
+use App\Http\Controllers\Admin\AccountSubCategoryController;
+use App\Http\Controllers\Admin\IncomeStatementConfigController;
 use App\Http\Controllers\Admin\BudgetPeriodController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\SystemSettingController;
@@ -68,9 +70,17 @@ Route::middleware('auth')->group(function () {
         Route::get('departments/{department}/account-codes',  [DepartmentController::class, 'accountCodes'])->name('departments.account-codes');
         Route::post('departments/{department}/account-codes', [DepartmentController::class, 'syncAccountCodes'])->name('departments.sync-account-codes');
 
-        // Account categories & codes
+        // P&L layout configuration
+        Route::resource('income-statement-configs', IncomeStatementConfigController::class)->except('show');
+        Route::post('income-statement-configs/{incomeStatementConfig}/activate',   [IncomeStatementConfigController::class, 'activate'])->name('income-statement-configs.activate');
+        Route::post('income-statement-configs/{incomeStatementConfig}/deactivate', [IncomeStatementConfigController::class, 'deactivate'])->name('income-statement-configs.deactivate');
+
+        // Account sub-categories, categories & codes
+        Route::resource('account-sub-categories', AccountSubCategoryController::class);
         Route::resource('account-categories', AccountCategoryController::class);
-        Route::resource('account-codes',      AccountCodeController::class);
+        Route::delete('account-categories', [AccountCategoryController::class, 'bulkDestroy'])->name('account-categories.bulk-destroy');
+        Route::resource('account-codes', AccountCodeController::class);
+        Route::delete('account-codes', [AccountCodeController::class, 'bulkDestroy'])->name('account-codes.bulk-destroy');
 
         // Budget periods
         Route::resource('budget-periods', BudgetPeriodController::class);

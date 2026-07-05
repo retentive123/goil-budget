@@ -861,6 +861,16 @@
             <i class="fas fa-chevron-down chevron-icon" id="budgetChevron"></i>
         </button>
         <div class="sidebar-submenu" id="budgetSubmenu">
+            <a href="{{ route('admin.account-sub-categories.index') }}"
+               class="sidebar-link {{ request()->routeIs('admin.account-sub-categories.*') ? 'active' : '' }}">
+                <i class="fas fa-layer-group nav-icon"></i>
+                <span class="link-text">Sub-Categories</span>
+            </a>
+            <a href="{{ route('admin.income-statement-configs.index') }}"
+               class="sidebar-link {{ request()->routeIs('admin.income-statement-configs.*') ? 'active' : '' }}">
+                <i class="fas fa-sliders-h nav-icon"></i>
+                <span class="link-text">P&L Layout</span>
+            </a>
             <a href="{{ route('admin.account-categories.index') }}"
                class="sidebar-link {{ request()->routeIs('admin.account-categories.*') ? 'active' : '' }}">
                 <i class="fas fa-folder nav-icon"></i>

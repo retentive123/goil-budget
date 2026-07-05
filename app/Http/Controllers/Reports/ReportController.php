@@ -16,7 +16,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
 use Barryvdh\DomPDF\Facade\Pdf;
-use App\Exports\CodeExplorerExport; 
+use App\Exports\CodeExplorerExport;
+use App\Models\IncomeStatementConfig;
 use App\Services\AuditLogger;
 
 class ReportController extends Controller
@@ -79,16 +80,24 @@ public function executive(Request $request)
     // ✅ Calculate total supplementary for grand total
     $totalSupplementary = $deptTotals->sum('supplementary');
 
-    // Category breakdown
-    $categoryTotals = [];
+    // Budget type breakdown (revenue, expense, capital_expenditure, assets, liabilities, both)
+    $typeLabels = [
+        'revenue'              => 'Revenue',
+        'expense'              => 'Expense',
+        'both'                 => 'Revenue & Expense',
+        'capital_expenditure'  => 'Capital Expenditure',
+        'assets'               => 'Assets',
+        'liabilities'          => 'Liabilities',
+    ];
+    $budgetTypeTotals = [];
     foreach ($versions as $v) {
         foreach ($v->lineItems as $item) {
-            $cat = $item->accountCode->category->name ?? 'Uncategorised';
-            // ✅ Use effectiveBudget() for each line item
-            $categoryTotals[$cat] = ($categoryTotals[$cat] ?? 0) + $item->effectiveBudget();
+            $type  = $item->accountCode->category->budget_type ?? 'expense';
+            $label = $typeLabels[$type] ?? ucfirst(str_replace('_', ' ', $type));
+            $budgetTypeTotals[$label] = ($budgetTypeTotals[$label] ?? 0) + $item->effectiveBudget();
         }
     }
-    arsort($categoryTotals);
+    arsort($budgetTypeTotals);
 
     // Quarterly trend across all depts
     $quarterlyTotals = [
@@ -115,9 +124,9 @@ public function executive(Request $request)
 
     return view('reports.executive', compact(
         'period', 'periods', 'departments',
-        'deptTotals', 'categoryTotals', 'quarterlyTotals',
+        'deptTotals', 'budgetTypeTotals', 'quarterlyTotals',
         'submissionStats', 'grandTotal', 'versions',
-        'totalSupplementary' // ✅ Pass to view
+        'totalSupplementary'
     ));
 }
 
@@ -230,7 +239,23 @@ if ($version) {
 {
     $user       = auth()->user();
     $periods    = BudgetPeriod::orderByDesc('year')->get();
-    $categories = AccountCategory::with('accountCodes')->orderBy('name')->get();
+
+    $budgetTypeLabels = [
+        'revenue'             => 'Revenue',
+        'expense'             => 'Expense',
+        'both'                => 'Revenue & Expense',
+        'capital_expenditure' => 'Capital Expenditure',
+        'assets'              => 'Assets',
+        'liabilities'         => 'Liabilities',
+    ];
+
+    $selectedBudgetType = $request->budget_type ?: null;
+
+    $categoriesQuery = AccountCategory::with('accountCodes')->orderBy('name');
+    if ($selectedBudgetType) {
+        $categoriesQuery->where('budget_type', $selectedBudgetType);
+    }
+    $categories = $categoriesQuery->get();
     $allCodes   = AccountCode::with('category')->orderBy('code')->get();
 
     $selectedCategory = $request->category_id
@@ -273,7 +298,8 @@ if ($version) {
         'periods', 'categories', 'allCodes', 'departments',
         'selectedCategory', 'selectedCode', 'period',
         'reportData', 'reportTitle', 'reportSubtitle',
-        'canViewAll', 'scopedDepartmentId'
+        'canViewAll', 'scopedDepartmentId',
+        'budgetTypeLabels', 'selectedBudgetType'
     ));
 }
 
@@ -383,33 +409,105 @@ public function deptComparison(Request $request)
         $versions, $minVariancePct, $varianceFilter
     );
 
-    // ✅ Calculate summary from $varianceData
+    // ── Summary totals + status counts ──────────────────────────────────
     $totalBudget = 0;
     $totalActual = 0;
-    $onBudget = 0;
+    $onBudget    = 0;
+    $overspend   = 0;
+    $underspend  = 0;
+
+    $typeLabelMap = [
+        'revenue'             => 'Revenue',
+        'expense'             => 'Expense',
+        'both'                => 'Rev & Exp',
+        'capital_expenditure' => 'CapEx',
+        'assets'              => 'Assets',
+        'liabilities'         => 'Liabilities',
+    ];
+
+    $typeSummary = [];
+    $catSummary  = [];
 
     foreach ($varianceData as $category => $codes) {
+        if (!isset($catSummary[$category])) {
+            $catSummary[$category] = ['budget' => 0, 'actual' => 0, 'variance' => 0];
+        }
         foreach ($codes as $code => $row) {
             $totalBudget += $row['budget'];
             $totalActual += $row['actual'];
-            if ($row['variance'] == 0) {
-                $onBudget++;
+            if ($row['variance'] == 0)      $onBudget++;
+            elseif ($row['variance'] < 0)   $overspend++;
+            else                            $underspend++;
+
+            $t = $row['budget_type'] ?? 'expense';
+            if (!isset($typeSummary[$t])) {
+                $typeSummary[$t] = [
+                    'label'    => $typeLabelMap[$t] ?? ucfirst(str_replace('_', ' ', $t)),
+                    'budget'   => 0,
+                    'actual'   => 0,
+                    'variance' => 0,
+                ];
             }
+            $typeSummary[$t]['budget']   += $row['budget'];
+            $typeSummary[$t]['actual']   += $row['actual'];
+            $typeSummary[$t]['variance'] += $row['variance'];
+
+            $catSummary[$category]['budget']   += $row['budget'];
+            $catSummary[$category]['actual']   += $row['actual'];
+            $catSummary[$category]['variance'] += $row['variance'];
         }
     }
+
+    // Sort categories by absolute variance descending
+    uasort($catSummary, fn($a, $b) => abs($b['variance']) <=> abs($a['variance']));
+
+    // ── Department summary: budget from versions, actuals from DB ────────
+    $versionIds  = $versions->pluck('id');
+    $deptBudgets = [];
+    foreach ($versions as $v) {
+        $dName = $v->department->name ?? 'Unknown';
+        if (!isset($deptBudgets[$dName])) $deptBudgets[$dName] = 0;
+        foreach ($v->lineItems as $item) {
+            $deptBudgets[$dName] += $item->effectiveBudget();
+        }
+    }
+
+    $deptActualsRaw = \App\Models\BudgetActual::whereHas('lineItem',
+            fn($q) => $q->whereIn('budget_version_id', $versionIds))
+        ->where('budget_actuals.status', 'confirmed')
+        ->join('budget_line_items', 'budget_actuals.budget_line_item_id', '=', 'budget_line_items.id')
+        ->join('budget_versions',   'budget_line_items.budget_version_id', '=', 'budget_versions.id')
+        ->join('departments',       'budget_versions.department_id', '=', 'departments.id')
+        ->selectRaw('departments.name as dept_name, SUM(budget_actuals.amount) as total')
+        ->groupBy('departments.name')
+        ->pluck('total', 'dept_name');
+
+    $deptSummary = [];
+    foreach ($deptBudgets as $dName => $budget) {
+        $actual = (float) ($deptActualsRaw[$dName] ?? 0);
+        $deptSummary[$dName] = [
+            'budget'   => $budget,
+            'actual'   => $actual,
+            'variance' => $budget - $actual, // positive = underspend (good)
+        ];
+    }
+    uasort($deptSummary, fn($a, $b) => abs($b['variance']) <=> abs($a['variance']));
 
     $summary = [
         'total_budget' => $totalBudget,
         'total_actual' => $totalActual,
         'on_budget'    => $onBudget,
+        'overspend'    => $overspend,
+        'underspend'   => $underspend,
     ];
 
     return view('reports.variance', compact(
-        'period','periods','departments',
+        'period', 'periods', 'departments',
         'department',
-        'varianceData',  // ✅ Pass as varianceData
+        'varianceData',
         'summary',
-        'minVariancePct','varianceFilter'
+        'typeSummary', 'catSummary', 'deptSummary',
+        'minVariancePct', 'varianceFilter'
     ));
 }
 
@@ -546,13 +644,16 @@ public function deptComparison(Request $request)
 
         if (!$period) {
             return view('reports.financial', [
-                'period'       => null,
-                'periods'      => $periods,
-                'departments'  => $departments,
-                'deptId'       => null,
-                'pnl'          => null,
-                'cashflow'     => null,
-                'balanceSheet' => null,
+                'period'              => null,
+                'prevPeriod'          => null,
+                'periods'             => $periods,
+                'departments'         => $departments,
+                'deptId'              => null,
+                'pnl'                 => null,
+                'cashflow'            => null,
+                'balanceSheet'        => null,
+                'activeConfig'        => null,
+                'configuredStatement' => null,
             ]);
         }
 
@@ -567,15 +668,23 @@ public function deptComparison(Request $request)
             ?? BudgetPeriod::where('id', '<', $period->id)
                 ->orderByDesc('year')->orderByDesc('id')->first();
 
+        $activeConfig = IncomeStatementConfig::where('is_active', true)
+            ->with('lines.subCategory', 'lines.csBase')
+            ->first();
+
         return view('reports.financial', [
-            'period'       => $period,
-            'prevPeriod'   => $prevPeriod,
-            'periods'      => $periods,
-            'departments'  => $departments,
-            'deptId'       => $deptId,
-            'pnl'          => $this->buildPnlData($versions, $period, $deptId, $prevPeriod),
-            'cashflow'     => $this->buildCashFlowData($versions, $period, $deptId),
-            'balanceSheet' => $this->buildBalanceSheetData($versions, $period, $deptId, $prevPeriod),
+            'period'               => $period,
+            'prevPeriod'           => $prevPeriod,
+            'periods'              => $periods,
+            'departments'          => $departments,
+            'deptId'               => $deptId,
+            'pnl'                  => $this->buildPnlData($versions, $period, $deptId, $prevPeriod),
+            'cashflow'             => $this->buildCashFlowData($versions, $period, $deptId),
+            'balanceSheet'         => $this->buildBalanceSheetData($versions, $period, $deptId, $prevPeriod),
+            'activeConfig'         => $activeConfig,
+            'configuredStatement'  => $activeConfig
+                ? $this->buildConfiguredStatement($activeConfig, $versions, $period, $deptId, $prevPeriod)
+                : null,
         ]);
     }
 
@@ -960,6 +1069,7 @@ private function buildVarianceData($versions, float $minPct = 0, string $filter 
 
             $result[$cat][$code] = [
                 'name'          => $vals['name'],
+                'budget_type'   => $vals['budget_type'] ?? 'expense',
                 'original'      => $vals['original'],
                 'supplementary' => $vals['supplementary'],
                 'budget'        => $vals['total'], // effective
@@ -1213,8 +1323,28 @@ private function buildPnlData($versions, $period, ?int $deptId, ?BudgetPeriod $p
         }
     }
 
-    // Accumulate raw data keyed by type → category → code
-    $raw = ['revenue' => [], 'expense' => []];
+    // Pre-seed $raw with every active P&L code in scope so codes without
+    // budget line items still appear (with 0 budget / actual).
+    // When a dept is filtered, scope to codes assigned to that dept.
+    $activePnlCodes = \App\Models\AccountCode::with('category')
+        ->where('is_active', true)
+        ->whereHas('category', fn($q) => $q->whereIn('budget_type', ['revenue', 'expense', 'both']))
+        ->when($deptId, fn($q) => $q->whereHas('departments', fn($d) => $d->where('departments.id', $deptId)))
+        ->orderBy('code')
+        ->get();
+
+    $raw          = ['revenue' => [], 'expense' => []];
+    $catSubCatId  = []; // category name → account_sub_category_id
+    foreach ($activePnlCodes as $ac) {
+        $cat  = $ac->category;
+        $type = in_array($cat->budget_type, ['revenue', 'both']) ? 'revenue' : 'expense';
+        $raw[$type][$cat->name][$ac->code] = [
+            'code' => $ac->code, 'name' => $ac->name,
+            'q1' => 0, 'q2' => 0, 'q3' => 0, 'q4' => 0,
+            'budget' => 0, 'supp' => 0,
+        ];
+        $catSubCatId[$cat->name] = $cat->account_sub_category_id;
+    }
 
     foreach ($versions as $version) {
         foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
@@ -1307,7 +1437,7 @@ private function buildPnlData($versions, $period, ?int $deptId, ?BudgetPeriod $p
                 : null;
             $catT['common_size'] = 0; // second pass
 
-            $sections[$type][] = ['name' => $catName, 'codes' => $codeRows, 'total' => $catT];
+            $sections[$type][] = ['name' => $catName, 'sub_cat_id' => $catSubCatId[$catName] ?? null, 'codes' => $codeRows, 'total' => $catT];
 
             foreach (['effective','actual','prev_budget','prev_actual'] as $k) {
                 $grandTotals[$type][$k] += $catT[$k];
@@ -1361,6 +1491,225 @@ private function buildPnlData($versions, $period, ?int $deptId, ?BudgetPeriod $p
         'prev_net_actual' => $prevNetActual,
         'net_growth_pct'  => $prevNetActual != 0
             ? round((($netActual - $prevNetActual) / abs($prevNetActual)) * 100, 1) : null,
+    ];
+}
+
+// ── Configured P&L statement builder ──────────────────────────────────────
+private function buildConfiguredStatement(
+    IncomeStatementConfig $config,
+    $versions,
+    BudgetPeriod $period,
+    ?int $deptId,
+    ?BudgetPeriod $prevPeriod = null
+): array {
+    // Effective budget amounts by sub_category_id from approved versions
+    $budgetBySubCat = [];
+    foreach ($versions as $version) {
+        foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
+            $subCatId = $item->accountCode->category->account_sub_category_id ?? null;
+            if (!$subCatId) continue;
+            $eff = $item->total_amount + $item->approvedSupplementaryTotal();
+            $budgetBySubCat[$subCatId] = ($budgetBySubCat[$subCatId] ?? 0) + $eff;
+        }
+    }
+
+    // YTD confirmed actuals by sub_category_id
+    $actualsBySubCat = \App\Models\BudgetActual::where('budget_period_id', $period->id)
+        ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+        ->where('status', 'confirmed')
+        ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
+        ->join('account_categories', 'account_codes.account_category_id', '=', 'account_categories.id')
+        ->whereNotNull('account_categories.account_sub_category_id')
+        ->selectRaw('account_categories.account_sub_category_id as sc, SUM(budget_actuals.amount) as total')
+        ->groupBy('account_categories.account_sub_category_id')
+        ->pluck('total', 'sc')
+        ->toArray();
+
+    // Prev-period data
+    $prevBudgetBySubCat  = [];
+    $prevActualsBySubCat = [];
+    if ($prevPeriod) {
+        $prevVersions = BudgetVersion::where('budget_period_id', $prevPeriod->id)
+            ->where('status', 'approved')
+            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->get();
+
+        foreach ($prevVersions as $pv) {
+            foreach ($pv->lineItems()->with('accountCode.category')->get() as $item) {
+                $subCatId = $item->accountCode->category->account_sub_category_id ?? null;
+                if (!$subCatId) continue;
+                $eff = $item->total_amount + $item->approvedSupplementaryTotal();
+                $prevBudgetBySubCat[$subCatId] = ($prevBudgetBySubCat[$subCatId] ?? 0) + $eff;
+            }
+        }
+
+        $prevActualsBySubCat = \App\Models\BudgetActual::where('budget_period_id', $prevPeriod->id)
+            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->where('status', 'confirmed')
+            ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
+            ->join('account_categories', 'account_codes.account_category_id', '=', 'account_categories.id')
+            ->whereNotNull('account_categories.account_sub_category_id')
+            ->selectRaw('account_categories.account_sub_category_id as sc, SUM(budget_actuals.amount) as total')
+            ->groupBy('account_categories.account_sub_category_id')
+            ->pluck('total', 'sc')
+            ->toArray();
+    }
+
+    $cs = fn(float $val, float $base): ?float =>
+        $base != 0 ? round($val / $base * 100, 1) : null;
+
+    // Pre-pass: record the running total at each subtotal point so
+    // any line can reference a subtotal as its CS% base.
+    $subtotalRunBudgets     = [];
+    $subtotalRunPrevBudgets = [];
+    {
+        $tmpBud  = 0.0;
+        $tmpPrev = 0.0;
+        foreach ($config->lines as $ln) {
+            if ($ln->line_type === 'sub_category') {
+                $sign     = $ln->operator === 'subtract' ? -1 : 1;
+                $tmpBud  += $sign * (float)($budgetBySubCat[$ln->sub_category_id]     ?? 0);
+                $tmpPrev += $sign * (float)($prevBudgetBySubCat[$ln->sub_category_id] ?? 0);
+            } elseif ($ln->line_type === 'subtotal' && $ln->label) {
+                $subtotalRunBudgets[$ln->label]     = $tmpBud;
+                $subtotalRunPrevBudgets[$ln->label] = $tmpPrev;
+            }
+        }
+    }
+
+    // Per-line CS base lookup for JS inline expansion (sub_category lines only)
+    $csBases = []; // sub_cat_id → ['bud' => ..., 'prev' => ...]
+    $hasCs   = false;
+
+    // Walk config lines, accumulate running totals
+    $lines          = [];
+    $runBudget      = 0.0;
+    $runActual      = 0.0;
+    $runPrevBudget  = 0.0;
+    $runPrevActual  = 0.0;
+
+    foreach ($config->lines as $line) {
+        if ($line->line_type === 'sub_category') {
+            $scId      = $line->sub_category_id;
+            $budget    = (float) ($budgetBySubCat[$scId]      ?? 0);
+            $actual    = (float) ($actualsBySubCat[$scId]     ?? 0);
+            $prevBud   = (float) ($prevBudgetBySubCat[$scId]  ?? 0);
+            $prevAct   = (float) ($prevActualsBySubCat[$scId] ?? 0);
+            $sign      = $line->operator === 'subtract' ? -1 : 1;
+
+            $runBudget     += $sign * $budget;
+            $runActual     += $sign * $actual;
+            $runPrevBudget += $sign * $prevBud;
+            $runPrevActual += $sign * $prevAct;
+
+            // Revenue (add): over-achievement is favourable → actual − budget
+            // Expense (subtract): under-spend is favourable → budget − actual
+            $isExpense = $line->operator === 'subtract';
+            $variance  = $isExpense ? $budget - $actual : $actual - $budget;
+            $pct       = $budget != 0 ? round(($variance / abs($budget)) * 100, 1) : 0;
+            $prevVar   = $isExpense ? $prevBud - $prevAct : $prevAct - $prevBud;
+            $prevPct   = $prevBud != 0 ? round(($prevVar / abs($prevBud)) * 100, 1) : 0;
+            $growthPct = $prevAct != 0 ? round((($actual - $prevAct) / abs($prevAct)) * 100, 1) : null;
+
+            $displayLabel = $line->label
+                ?: (($line->operator === 'subtract' ? 'Less: ' : '') . ($line->subCategory?->name ?? ''));
+
+            // Per-line CS base (sub_category reference or subtotal label)
+            $csBaseId    = $line->cs_base_sub_category_id;
+            $csBaseLabel = $line->cs_base_subtotal_label;
+            if ($csBaseId) {
+                $csBaseBud = (float)($budgetBySubCat[$csBaseId]     ?? 0);
+                $csPrevBud = (float)($prevBudgetBySubCat[$csBaseId] ?? 0);
+            } elseif ($csBaseLabel) {
+                $csBaseBud = (float)($subtotalRunBudgets[$csBaseLabel]     ?? 0);
+                $csPrevBud = (float)($subtotalRunPrevBudgets[$csBaseLabel] ?? 0);
+            } else {
+                $csBaseBud = 0;
+                $csPrevBud = 0;
+            }
+
+            // Build lookup for JS inline expansion of category/code rows
+            if ($csBaseId || $csBaseLabel) {
+                $hasCs = true;
+                $csBases[$scId] = ['bud' => $csBaseBud, 'prev' => $csPrevBud];
+            }
+
+            $lines[] = [
+                'type'        => 'sub_category',
+                'label'       => $displayLabel,
+                'operator'    => $line->operator,
+                'sub_cat_id'  => $scId,
+                'budget'      => $budget,
+                'actual'      => $actual,
+                'prev_budget' => $prevBud,
+                'prev_actual' => $prevAct,
+                'variance'    => $variance,
+                'pct'         => $pct,
+                'prev_var'    => $prevVar,
+                'prev_pct'    => $prevPct,
+                'growth_pct'  => $growthPct,
+                'cs_bud'      => $cs($budget,  $csBaseBud),
+                'cs_prev_bud' => $cs($prevBud, $csPrevBud),
+            ];
+
+        } elseif ($line->line_type === 'subtotal') {
+            $variance  = $runActual - $runBudget;
+            $pct       = $runBudget != 0 ? round(($variance / abs($runBudget)) * 100, 1) : 0;
+            $prevVar   = $runPrevActual - $runPrevBudget;
+            $prevPct   = $runPrevBudget != 0 ? round(($prevVar / abs($runPrevBudget)) * 100, 1) : 0;
+            $growthPct = $runPrevActual != 0
+                ? round((($runActual - $runPrevActual) / abs($runPrevActual)) * 100, 1) : null;
+
+            $stCsBaseId    = $line->cs_base_sub_category_id;
+            $stCsBaseLabel = $line->cs_base_subtotal_label;
+            if ($stCsBaseId) {
+                $stCsBaseBud = (float)($budgetBySubCat[$stCsBaseId]     ?? 0);
+                $stCsPrevBud = (float)($prevBudgetBySubCat[$stCsBaseId] ?? 0);
+            } elseif ($stCsBaseLabel) {
+                $stCsBaseBud = (float)($subtotalRunBudgets[$stCsBaseLabel]     ?? 0);
+                $stCsPrevBud = (float)($subtotalRunPrevBudgets[$stCsBaseLabel] ?? 0);
+            } else {
+                $stCsBaseBud = 0;
+                $stCsPrevBud = 0;
+            }
+            if ($stCsBaseId || $stCsBaseLabel) {
+                $hasCs = true;
+            }
+
+            $lines[] = [
+                'type'        => 'subtotal',
+                'label'       => $line->label ?? 'Subtotal',
+                'budget'      => $runBudget,
+                'actual'      => $runActual,
+                'prev_budget' => $runPrevBudget,
+                'prev_actual' => $runPrevActual,
+                'variance'    => $variance,
+                'pct'         => $pct,
+                'prev_var'    => $prevVar,
+                'prev_pct'    => $prevPct,
+                'growth_pct'  => $growthPct,
+                'cs_bud'      => $cs($runBudget,     $stCsBaseBud),
+                'cs_prev_bud' => $cs($runPrevBudget, $stCsPrevBud),
+            ];
+
+        } else { // spacer
+            $lines[] = ['type' => 'spacer'];
+        }
+    }
+
+    $finalVar    = $runActual - $runBudget;
+    $finalPrevVar = $runPrevActual - $runPrevBudget;
+
+    return [
+        'lines'          => $lines,
+        'has_cs'         => $hasCs,
+        'cs_bases'       => $csBases,
+        'final_budget'   => $runBudget,
+        'final_actual'   => $runActual,
+        'final_prev_bud' => $runPrevBudget,
+        'final_prev_act' => $runPrevActual,
+        'final_cs_bud'   => null,
+        'final_cs_prev'  => null,
     ];
 }
 
@@ -1493,7 +1842,29 @@ private function buildBalanceSheetData($versions, $period, ?int $deptId, ?Budget
         }
     }
 
+    // Pre-seed with every active balance-sheet code in scope.
+    $activeBalanceCodes = \App\Models\AccountCode::with('category')
+        ->where('is_active', true)
+        ->whereHas('category', fn($q) => $q->whereIn('budget_type', ['assets', 'liabilities']))
+        ->when($deptId, fn($q) => $q->whereHas('departments', fn($d) => $d->where('departments.id', $deptId)))
+        ->orderBy('code')
+        ->get();
+
     $raw = ['assets' => [], 'liabilities' => []];
+    foreach ($activeBalanceCodes as $ac) {
+        $cat  = $ac->category;
+        $type = match($cat->budget_type) {
+            'assets'      => 'assets',
+            'liabilities' => 'liabilities',
+            default       => null,
+        };
+        if (!$type) continue;
+        $raw[$type][$cat->name][$ac->code] = [
+            'code' => $ac->code, 'name' => $ac->name,
+            'q1' => 0, 'q2' => 0, 'q3' => 0, 'q4' => 0,
+            'budget' => 0, 'supp' => 0,
+        ];
+    }
 
     foreach ($versions as $version) {
         foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
@@ -1563,7 +1934,7 @@ private function buildBalanceSheetData($versions, $period, ?int $deptId, ?Budget
                 ? round((($catT['actual'] - $catT['prev_actual']) / abs($catT['prev_actual'])) * 100, 1) : null;
             $catT['common_size'] = 0;
 
-            $sections[$type][] = ['name' => $catName, 'codes' => $codeRows, 'total' => $catT];
+            $sections[$type][] = ['name' => $catName, 'sub_cat_id' => $catSubCatId[$catName] ?? null, 'codes' => $codeRows, 'total' => $catT];
 
             foreach (['effective', 'actual', 'prev_budget', 'prev_actual'] as $k) {
                 $grandTotals[$type][$k] += $catT[$k];

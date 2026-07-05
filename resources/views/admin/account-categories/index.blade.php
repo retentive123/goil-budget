@@ -153,16 +153,43 @@ $usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
     @endif
 </div>
 
+{{-- Bulk-delete form (hidden, submitted by JS) --}}
+<form id="bulkDeleteForm" method="POST"
+      action="{{ route('admin.account-categories.bulk-destroy') }}">
+    @csrf @method('DELETE')
+    <input type="hidden" name="ids" id="bulkIds">
+</form>
+
 {{-- Table --}}
 <div class="chart-card p-0" style="overflow:hidden">
+
+    {{-- Bulk action bar (hidden until rows are checked) --}}
+    <div id="bulkBar" class="d-none d-flex align-items-center gap-3 px-4 py-2"
+         style="background:#FFF7ED;border-bottom:1px solid #FED7AA">
+        <span class="small fw-semibold" style="color:#C2410C" id="bulkCount"></span>
+        <button type="button" class="btn btn-sm btn-danger"
+                style="font-size:12px" onclick="confirmBulkDelete()">
+            <i class="fas fa-trash me-1"></i>Delete Selected
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                style="font-size:12px" onclick="clearSelection()">
+            Clear selection
+        </button>
+    </div>
+
     <div class="table-responsive">
         <table class="table table-sm table-hover mb-0" id="catTable">
             <thead style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;
                           color:var(--slate);background:#F8FAFC">
                 <tr>
-                    <th class="ps-4">Code</th>
+                    <th class="ps-3" style="width:36px">
+                        <input type="checkbox" id="selectAll" class="form-check-input"
+                               style="cursor:pointer" onchange="toggleAll(this)">
+                    </th>
+                    <th>Code</th>
                     <th>Name</th>
                     <th>Type</th>
+                    <th>Sub-Category</th>
                     <th>Description</th>
                     <th class="text-center">Codes</th>
                     <th>Status</th>
@@ -174,13 +201,20 @@ $usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
                 @php
                     $tc  = $typeConfig[$category->budget_type]
                            ?? ['label' => ucfirst($category->budget_type), 'bg' => '#F1F5F9', 'color' => '#475569'];
+                    $canDelete = $category->account_codes_count === 0;
                 @endphp
                 <tr class="cat-row"
                     data-code="{{ strtolower($category->code) }}"
                     data-name="{{ strtolower($category->name) }}"
                     data-desc="{{ strtolower($category->description ?? '') }}"
                     data-type="{{ $category->budget_type }}">
-                    <td class="ps-4">
+                    <td class="ps-3">
+                        <input type="checkbox" class="form-check-input row-cb"
+                               value="{{ $category->id }}"
+                               data-deletable="{{ $canDelete ? '1' : '0' }}"
+                               style="cursor:pointer" onchange="updateBulkBar()">
+                    </td>
+                    <td>
                         <code style="font-size:12px;color:var(--navy);font-weight:600">
                             {{ $category->code }}
                         </code>
@@ -193,7 +227,17 @@ $usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
                             {{ $tc['label'] }}
                         </span>
                     </td>
-                    <td class="small text-muted" style="max-width:240px">
+                    <td class="small">
+                        @if($category->subCategory)
+                        <span style="font-size:11px;padding:2px 8px;border-radius:20px;
+                                     background:#F0F9FF;color:#0369A1;font-weight:500">
+                            {{ $category->subCategory->name }}
+                        </span>
+                        @else
+                        <span class="text-muted">—</span>
+                        @endif
+                    </td>
+                    <td class="small text-muted" style="max-width:220px">
                         {{ $category->description ?? '—' }}
                     </td>
                     <td class="text-center">
@@ -212,13 +256,13 @@ $usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
                             <a href="{{ route('admin.account-categories.edit', $category) }}"
                                class="btn btn-sm btn-outline-primary"
                                style="font-size:11px;padding:2px 10px">Edit</a>
-                            @if($category->account_codes_count === 0)
-                            <form method="POST"
+                            @if($canDelete)
+                            <form id="del-cat-{{ $category->id }}" method="POST"
                                   action="{{ route('admin.account-categories.destroy', $category) }}">
                                 @csrf @method('DELETE')
-                                <button class="btn btn-sm btn-outline-danger"
+                                <button type="button" class="btn btn-sm btn-outline-danger"
                                         style="font-size:11px;padding:2px 10px"
-                                        onclick="return confirm('Delete this category?')">
+                                        onclick="deleteCat('del-cat-{{ $category->id }}', '{{ addslashes($category->name) }}')">
                                     Delete
                                 </button>
                             </form>
@@ -228,7 +272,7 @@ $usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
                 </tr>
                 @empty
                 <tr id="emptyRow">
-                    <td colspan="7" class="text-center text-muted py-4">
+                    <td colspan="9" class="text-center text-muted py-4">
                         No categories yet.
                         <a href="{{ route('admin.account-categories.create') }}">Add one</a>.
                     </td>
@@ -318,6 +362,7 @@ function applyFilters() {
     });
 
     renderPage();
+    updateBulkBar();
 }
 
 function renderPage() {
@@ -451,6 +496,103 @@ function dlBlob(content, filename, mime) {
 
 // Init count
 document.addEventListener('DOMContentLoaded', () => applyFilters());
+
+// ── Multi-select / bulk delete ────────────────────────────────────────────
+function visibleCheckboxes() {
+    return [...document.querySelectorAll('.cat-row')]
+        .filter(r => r.style.display !== 'none')
+        .map(r => r.querySelector('.row-cb'));
+}
+
+function toggleAll(master) {
+    visibleCheckboxes().forEach(cb => cb.checked = master.checked);
+    updateBulkBar();
+}
+
+function updateBulkBar() {
+    const checked = [...document.querySelectorAll('.row-cb:checked')];
+    const bar     = document.getElementById('bulkBar');
+    const countEl = document.getElementById('bulkCount');
+    const master  = document.getElementById('selectAll');
+
+    if (checked.length === 0) {
+        bar.classList.add('d-none');
+        master.indeterminate = false;
+        master.checked = false;
+    } else {
+        bar.classList.remove('d-none');
+        const deletable = checked.filter(cb => cb.dataset.deletable === '1').length;
+        countEl.textContent = `${checked.length} selected`
+            + (deletable < checked.length
+               ? ` (${checked.length - deletable} have codes — will be skipped)` : '');
+        const all = visibleCheckboxes();
+        master.checked       = checked.length === all.length;
+        master.indeterminate = checked.length > 0 && checked.length < all.length;
+    }
+}
+
+function clearSelection() {
+    document.querySelectorAll('.row-cb').forEach(cb => cb.checked = false);
+    document.getElementById('selectAll').checked       = false;
+    document.getElementById('selectAll').indeterminate = false;
+    updateBulkBar();
+}
+
+function deleteCat(formId, name) {
+    Swal.fire({
+        title: 'Delete category?',
+        html: `<strong>${name}</strong> will be permanently deleted.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#DC2626',
+        cancelButtonColor: '#6B7280',
+        confirmButtonText: 'Yes, delete',
+        cancelButtonText: 'Cancel',
+        reverseButtons: true,
+    }).then(result => {
+        if (result.isConfirmed) document.getElementById(formId).submit();
+    });
+}
+
+function confirmBulkDelete() {
+    const checked   = [...document.querySelectorAll('.row-cb:checked')];
+    const ids       = checked.map(cb => cb.value).join(',');
+    const deletable = checked.filter(cb => cb.dataset.deletable === '1').length;
+
+    if (deletable === 0) {
+        Swal.fire({
+            title: 'Cannot delete',
+            text: 'None of the selected categories can be deleted — all have codes assigned.',
+            icon: 'info',
+            confirmButtonColor: '#6B7280',
+        });
+        return;
+    }
+
+    const skipped = checked.length - deletable;
+    const text = skipped > 0
+        ? `${deletable} of ${checked.length} selected will be deleted. ${skipped} will be skipped (have codes assigned).`
+        : `${deletable} selected ${deletable === 1 ? 'category' : 'categories'} will be permanently deleted.`;
+
+    Swal.fire({
+        title: 'Delete selected?',
+        text,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#DC2626',
+        cancelButtonColor: '#6B7280',
+        confirmButtonText: 'Yes, delete',
+        cancelButtonText: 'Cancel',
+        reverseButtons: true,
+    }).then(result => {
+        if (result.isConfirmed) {
+            document.getElementById('bulkIds').value = ids;
+            document.getElementById('bulkDeleteForm').submit();
+        }
+    });
+}
+
+
 </script>
 
 @endsection

@@ -67,11 +67,11 @@
         </div>
     </div>
 
-    {{-- Category pie --}}
+    {{-- Budget type pie --}}
     <div class="col-md-4">
         <div class="chart-card h-100">
-            <div class="chart-title">Budget by Category</div>
-            <canvas id="categoryPie" height="220"></canvas>
+            <div class="chart-title">Budget by Type</div>
+            <canvas id="budgetTypePie" height="220"></canvas>
         </div>
     </div>
 </div>
@@ -80,6 +80,63 @@
 <div class="chart-card mb-4">
     <div class="chart-title">Department Budget Rankings ({{ currency() }})</div>
     <canvas id="deptRankBar" height="120"></canvas>
+</div>
+
+{{-- Budget type breakdown table --}}
+@php
+$typeColors = [
+    'Revenue'              => '#10B981',
+    'Expense'              => '#F43F5E',
+    'Revenue & Expense'    => '#14B8A6',
+    'Capital Expenditure'  => '#3B82F6',
+    'Assets'               => '#8B5CF6',
+    'Liabilities'          => '#F59E0B',
+];
+@endphp
+<div class="chart-card mb-4">
+    <div class="chart-title">Budget by Type Breakdown</div>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+            <thead style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--slate)">
+                <tr>
+                    <th>Budget Type</th>
+                    <th class="text-end">Total ({{ currency() }})</th>
+                    <th>Share of Grand Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($budgetTypeTotals as $type => $total)
+                @php
+                    $share = $grandTotal > 0 ? round(($total / $grandTotal) * 100, 1) : 0;
+                    $color = $typeColors[$type] ?? '#64748B';
+                @endphp
+                <tr>
+                    <td>
+                        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                                     background:{{ $color }};margin-right:6px"></span>
+                        <span class="fw-semibold small">{{ $type }}</span>
+                    </td>
+                    <td class="text-end small fw-semibold">{{ number_format($total, 0) }}</td>
+                    <td style="min-width:160px">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress flex-grow-1" style="height:6px">
+                                <div class="progress-bar" style="width:{{ $share }}%;background:{{ $color }}"></div>
+                            </div>
+                            <span style="font-size:11px;color:var(--slate);min-width:36px">{{ $share }}%</span>
+                        </div>
+                    </td>
+                </tr>
+                @endforeach
+            </tbody>
+            <tfoot style="background:#F8FAFC;font-weight:700;font-size:13px">
+                <tr>
+                    <td>Grand Total</td>
+                    <td class="text-end">{{ currency() }} {{ number_format($grandTotal, 0) }}</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
 </div>
 
 {{-- Department table --}}
@@ -219,21 +276,42 @@ new Chart(document.getElementById('quarterBar'), {
     }
 });
 
-// Category pie
-new Chart(document.getElementById('categoryPie'), {
+// Budget type pie — semantic colours per type
+const TYPE_COLORS = {
+    'Revenue':             '#10B981',
+    'Expense':             '#F43F5E',
+    'Revenue & Expense':   '#14B8A6',
+    'Capital Expenditure': '#3B82F6',
+    'Assets':              '#8B5CF6',
+    'Liabilities':         '#F59E0B',
+};
+const typeLabels = {!! json_encode(array_keys($budgetTypeTotals)) !!};
+const typeData   = {!! json_encode(array_values($budgetTypeTotals)) !!};
+const typeBgColors = typeLabels.map(l => TYPE_COLORS[l] || '#64748B');
+
+new Chart(document.getElementById('budgetTypePie'), {
     type: 'pie',
     data: {
-        labels: {!! json_encode(array_keys($categoryTotals)) !!},
+        labels: typeLabels,
         datasets: [{
-            data: {!! json_encode(array_values($categoryTotals)) !!},
-            backgroundColor: COLORS,
+            data: typeData,
+            backgroundColor: typeBgColors,
             borderWidth: 2,
             borderColor: '#fff',
         }]
     },
     options: {
         plugins: {
-            legend:{ position:'bottom', labels:{ font:{size:10}, padding:8, boxWidth:10 } }
+            legend:{ position:'bottom', labels:{ font:{size:10}, padding:8, boxWidth:10 } },
+            tooltip: {
+                callbacks: {
+                    label: ctx => {
+                        const total = ctx.dataset.data.reduce((a,b) => a+b, 0);
+                        const pct   = total > 0 ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
+                        return ` ${ctx.label}: {{ currency() }} ${ctx.parsed.toLocaleString()} (${pct}%)`;
+                    }
+                }
+            }
         }
     }
 });

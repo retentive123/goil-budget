@@ -121,12 +121,41 @@
     </div>
 </form>
 
+{{-- Shared delete forms (submitted by SweetAlert callbacks) --}}
+<form id="codesBulkForm" method="POST"
+      action="{{ route('admin.account-codes.bulk-destroy') }}">
+    @csrf @method('DELETE')
+    <input type="hidden" name="ids" id="codesBulkIds">
+</form>
+<form id="codeSingleDeleteForm" method="POST" action="">
+    @csrf @method('DELETE')
+</form>
+
 <div class="card shadow-sm">
     <div class="card-body p-0">
+
+        {{-- Bulk action bar --}}
+        <div id="codesBulkBar" class="d-none d-flex align-items-center gap-3 px-4 py-2"
+             style="background:#FFF7ED;border-bottom:1px solid #FED7AA">
+            <span class="small fw-semibold" style="color:#C2410C" id="codesBulkCount"></span>
+            <button type="button" class="btn btn-sm btn-danger"
+                    style="font-size:12px" onclick="codesConfirmBulk()">
+                <i class="bi bi-trash me-1"></i>Delete Selected
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    style="font-size:12px" onclick="codesClearSel()">
+                Clear selection
+            </button>
+        </div>
+
         <div class="table-responsive">
             <table class="table table-hover mb-0">
                 <thead class="table-light">
                     <tr>
+                        <th style="width:36px" class="ps-3">
+                            <input type="checkbox" id="codesSelectAll" class="form-check-input"
+                                   style="cursor:pointer" onchange="codesToggleAll(this)">
+                        </th>
                         <th style="width:40px">#</th>
                         <th style="width:120px">Code</th>
                         <th>Name</th>
@@ -137,7 +166,14 @@
                 </thead>
                 <tbody>
                     @forelse($codes as $code)
+                    @php $canDel = $code->lineItems()->count() == 0; @endphp
                     <tr>
+                        <td class="ps-3">
+                            <input type="checkbox" class="form-check-input codes-cb"
+                                   value="{{ $code->id }}"
+                                   data-deletable="{{ $canDel ? '1' : '0' }}"
+                                   style="cursor:pointer" onchange="codesUpdateBar()">
+                        </td>
                         <td class="text-muted small">
                             {{ $codes->firstItem() + $loop->index }}
                         </td>
@@ -166,8 +202,6 @@
                         </td>
                         <td>
                             <div class="btn-group btn-group-sm">
-
-
                                 <a href="{{ route('admin.account-codes.edit', $code) }}"
                                    class="btn btn-outline-primary" title="Edit">
                                     <i class="bi bi-pencil"></i>
@@ -176,10 +210,9 @@
                                    class="btn btn-outline-info" title="View">
                                     <i class="bi bi-eye"></i>
                                 </a>
-                                @if($code->lineItems()->count() == 0)
+                                @if($canDel)
                                 <button type="button" class="btn btn-outline-danger"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#deleteModal{{ $code->id }}"
+                                        onclick="deleteCode('{{ route('admin.account-codes.destroy', $code) }}', '{{ $code->code }}')"
                                         title="Delete">
                                     <i class="bi bi-trash"></i>
                                 </button>
@@ -190,37 +223,11 @@
                                 </button>
                                 @endif
                             </div>
-
-                            {{-- Delete Modal --}}
-                            @if($code->lineItems()->count() == 0)
-                            <div class="modal fade" id="deleteModal{{ $code->id }}" tabindex="-1">
-                                <div class="modal-dialog modal-dialog-centered">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h6 class="modal-title">Delete Account Code</h6>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                        </div>
-                                        <div class="modal-body">
-                                            <p>Are you sure you want to delete <strong>{{ $code->code }}</strong>?</p>
-                                            <p class="text-muted small">This action cannot be undone.</p>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                            <form action="{{ route('admin.account-codes.destroy', $code) }}" method="POST">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-                                            </form>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            @endif
                         </td>
                     </tr>
                     @empty
                     <tr>
-                        <td colspan="6" class="text-center text-muted py-5">
+                        <td colspan="7" class="text-center text-muted py-5">
                             <div style="font-size:48px;margin-bottom:12px">📋</div>
                             <div style="font-size:16px;font-weight:600;color:#1B2A4A;margin-bottom:8px">
                                 No account codes found
@@ -238,9 +245,9 @@
                     @endforelse
                 </tbody>
             </table>
-        </div>
-    </div>
-</div>
+        </div>{{-- /.table-responsive --}}
+    </div>{{-- /.card-body --}}
+</div>{{-- /.card --}}
 
 {{-- Pagination --}}
 @if($codes->hasPages())
@@ -267,27 +274,110 @@
 
 @push('scripts')
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Auto-submit form when filter changes
-        const filterSelects = document.querySelectorAll('.filter-select');
-        const filterForm = document.getElementById('filterForm');
-
-        filterSelects.forEach(select => {
-            select.addEventListener('change', function() {
-                filterForm.submit();
-            });
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-submit form when filter changes
+    document.querySelectorAll('.filter-select').forEach(sel => {
+        sel.addEventListener('change', () => document.getElementById('filterForm').submit());
+    });
+    const searchInput = document.querySelector('input[name="search"]');
+    if (searchInput) {
+        searchInput.addEventListener('keyup', e => {
+            if (e.key === 'Enter') document.getElementById('filterForm').submit();
         });
+    }
+});
 
-        // Optional: Debounce search input
-        const searchInput = document.querySelector('input[name="search"]');
-        if (searchInput) {
-            let timeout = null;
-            searchInput.addEventListener('keyup', function(e) {
-                if (e.key === 'Enter') {
-                    filterForm.submit();
-                }
-            });
+// ── Multi-select / bulk delete ────────────────────────────────────────────
+function codesToggleAll(master) {
+    document.querySelectorAll('.codes-cb').forEach(cb => cb.checked = master.checked);
+    codesUpdateBar();
+}
+
+function codesUpdateBar() {
+    const checked   = [...document.querySelectorAll('.codes-cb:checked')];
+    const all       = [...document.querySelectorAll('.codes-cb')];
+    const bar       = document.getElementById('codesBulkBar');
+    const countEl   = document.getElementById('codesBulkCount');
+    const master    = document.getElementById('codesSelectAll');
+
+    if (checked.length === 0) {
+        bar.classList.add('d-none');
+        master.indeterminate = false;
+        master.checked = false;
+    } else {
+        bar.classList.remove('d-none');
+        const deletable = checked.filter(cb => cb.dataset.deletable === '1').length;
+        countEl.textContent = `${checked.length} selected`
+            + (deletable < checked.length
+               ? ` (${checked.length - deletable} in use — will be skipped)` : '');
+        master.checked       = checked.length === all.length;
+        master.indeterminate = checked.length > 0 && checked.length < all.length;
+    }
+}
+
+function codesClearSel() {
+    document.querySelectorAll('.codes-cb').forEach(cb => cb.checked = false);
+    const master = document.getElementById('codesSelectAll');
+    master.checked = false;
+    master.indeterminate = false;
+    codesUpdateBar();
+}
+
+function deleteCode(action, code) {
+    Swal.fire({
+        title: 'Delete account code?',
+        html: `<strong>${code}</strong> will be permanently deleted.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#DC2626',
+        cancelButtonColor: '#6B7280',
+        confirmButtonText: 'Yes, delete',
+        cancelButtonText: 'Cancel',
+        reverseButtons: true,
+    }).then(result => {
+        if (result.isConfirmed) {
+            const form = document.getElementById('codeSingleDeleteForm');
+            form.action = action;
+            form.submit();
         }
     });
+}
+
+function codesConfirmBulk() {
+    const checked   = [...document.querySelectorAll('.codes-cb:checked')];
+    const deletable = checked.filter(cb => cb.dataset.deletable === '1').length;
+
+    if (deletable === 0) {
+        Swal.fire({
+            title: 'Cannot delete',
+            text: 'None of the selected codes can be deleted — all are used in budget entries.',
+            icon: 'info',
+            confirmButtonColor: '#6B7280',
+        });
+        return;
+    }
+
+    const skipped = checked.length - deletable;
+    const text = skipped > 0
+        ? `${deletable} of ${checked.length} selected codes will be deleted. ${skipped} will be skipped (used in budget entries).`
+        : `${deletable} selected ${deletable === 1 ? 'code' : 'codes'} will be permanently deleted.`;
+
+    Swal.fire({
+        title: 'Delete selected?',
+        text,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#DC2626',
+        cancelButtonColor: '#6B7280',
+        confirmButtonText: 'Yes, delete',
+        cancelButtonText: 'Cancel',
+        reverseButtons: true,
+    }).then(result => {
+        if (result.isConfirmed) {
+            document.getElementById('codesBulkIds').value = checked.map(cb => cb.value).join(',');
+            document.getElementById('codesBulkForm').submit();
+        }
+    });
+}
 </script>
 @endpush

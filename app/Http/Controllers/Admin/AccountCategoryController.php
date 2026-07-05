@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AccountCategory;
+use App\Models\AccountSubCategory;
 use Illuminate\Http\Request;
 
 class AccountCategoryController extends Controller
@@ -11,6 +12,7 @@ class AccountCategoryController extends Controller
     public function index()
     {
         $categories = AccountCategory::withCount('accountCodes')
+                                     ->with('subCategory')
                                      ->orderBy('code')
                                      ->get();
 
@@ -19,16 +21,21 @@ class AccountCategoryController extends Controller
 
     public function create()
     {
-        return view('admin.account-categories.create');
+        $subCategories = AccountSubCategory::where('is_active', true)
+            ->orderBy('budget_type')->orderBy('sort_order')->orderBy('name')
+            ->get()->groupBy('budget_type');
+
+        return view('admin.account-categories.create', compact('subCategories'));
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name'        => ['required', 'string', 'max:255', 'unique:account_categories,name'],
-            'code'        => ['required', 'string', 'max:20',  'unique:account_categories,code'],
-            'description' => ['nullable', 'string'],
-            'budget_type' => ['required','in:revenue,expense,both,capital_expenditure,assets,liabilities'],
+            'name'                    => ['required', 'string', 'max:255', 'unique:account_categories,name'],
+            'code'                    => ['required', 'string', 'max:20',  'unique:account_categories,code'],
+            'description'             => ['nullable', 'string'],
+            'budget_type'             => ['required','in:revenue,expense,both,capital_expenditure,assets,liabilities'],
+            'account_sub_category_id' => ['nullable', 'exists:account_sub_categories,id'],
         ]);
 
         AccountCategory::create([...$validated, 'is_active' => true]);
@@ -47,19 +54,24 @@ class AccountCategoryController extends Controller
 
     public function edit(AccountCategory $accountCategory)
     {
-        return view('admin.account-categories.edit', compact('accountCategory'));
+        $subCategories = AccountSubCategory::where('is_active', true)
+            ->orderBy('budget_type')->orderBy('sort_order')->orderBy('name')
+            ->get()->groupBy('budget_type');
+
+        return view('admin.account-categories.edit', compact('accountCategory', 'subCategories'));
     }
 
     public function update(Request $request, AccountCategory $accountCategory)
     {
         $validated = $request->validate([
-            'name'        => ['required', 'string', 'max:255',
-                              'unique:account_categories,name,' . $accountCategory->id],
-            'code'        => ['required', 'string', 'max:20',
-                              'unique:account_categories,code,' . $accountCategory->id],
-            'description' => ['nullable', 'string'],
-            'is_active'   => ['boolean'],
-            'budget_type' => ['required','in:revenue,expense,both,capital_expenditure,assets,liabilities'],
+            'name'                    => ['required', 'string', 'max:255',
+                                          'unique:account_categories,name,' . $accountCategory->id],
+            'code'                    => ['required', 'string', 'max:20',
+                                          'unique:account_categories,code,' . $accountCategory->id],
+            'description'             => ['nullable', 'string'],
+            'is_active'               => ['boolean'],
+            'budget_type'             => ['required','in:revenue,expense,both,capital_expenditure,assets,liabilities'],
+            'account_sub_category_id' => ['nullable', 'exists:account_sub_categories,id'],
         ]);
 
         $accountCategory->update($validated);
@@ -81,5 +93,34 @@ class AccountCategoryController extends Controller
 
         return redirect()->route('admin.account-categories.index')
             ->with('success', 'Account category deleted.');
+    }
+
+    public function bulkDestroy(Request $request)
+    {
+        $ids = array_filter(explode(',', $request->input('ids', '')));
+
+        if (empty($ids)) {
+            return back()->with('error', 'No categories selected.');
+        }
+
+        $deleted  = 0;
+        $skipped  = 0;
+
+        foreach (AccountCategory::whereIn('id', $ids)->get() as $cat) {
+            if ($cat->accountCodes()->count() > 0) {
+                $skipped++;
+            } else {
+                $cat->delete();
+                $deleted++;
+            }
+        }
+
+        $msg = "{$deleted} " . str('category')->plural($deleted) . " deleted.";
+        if ($skipped) {
+            $msg .= " {$skipped} skipped (have codes assigned).";
+        }
+
+        return redirect()->route('admin.account-categories.index')
+            ->with($skipped && !$deleted ? 'error' : 'success', $msg);
     }
 }

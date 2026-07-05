@@ -99,30 +99,28 @@
                         <h6 class="fw-semibold mb-3" style="color: #1B2A4A; font-size: 13px;">
                             <i class="fas fa-wallet" style="color: #E65C00;"></i> Budget Type
                         </h6>
-                        <select name="budget_type"
+                        @php $bt = old('budget_type', $accountCategory->budget_type ?? 'expense'); @endphp
+                        <select name="budget_type" id="editBudgetType"
                                 class="form-select @error('budget_type') is-invalid @enderror"
-                                style="border-radius: 10px; border-color: #E2E8F0; padding: 10px 14px;">
-                            @php $bt = old('budget_type', $accountCategory->budget_type ?? 'expense'); @endphp
+                                style="border-radius: 10px; border-color: #E2E8F0; padding: 10px 14px;"
+                                onchange="editUpdateSubCats()">
                             <optgroup label="Income Statement">
                                 <option value="revenue" {{ $bt === 'revenue' ? 'selected' : '' }}>
-                                    📈 Revenue — income and receipts
+                                    Revenue — income and receipts
                                 </option>
                                 <option value="expense" {{ $bt === 'expense' ? 'selected' : '' }}>
-                                    📉 Expense — costs and expenditures
-                                </option>
-                                <option value="both" {{ $bt === 'both' ? 'selected' : '' }}>
-                                    📊 Both — mixed revenue and expense
+                                    Expense — costs and expenditures
                                 </option>
                             </optgroup>
                             <optgroup label="Balance Sheet &amp; CapEx">
                                 <option value="assets" {{ $bt === 'assets' ? 'selected' : '' }}>
-                                    🏦 Assets — resources owned or controlled
+                                    Assets — resources owned or controlled
                                 </option>
                                 <option value="liabilities" {{ $bt === 'liabilities' ? 'selected' : '' }}>
-                                    📋 Liabilities — obligations and payables
+                                    Liabilities — obligations and payables
                                 </option>
                                 <option value="capital_expenditure" {{ $bt === 'capital_expenditure' ? 'selected' : '' }}>
-                                    🏗️ Capital Expenditure — long-term investment
+                                    Capital Expenditure — long-term investment
                                 </option>
                             </optgroup>
                         </select>
@@ -130,6 +128,23 @@
                             <i class="fas fa-info-circle"></i> Determines how line items in this category are treated.
                         </div>
                         @error('budget_type')
+                            <div class="invalid-feedback d-block mt-1">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    {{-- Sub-Category --}}
+                    <div class="mb-4" id="editSubCatWrap">
+                        <h6 class="fw-semibold mb-3" style="color: #1B2A4A; font-size: 13px;">
+                            <i class="fas fa-layer-group" style="color: #E65C00;"></i> Sub-Category
+                            <span class="text-muted fw-normal" style="font-size: 11px;">(optional)</span>
+                        </h6>
+                        <select name="account_sub_category_id" id="editSubCatSelect"
+                                class="form-select @error('account_sub_category_id') is-invalid @enderror"
+                                style="border-radius: 10px; border-color: #E2E8F0; padding: 10px 14px;">
+                            <option value="">— None —</option>
+                        </select>
+                        <div id="editSubCatHint" style="font-size: 12px; color: #64748B; margin-top: 4px;"></div>
+                        @error('account_sub_category_id')
                             <div class="invalid-feedback d-block mt-1">{{ $message }}</div>
                         @enderror
                     </div>
@@ -232,6 +247,29 @@
 </div>
 
 <script>
+const EDIT_SUB_CATS    = @json($subCategories->map(fn($group) => $group->map(fn($s) => ['id' => $s->id, 'name' => $s->name])));
+const EDIT_CURRENT_SUB = {{ old('account_sub_category_id', $accountCategory->account_sub_category_id ?? 'null') }};
+
+function editUpdateSubCats() {
+    const type   = document.getElementById('editBudgetType').value;
+    const select = document.getElementById('editSubCatSelect');
+    const hint   = document.getElementById('editSubCatHint');
+    const subs   = EDIT_SUB_CATS[type] ?? [];
+
+    select.innerHTML = '<option value="">— None —</option>';
+    subs.forEach(s => {
+        const opt = new Option(s.name, s.id, false, s.id == EDIT_CURRENT_SUB);
+        select.appendChild(opt);
+    });
+
+    hint.textContent = subs.length === 0 && type
+        ? 'No sub-categories defined for this type yet.'
+        : '';
+    document.getElementById('editSubCatWrap').style.opacity = (subs.length === 0) ? '.5' : '1';
+}
+
+document.addEventListener('DOMContentLoaded', editUpdateSubCats);
+
 function updateStatusLabel(checkbox) {
     const label = document.getElementById('statusLabel');
     if (checkbox.checked) {

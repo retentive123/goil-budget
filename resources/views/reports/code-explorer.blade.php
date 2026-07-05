@@ -14,7 +14,26 @@
 <form method="GET" class="chart-card mb-4">
     <div class="row g-3 align-items-end">
 
-        <div class="col-md-3">
+        {{-- Budget Type filter --}}
+        <div class="col-12 col-md-2">
+            <label class="form-label small fw-semibold mb-1">Budget Type</label>
+            <select name="budget_type" class="form-select form-select-sm"
+                    onchange="
+                        this.form.querySelector('[name=category_id]').value='';
+                        this.form.querySelector('[name=account_code_id]').value='';
+                        this.form.submit()
+                    ">
+                <option value="">— All Types —</option>
+                @foreach($budgetTypeLabels as $key => $label)
+                <option value="{{ $key }}"
+                    {{ $selectedBudgetType === $key ? 'selected' : '' }}>
+                    {{ $label }}
+                </option>
+                @endforeach
+            </select>
+        </div>
+
+        <div class="col-12 col-md-3">
             <label class="form-label small fw-semibold mb-1">View by Category</label>
             <select name="category_id" class="form-select form-select-sm"
                     onchange="
@@ -31,11 +50,11 @@
             </select>
         </div>
 
-        <div class="col-md-1 text-center" style="padding-bottom:6px">
+        <div class="col-auto d-none d-md-flex align-items-end pb-1">
             <span style="font-size:12px;color:var(--slate);font-weight:600">OR</span>
         </div>
 
-        <div class="col-md-3">
+        <div class="col-12 col-md-3">
             <label class="form-label small fw-semibold mb-1">View Specific Code</label>
             <select name="account_code_id" class="form-select form-select-sm"
                     onchange="
@@ -56,7 +75,7 @@
             </select>
         </div>
 
-        <div class="col-md-2">
+        <div class="col-12 col-md-2">
             <label class="form-label small fw-semibold mb-1">Period</label>
             <select name="period_id" class="form-select form-select-sm"
                     onchange="this.form.submit()">
@@ -71,7 +90,7 @@
         </div>
 
         @if($canViewAll)
-        <div class="col-md-2">
+        <div class="col-12 col-md-2">
             <label class="form-label small fw-semibold mb-1">Department</label>
             <select name="department_id" class="form-select form-select-sm"
                     onchange="this.form.submit()">
@@ -97,16 +116,14 @@
         Select a Category or Account Code
     </div>
     <div style="font-size:13px;color:var(--slate)">
-        Choose a <strong>category</strong> to see all codes under it,
-        or pick a <strong>specific code</strong> to drill in further.
-        Both views show budget vs actual with quarterly breakdowns.
+        Choose a <strong>category</strong> to see a combined summary of all codes under it,
+        or pick a <strong>specific code</strong> to drill in with quarterly detail.
     </div>
 </div>
 @endif
 
 @if(count($reportData))
 <div class="d-flex justify-content-end mb-3">
-    {{-- Use the full route name with proper prefix --}}
     <a href="{{ route('reports.code-explorer.export', request()->query()) }}"
        class="btn btn-sm btn-outline-success">
         ↓ Export to Excel
@@ -115,11 +132,17 @@
 @endif
 
 {{-- ══════════════════════════════════════════════════════
-     REPORT OUTPUT — same layout whether category or code
+     REPORT OUTPUT
      ══════════════════════════════════════════════════════ --}}
 @if(count($reportData))
 
 {{-- Header --}}
+@php
+    $grandBudget = collect($reportData)->sum('budget_total');
+    $grandActual = collect($reportData)->sum('actual_total');
+    $grandVar    = $grandActual - $grandBudget;
+    $grandUtil   = $grandBudget > 0 ? round(($grandActual / $grandBudget) * 100, 1) : 0;
+@endphp
 <div class="chart-card mb-4">
     <div class="d-flex align-items-start gap-3">
         <div style="background:var(--navy);color:var(--gold);border-radius:10px;
@@ -143,14 +166,6 @@
                 @endif
             </div>
         </div>
-        {{-- Grand totals --}}
-        @php
-            $grandBudget = collect($reportData)->sum('budget_total');
-            $grandActual = collect($reportData)->sum('actual_total');
-            $grandVar    = $grandActual - $grandBudget;
-            $grandUtil   = $grandBudget > 0
-                ? round(($grandActual / $grandBudget) * 100, 1) : 0;
-        @endphp
         <div class="text-end">
             <div style="font-size:11px;color:var(--slate)">Total Budget</div>
             <div style="font-size:20px;font-weight:700;color:var(--navy)">
@@ -167,25 +182,108 @@
     </div>
 </div>
 
-{{-- Summary charts (only when multiple codes / category view) --}}
-@if(count($reportData) > 1)
+@if($selectedCategory)
+{{-- ══════════════════════════════════════════════════════
+     COMBINED CATEGORY VIEW
+     ══════════════════════════════════════════════════════ --}}
+
+{{-- Summary charts --}}
 <div class="row g-3 mb-4">
     <div class="col-md-8">
         <div class="chart-card h-100">
             <div class="chart-title">Budget vs Actual by Code</div>
-            <canvas id="summaryGrouped" height="180"></canvas>
+            <canvas id="summaryGrouped" height="200"></canvas>
         </div>
     </div>
     <div class="col-md-4">
         <div class="chart-card h-100">
             <div class="chart-title">Overall Utilisation</div>
-            <canvas id="summaryDonut" height="180"></canvas>
+            <canvas id="summaryDonut" height="200"></canvas>
         </div>
     </div>
 </div>
-@endif
 
-{{-- ── Per-code panels ── --}}
+{{-- Combined summary table --}}
+<div class="chart-card">
+    <div class="chart-title">Code Summary — {{ $selectedCategory->name }}</div>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0" style="font-size:12px">
+            <thead style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--slate)">
+                <tr>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th class="text-end">Budget ({{ currency() }})</th>
+                    <th class="text-end">Actual ({{ currency() }})</th>
+                    <th class="text-end">Variance</th>
+                    <th style="min-width:120px">Utilisation</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($reportData as $row)
+                @php
+                    $varColor = $row['variance'] > 0 ? '#F43F5E'
+                        : ($row['variance'] < 0 ? '#10B981' : 'inherit');
+                    $utilColor = $row['utilisation'] > 90 ? '#F43F5E'
+                        : ($row['utilisation'] > 70 ? '#F59E0B' : '#10B981');
+                @endphp
+                <tr>
+                    <td>
+                        <span style="background:var(--surface);border:1px solid var(--border);
+                                     border-radius:4px;padding:2px 8px;font-family:monospace;
+                                     font-weight:700;font-size:11px;color:var(--navy)">
+                            {{ $row['code'] }}
+                        </span>
+                    </td>
+                    <td class="fw-semibold small">{{ $row['name'] }}</td>
+                    <td class="text-end small">{{ number_format($row['budget_total'], 0) }}</td>
+                    <td class="text-end small fw-semibold" style="color:#10B981">
+                        {{ number_format($row['actual_total'], 0) }}
+                    </td>
+                    <td class="text-end small fw-semibold" style="color:{{ $varColor }}">
+                        {{ $row['variance'] >= 0 ? '+' : '' }}{{ number_format($row['variance'], 0) }}
+                    </td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress flex-grow-1" style="height:5px">
+                                <div class="progress-bar"
+                                     style="width:{{ min($row['utilisation'],100) }}%;
+                                            background:{{ $utilColor }}">
+                                </div>
+                            </div>
+                            <span style="font-size:11px;color:{{ $utilColor }};min-width:36px;font-weight:600">
+                                {{ $row['utilisation'] }}%
+                            </span>
+                        </div>
+                    </td>
+                </tr>
+                @endforeach
+            </tbody>
+            <tfoot style="background:#F8FAFC;font-weight:700;font-size:12px">
+                <tr>
+                    <td colspan="2">Total ({{ count($reportData) }} codes)</td>
+                    <td class="text-end">{{ currency() }} {{ number_format($grandBudget, 0) }}</td>
+                    <td class="text-end" style="color:#10B981">
+                        {{ currency() }} {{ number_format($grandActual, 0) }}
+                    </td>
+                    <td class="text-end"
+                        style="color:{{ $grandVar > 0 ? '#F43F5E' : '#10B981' }}">
+                        {{ $grandVar >= 0 ? '+' : '' }}{{ currency() }} {{ number_format($grandVar, 0) }}
+                    </td>
+                    <td>
+                        <span style="color:{{ $grandUtil > 90 ? '#F43F5E' : ($grandUtil > 70 ? '#F59E0B' : '#10B981') }}">
+                            {{ $grandUtil }}%
+                        </span>
+                    </td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+@else
+{{-- ══════════════════════════════════════════════════════
+     SINGLE CODE VIEW — full quarterly detail per code
+     ══════════════════════════════════════════════════════ --}}
 @foreach($reportData as $idx => $row)
 @php
     $varColor  = $row['variance'] > 0 ? '#F43F5E'
@@ -316,7 +414,6 @@
                         $monthNames = \App\Models\BudgetActual::MONTHS;
                     @endphp
 
-                    {{-- Individual months row --}}
                     <tr style="background:#FFFBEB">
                         <td class="fw-semibold" style="color:#92400E;font-size:11px">
                             Monthly Actuals
@@ -578,6 +675,8 @@
 </div>
 {{-- end per-code panel --}}
 @endforeach
+@endif
+{{-- end category vs single-code branch --}}
 
 {{-- ══════════════════════
      Charts (Chart.js)
@@ -601,6 +700,91 @@ const yScaleCfg = {
     ticks: { font:{ size:10 }, callback: fmtVal }
 };
 
+@if($selectedCategory)
+{{-- ── Combined category charts ── --}}
+(function() {
+    const codeNames = {!! json_encode(array_column($reportData, 'name', 'code')) !!};
+    const ctx = document.getElementById('summaryGrouped');
+    if (!ctx) return;
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: {!! json_encode(array_column($reportData, 'code')) !!},
+            datasets: [
+                {
+                    label: 'Budget',
+                    data:  {!! json_encode(array_column($reportData, 'budget_total')) !!},
+                    backgroundColor: NAVY,
+                    borderRadius: 4, borderSkipped: false,
+                },
+                {
+                    label: 'Actual',
+                    data:  {!! json_encode(array_column($reportData, 'actual_total')) !!},
+                    backgroundColor: EMERALD,
+                    borderRadius: 4, borderSkipped: false,
+                },
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position:'top', labels:{ font:{size:11}, boxWidth:12 } },
+                tooltip: {
+                    callbacks: {
+                        title: (items) => {
+                            const code = items[0].label;
+                            return codeNames[code] ? `${code} — ${codeNames[code]}` : code;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: yScaleCfg,
+                x: { grid:{ display:false }, ticks:{ font:{size:10} } }
+            }
+        }
+    });
+})();
+
+(function() {
+    const ctx = document.getElementById('summaryDonut');
+    if (!ctx) return;
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Actual', 'Remaining'],
+            datasets: [{
+                data: [
+                    {{ $grandActual }},
+                    {{ max(0, $grandBudget - $grandActual) }},
+                ],
+                backgroundColor: [EMERALD, '#E2E8F0'],
+                borderWidth: 0,
+            }]
+        },
+        options: {
+            cutout: '68%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { font:{ size:11 }, padding:10, boxWidth:10 }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            const total = {{ $grandBudget }};
+                            const pct   = total > 0 ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
+                            return ` ${ctx.label}: {{ currency() }} ${ctx.parsed.toLocaleString()} (${pct}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+})();
+
+@else
+{{-- ── Per-code charts (single code view) ── --}}
 @foreach($reportData as $idx => $row)
 @php $chartId = 'code_' . $idx; @endphp
 
@@ -738,72 +922,9 @@ const yScaleCfg = {
 @endif
 
 @endforeach
-
-{{-- Summary charts (category view with multiple codes) --}}
-@if(count($reportData) > 1)
-(function() {
-    const ctx = document.getElementById('summaryGrouped');
-    if (!ctx) return;
-    new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: {!! json_encode(array_column($reportData, 'code')) !!},
-            datasets: [
-                {
-                    label: 'Budget',
-                    data:  {!! json_encode(array_column($reportData, 'budget_total')) !!},
-                    backgroundColor: NAVY,
-                    borderRadius: 4, borderSkipped: false,
-                },
-                {
-                    label: 'Actual',
-                    data:  {!! json_encode(array_column($reportData, 'actual_total')) !!},
-                    backgroundColor: EMERALD,
-                    borderRadius: 4, borderSkipped: false,
-                },
-            ]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { position:'top', labels:{ font:{size:11}, boxWidth:12 } }
-            },
-            scales: {
-                y: yScaleCfg,
-                x: { grid:{ display:false }, ticks:{ font:{size:10} } }
-            }
-        }
-    });
-})();
-
-(function() {
-    const ctx = document.getElementById('summaryDonut');
-    if (!ctx) return;
-    new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: ['Actual', 'Remaining'],
-            datasets: [{
-                data: [
-                    {{ $grandActual }},
-                    {{ max(0, $grandBudget - $grandActual) }},
-                ],
-                backgroundColor: [EMERALD, '#E2E8F0'],
-                borderWidth: 0,
-            }]
-        },
-        options: {
-            cutout: '68%',
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: { font:{ size:11 }, padding:10, boxWidth:10 }
-                }
-            }
-        }
-    });
-})();
 @endif
+{{-- end category vs single-code chart branch --}}
+
 </script>
 
 @elseif($selectedCategory || $selectedCode)

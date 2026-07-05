@@ -9,7 +9,7 @@ class AccountCategory extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'code', 'description', 'is_active', 'budget_type'];
+    protected $fillable = ['name', 'code', 'description', 'is_active', 'budget_type', 'account_sub_category_id'];
 
     protected $casts = ['is_active' => 'boolean'];
 
@@ -38,6 +38,11 @@ class AccountCategory extends Model
 
     public function isPnlType(): bool {
         return in_array($this->budget_type, self::PNL_TYPES);
+    }
+
+    public function subCategory()
+    {
+        return $this->belongsTo(AccountSubCategory::class, 'account_sub_category_id');
     }
 
     public function accountCodes()

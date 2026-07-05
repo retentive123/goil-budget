@@ -40,37 +40,48 @@
                 @enderror
             </div>
 
-            {{-- Add before description field --}}
             <div class="mb-3">
                 <label class="form-label small fw-semibold">Budget Type</label>
-                <select name="budget_type"
-                        class="form-select @error('budget_type') is-invalid @enderror">
+                <select name="budget_type" id="budgetType"
+                        class="form-select @error('budget_type') is-invalid @enderror"
+                        onchange="updateSubCats()">
                     <optgroup label="Income Statement">
                         <option value="revenue" {{ old('budget_type')==='revenue' ?'selected':'' }}>
-                            📈 Revenue — income and receipts
+                            Revenue — income and receipts
                         </option>
                         <option value="expense" {{ old('budget_type','expense')==='expense' ?'selected':'' }}>
-                            📉 Expense — costs and expenditures
-                        </option>
-                        <option value="both" {{ old('budget_type')==='both' ?'selected':'' }}>
-                            📊 Both — mixed revenue and expense
+                            Expense — costs and expenditures
                         </option>
                     </optgroup>
                     <optgroup label="Balance Sheet &amp; CapEx">
                         <option value="assets" {{ old('budget_type')==='assets' ?'selected':'' }}>
-                            🏦 Assets — resources owned or controlled
+                            Assets — resources owned or controlled
                         </option>
                         <option value="liabilities" {{ old('budget_type')==='liabilities' ?'selected':'' }}>
-                            📋 Liabilities — obligations and payables
+                            Liabilities — obligations and payables
                         </option>
                         <option value="capital_expenditure" {{ old('budget_type')==='capital_expenditure' ?'selected':'' }}>
-                            🏗️ Capital Expenditure — long-term investment
+                            Capital Expenditure — long-term investment
                         </option>
                     </optgroup>
                 </select>
                 @error('budget_type')
                     <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
+            </div>
+
+            <div class="mb-3" id="subCatWrap">
+                <label class="form-label small fw-semibold">
+                    Sub-Category <span class="text-muted fw-normal">(optional)</span>
+                </label>
+                <select name="account_sub_category_id" id="subCatSelect"
+                        class="form-select @error('account_sub_category_id') is-invalid @enderror">
+                    <option value="">— None —</option>
+                </select>
+                @error('account_sub_category_id')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+                <div class="form-text" id="subCatHint">Select a budget type first.</div>
             </div>
 
             <div class="mb-4">
@@ -96,4 +107,34 @@
 
 </div>
 </div>
+@push('scripts')
+<script>
+const SUB_CATS = @json($subCategories->map(fn($group) => $group->map(fn($s) => ['id' => $s->id, 'name' => $s->name])));
+const OLD_SUB  = {{ old('account_sub_category_id', 'null') }};
+
+function updateSubCats() {
+    const type   = document.getElementById('budgetType').value;
+    const select = document.getElementById('subCatSelect');
+    const hint   = document.getElementById('subCatHint');
+    const subs   = SUB_CATS[type] ?? [];
+
+    select.innerHTML = '<option value="">— None —</option>';
+    subs.forEach(s => {
+        const opt = new Option(s.name, s.id, false, s.id == OLD_SUB);
+        select.appendChild(opt);
+    });
+
+    if (subs.length === 0) {
+        hint.textContent = type ? 'No sub-categories defined for this type yet.' : 'Select a budget type first.';
+        document.getElementById('subCatWrap').style.opacity = '.5';
+    } else {
+        hint.textContent = '';
+        document.getElementById('subCatWrap').style.opacity = '1';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', updateSubCats);
+</script>
+@endpush
+
 @endsection

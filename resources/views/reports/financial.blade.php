@@ -144,12 +144,12 @@
             <span id="pnlSearchInfo" class="small text-muted"></span>
         </div>
         <div class="d-flex gap-2 align-items-center">
-            <button class="btn btn-sm btn-outline-secondary" id="toggleQtrsBtn"
+            <!--<button class="btn btn-sm btn-outline-secondary" id="toggleQtrsBtn"
                     onclick="toggleQuarterly()" style="font-size:12px">
                 <i class="fas fa-columns me-1"></i>Show Q1–Q4
             </button>
-            <button class="btn btn-sm btn-outline-secondary"
-                    onclick="expandAll()" style="font-size:12px">
+            <button id="pnlExpandBtn" class="btn btn-sm btn-outline-secondary"
+                    onclick="toggleExpandAll()" style="font-size:12px">
                 <i class="fas fa-expand-alt me-1"></i>Expand All
             </button>
             <div class="dropdown">
@@ -177,7 +177,14 @@
                         </a>
                     </li>
                 </ul>
-            </div>
+            </div>-->
+            @can('manage users')
+            <a href="{{ route('admin.income-statement-configs.index') }}"
+               class="btn btn-sm btn-outline-secondary" style="font-size:12px"
+               title="Configure P&L Layout">
+                <i class="fas fa-sliders-h me-1"></i>Layout
+            </a>
+            @endcan
         </div>
     </div>
 
@@ -193,7 +200,265 @@
     </div>
     @endif
 
-    {{-- ── P&L Table ── --}}
+    {{-- ════════════════════════════════════════════════════════
+         CONFIGURED STATEMENT (when an active layout exists)
+    ════════════════════════════════════════════════════════ --}}
+    @if($configuredStatement)
+    @php $cs = $configuredStatement; @endphp
+
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+        <span class="badge" style="background:#EFF6FF;color:#1D4ED8;font-size:10px;border-radius:4px">
+            <i class="fas fa-sliders-h me-1"></i>Layout: {{ $activeConfig->name }}
+        </span>
+        <div class="d-flex gap-2 align-items-center">
+            <button id="cfgExpandBtn" class="btn btn-sm btn-outline-secondary"
+                    onclick="cfgToggleExpandAll()" style="font-size:12px">
+                <i class="fas fa-expand-alt me-1"></i>Expand All
+            </button>
+            @if($cs['has_cs'])
+            <button id="cfgCsBtn" class="btn btn-sm btn-outline-secondary"
+                    onclick="cfgToggleCs()" style="font-size:12px">
+                <i class="fas fa-percentage me-1"></i>CS%
+            </button>
+            @endif
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                        data-bs-toggle="dropdown" style="font-size:12px">
+                    <i class="fas fa-download me-1"></i>Export
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="font-size:13px">
+                    <li>
+                        <a class="dropdown-item" href="#"
+                           onclick="cfgExport();return false">
+                            <i class="fas fa-file-excel me-2 text-success"></i>Excel
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-responsive mb-3">
+    <table class="table table-sm mb-0" id="cfgTable"
+           style="min-width:700px;border-collapse:separate;border-spacing:0">
+        <thead style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#64748B;
+                      position:sticky;top:0;background:#fff;z-index:2">
+            <tr>
+                <th style="min-width:240px;padding:8px 12px">Account</th>
+                <th class="text-end" style="min-width:110px;background:#EFF6FF;color:#1D4ED8;padding:8px 12px">
+                    Eff. Budget
+                </th>
+                @if($cs['has_cs'])
+                <th class="text-end cfg-cs-col d-none"
+                    style="min-width:80px;background:#FFFBEB;color:#92400E;padding:8px 12px">
+                    CS% Bud
+                </th>
+                @endif
+                <th class="text-end" style="min-width:110px;background:#EFF6FF;color:#1D4ED8;padding:8px 12px">
+                    YTD Actual
+                </th>
+                <th class="text-end" style="min-width:110px;background:#EFF6FF;color:#1D4ED8;padding:8px 12px">
+                    Variance&nbsp;/ %
+                </th>
+                @if($prevPeriod)
+                <th class="text-end" style="min-width:110px;background:#F5F3FF;color:#6D28D9;padding:8px 12px">
+                    Prev Budget
+                </th>
+                <th class="text-end" style="min-width:110px;background:#F5F3FF;color:#6D28D9;padding:8px 12px">
+                    Prev Actual
+                </th>
+                <th class="text-end" style="min-width:100px;background:#F5F3FF;color:#6D28D9;padding:8px 12px">
+                    Growth
+                </th>
+                @endif
+                @if($cs['has_cs'] && $prevPeriod)
+                <th class="text-end cfg-cs-col d-none"
+                    style="min-width:80px;background:#FFFBEB;color:#92400E;padding:8px 12px">
+                    CS% Prev
+                </th>
+                @endif
+            </tr>
+        </thead>
+        <tbody>
+        @foreach($cs['lines'] as $csRow)
+
+        @if($csRow['type'] === 'spacer')
+        <tr><td colspan="99" style="padding:4px 0;background:#F8FAFC"></td></tr>
+
+        @elseif($csRow['type'] === 'subtotal')
+        {{-- Bold subtotal row with top border --}}
+        <tr style="background:#F8FAFC;font-weight:700;border-top:2px solid #CBD5E1">
+            <td style="padding:9px 16px;color:#1B2A4A;font-size:13px">
+                <i class="fas fa-equals me-2" style="color:#64748B;font-size:10px"></i>
+                {{ $csRow['label'] }}
+            </td>
+            <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">
+                {{ number_format($csRow['budget'], 0) }}
+            </td>
+            @if($cs['has_cs'])
+            <td class="text-end cfg-cs-col d-none"
+                style="padding:9px 12px;font-size:12px;color:#92400E;font-variant-numeric:tabular-nums">
+                {{ $csRow['cs_bud'] !== null ? $csRow['cs_bud'].'%' : '—' }}
+            </td>
+            @endif
+            <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">
+                {{ number_format($csRow['actual'], 0) }}
+            </td>
+            @php
+                $csVarColor = $csRow['variance'] >= 0 ? '#10B981' : '#F43F5E';
+            @endphp
+            <td class="text-end" style="padding:9px 12px;color:{{ $csVarColor }};font-variant-numeric:tabular-nums">
+                {{ $csRow['variance'] >= 0 ? '+' : '' }}{{ number_format($csRow['variance'], 0) }}
+                <small class="ms-1">({{ $csRow['pct'] >= 0 ? '+' : '' }}{{ $csRow['pct'] }}%)</small>
+            </td>
+            @if($prevPeriod)
+            <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">
+                {{ number_format($csRow['prev_budget'], 0) }}
+            </td>
+            <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">
+                {{ number_format($csRow['prev_actual'], 0) }}
+            </td>
+            <td class="text-end" style="padding:9px 12px">
+                @if($csRow['growth_pct'] !== null)
+                <span style="color:{{ $csRow['growth_pct'] >= 0 ? '#10B981' : '#F43F5E' }}">
+                    {{ $csRow['growth_pct'] >= 0 ? '+' : '' }}{{ $csRow['growth_pct'] }}%
+                </span>
+                @else —
+                @endif
+            </td>
+            @endif
+            @if($cs['has_cs'] && $prevPeriod)
+            <td class="text-end cfg-cs-col d-none"
+                style="padding:9px 12px;font-size:12px;color:#92400E;font-variant-numeric:tabular-nums">
+                {{ ($csRow['cs_prev_bud'] ?? null) !== null ? $csRow['cs_prev_bud'].'%' : '—' }}
+            </td>
+            @endif
+        </tr>
+
+        @else {{-- sub_category --}}
+        @php
+            $isLess  = ($csRow['operator'] === 'subtract');
+            $varClr  = $csRow['variance'] >= 0 ? '#10B981' : '#F43F5E';
+        @endphp
+        <tr class="cfg-subcat-row"
+            data-subcat="{{ $csRow['sub_cat_id'] ?? '' }}"
+            onclick="toggleCfgSubCat(this)"
+            style="border-bottom:1px solid #F1F5F9;cursor:pointer">
+            <td style="padding:8px 12px 8px 16px;font-size:13px;color:#374151">
+                <i class="fas fa-chevron-right cfg-chevron"
+                   style="font-size:9px;margin-right:6px;transition:transform .15s;color:#94A3B8"></i>
+                @if($isLess)
+                <span style="color:#94A3B8;font-size:11px;margin-right:4px">(Less)</span>
+                @endif
+                {{ $csRow['label'] }}
+            </td>
+            <td class="text-end" style="padding:8px 12px;font-size:13px;font-variant-numeric:tabular-nums">
+                {{ number_format($csRow['budget'], 0) }}
+            </td>
+            @if($cs['has_cs'])
+            <td class="text-end cfg-cs-col d-none"
+                style="padding:8px 12px;font-size:12px;color:#92400E;font-variant-numeric:tabular-nums">
+                {{ $csRow['cs_bud'] !== null ? $csRow['cs_bud'].'%' : '—' }}
+            </td>
+            @endif
+            <td class="text-end" style="padding:8px 12px;font-size:13px;font-variant-numeric:tabular-nums">
+                {{ number_format($csRow['actual'], 0) }}
+            </td>
+            <td class="text-end" style="padding:8px 12px;font-size:12px;color:{{ $varClr }};font-variant-numeric:tabular-nums">
+                {{ $csRow['variance'] >= 0 ? '+' : '' }}{{ number_format($csRow['variance'], 0) }}
+                <small>({{ $csRow['pct'] >= 0 ? '+' : '' }}{{ $csRow['pct'] }}%)</small>
+            </td>
+            @if($prevPeriod)
+            <td class="text-end" style="padding:8px 12px;font-size:12px;color:#8B5CF6;font-variant-numeric:tabular-nums">
+                {{ number_format($csRow['prev_budget'], 0) }}
+            </td>
+            <td class="text-end" style="padding:8px 12px;font-size:12px;color:#8B5CF6;font-variant-numeric:tabular-nums">
+                {{ number_format($csRow['prev_actual'], 0) }}
+            </td>
+            <td class="text-end" style="padding:8px 12px;font-size:12px">
+                @if($csRow['growth_pct'] !== null)
+                <span style="color:{{ $csRow['growth_pct'] >= 0 ? '#10B981' : '#F43F5E' }}">
+                    {{ $csRow['growth_pct'] >= 0 ? '+' : '' }}{{ $csRow['growth_pct'] }}%
+                </span>
+                @else —
+                @endif
+            </td>
+            @endif
+            @if($cs['has_cs'] && $prevPeriod)
+            <td class="text-end cfg-cs-col d-none"
+                style="padding:8px 12px;font-size:12px;color:#92400E;font-variant-numeric:tabular-nums">
+                {{ ($csRow['cs_prev_bud'] ?? null) !== null ? $csRow['cs_prev_bud'].'%' : '—' }}
+            </td>
+            @endif
+        </tr>
+        @endif
+
+        @endforeach
+
+        {{-- Final net profit row --}}
+        @php
+            $finalVar   = $cs['final_actual'] - $cs['final_budget'];
+            $finalClr   = $finalVar >= 0 ? '#10B981' : '#F43F5E';
+            $finalPct   = $cs['final_budget'] != 0
+                ? round(($finalVar / abs($cs['final_budget'])) * 100, 1) : 0;
+            $finalGrow  = ($cs['final_prev_act'] != 0)
+                ? round((($cs['final_actual'] - $cs['final_prev_act']) / abs($cs['final_prev_act'])) * 100, 1)
+                : null;
+        @endphp
+        <tr style="background:{{ $cs['final_actual'] >= 0 ? '#DCFCE7' : '#FEE2E2' }};
+                   font-weight:700;border-top:3px double #CBD5E1">
+            <td style="padding:11px 16px;font-size:14px;
+                       color:{{ $cs['final_actual'] >= 0 ? '#065F46' : '#991B1B' }}">
+                Net Income / (Loss)
+            </td>
+            <td class="text-end" style="padding:11px 12px;font-variant-numeric:tabular-nums">
+                {{ currency() }} {{ number_format($cs['final_budget'], 0) }}
+            </td>
+            @if($cs['has_cs'])
+            <td class="text-end cfg-cs-col d-none"
+                style="padding:11px 12px;font-size:12px;color:#92400E;font-variant-numeric:tabular-nums">
+                {{ $cs['final_cs_bud'] !== null ? $cs['final_cs_bud'].'%' : '—' }}
+            </td>
+            @endif
+            <td class="text-end" style="padding:11px 12px;font-variant-numeric:tabular-nums;
+                                        color:{{ $finalClr }}">
+                {{ currency() }} {{ number_format($cs['final_actual'], 0) }}
+            </td>
+            <td class="text-end" style="padding:11px 12px;color:{{ $finalClr }};font-variant-numeric:tabular-nums">
+                {{ $finalVar >= 0 ? '+' : '' }}{{ number_format($finalVar, 0) }}
+                <small>({{ $finalPct >= 0 ? '+' : '' }}{{ $finalPct }}%)</small>
+            </td>
+            @if($prevPeriod)
+            <td class="text-end" style="padding:11px 12px;font-variant-numeric:tabular-nums">
+                {{ number_format($cs['final_prev_bud'], 0) }}
+            </td>
+            <td class="text-end" style="padding:11px 12px;font-variant-numeric:tabular-nums">
+                {{ number_format($cs['final_prev_act'], 0) }}
+            </td>
+            <td class="text-end" style="padding:11px 12px">
+                @if($finalGrow !== null)
+                <span style="color:{{ $finalGrow >= 0 ? '#10B981' : '#F43F5E' }}">
+                    {{ $finalGrow >= 0 ? '+' : '' }}{{ $finalGrow }}%
+                </span>
+                @else —
+                @endif
+            </td>
+            @endif
+            @if($cs['has_cs'] && $prevPeriod)
+            <td class="text-end cfg-cs-col d-none"
+                style="padding:11px 12px;font-size:12px;color:#92400E;font-variant-numeric:tabular-nums">
+                {{ ($cs['final_cs_prev'] ?? null) !== null ? $cs['final_cs_prev'].'%' : '—' }}
+            </td>
+            @endif
+        </tr>
+        </tbody>
+    </table>
+    </div>
+
+    @endif
+
+    {{-- ── P&L Table (hidden when configured layout active; data still used by JS) ── --}}
+    @if($configuredStatement)<div style="display:none">@endif
     {{-- COLSPAN reference:
          1=Account, 2=Eff Budget, 3=YTD Actual, 4=Common Size%,
          5=Variance, 6=Var%, 7=Growth%,
@@ -383,6 +648,8 @@
     </table>
     </div>
 
+    @if($configuredStatement)</div>@endif
+
 </div>
 </div>{{-- /tab-pane income statement --}}
 
@@ -410,7 +677,23 @@
         @endforeach
     </div>
 
-    <div class="chart-title mb-2">Monthly Cash Flow Detail</div>
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="chart-title mb-0">Monthly Cash Flow Detail</div>
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                    data-bs-toggle="dropdown" style="font-size:12px">
+                <i class="fas fa-download me-1"></i>Export
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="font-size:13px">
+                <li><a class="dropdown-item" href="#" onclick="cfExport('csv');return false">
+                    <i class="fas fa-file-csv me-2 text-success"></i>CSV</a></li>
+                <li><a class="dropdown-item" href="#" onclick="cfExport('json');return false">
+                    <i class="fas fa-file-code me-2 text-primary"></i>JSON</a></li>
+                <li><a class="dropdown-item" href="#" id="cfCopyBtn" onclick="cfExport('copy');return false">
+                    <i class="fas fa-copy me-2 text-muted"></i>Copy (TSV)</a></li>
+            </ul>
+        </div>
+    </div>
     <div class="table-responsive">
     <table class="table table-sm table-hover mb-0">
         <thead style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#64748B">
@@ -545,9 +828,24 @@
     <div></div>
     @endif
     <div class="d-flex gap-2">
-        <button class="btn btn-sm btn-outline-secondary" onclick="bsExpandAll()" style="font-size:12px">
+        <button id="bsExpandBtn" class="btn btn-sm btn-outline-secondary"
+                onclick="bsToggleExpandAll()" style="font-size:12px">
             <i class="fas fa-expand-alt me-1"></i>Expand All
         </button>
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                    data-bs-toggle="dropdown" style="font-size:12px">
+                <i class="fas fa-download me-1"></i>Export
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="font-size:13px">
+                <li><a class="dropdown-item" href="#" onclick="bsExport('csv');return false">
+                    <i class="fas fa-file-csv me-2 text-success"></i>CSV</a></li>
+                <li><a class="dropdown-item" href="#" onclick="bsExport('json');return false">
+                    <i class="fas fa-file-code me-2 text-primary"></i>JSON</a></li>
+                <li><a class="dropdown-item" href="#" id="bsCopyBtn" onclick="bsExport('copy');return false">
+                    <i class="fas fa-copy me-2 text-muted"></i>Copy (TSV)</a></li>
+            </ul>
+        </div>
     </div>
 </div>
 
@@ -666,11 +964,27 @@
 // ── Data ──────────────────────────────────────────────────────────────────
 const PNL_REVENUE  = @json($pnl['sections']['revenue']);
 const PNL_EXPENSE  = @json($pnl['sections']['expense']);
+const PNL_TOTALS   = @json($pnl['totals']);
+const PNL_NET      = {
+    budget:          {{ $pnl['net_budget'] }},
+    actual:          {{ $pnl['net_actual'] }},
+    variance:        {{ $pnl['net_variance'] }},
+    pct:             {{ $pnl['net_pct'] }},
+    prev_net_budget: {{ $pnl['prev_net_budget'] ?? 0 }},
+    prev_net_actual: {{ $pnl['prev_net_actual'] ?? 0 }},
+    growth_pct:      @json($pnl['net_growth_pct']),
+};
 const CF_QUARTERLY = @json($cashflow['quarterly']);
 const CF_MONTHLY   = @json($cashflow['monthly']);
 const HAS_PREV     = {{ $prevPeriod ? 'true' : 'false' }};
 const BS_ASSETS      = @json($balanceSheet['sections']['assets'] ?? []);
 const BS_LIABILITIES = @json($balanceSheet['sections']['liabilities'] ?? []);
+const BS_TOTALS      = @json($balanceSheet['totals'] ?? []);
+const BS_NET         = {
+    budget: {{ $balanceSheet['net_budget'] ?? 0 }},
+    actual: {{ $balanceSheet['net_actual'] ?? 0 }},
+    prev_budget: {{ ($balanceSheet['totals']['assets']['prev_budget'] ?? 0) - ($balanceSheet['totals']['liabilities']['prev_budget'] ?? 0) }},
+};
 
 // ── Formatting helpers ─────────────────────────────────────────────────────
 function n0(v)  { return Number(v ?? 0).toLocaleString('en-GH', {minimumFractionDigits:0, maximumFractionDigits:0}); }
@@ -695,11 +1009,17 @@ function toggleQuarterly() {
     renderSection('expense');
 }
 
-function expandAll() {
+let pnlAllExpanded = false;
+function toggleExpandAll() {
+    pnlAllExpanded = !pnlAllExpanded;
+    const btn = document.getElementById('pnlExpandBtn');
+    btn.innerHTML = pnlAllExpanded
+        ? '<i class="fas fa-compress-alt me-1"></i>Collapse All'
+        : '<i class="fas fa-expand-alt me-1"></i>Expand All';
     ['revenue','expense'].forEach(type => {
         const cats = type === 'revenue' ? PNL_REVENUE : PNL_EXPENSE;
         cats.forEach((_, i) => {
-            catState[type][i] = {expanded: true, showAll: true};
+            catState[type][i] = {expanded: pnlAllExpanded, showAll: pnlAllExpanded};
         });
         renderSection(type);
     });
@@ -828,51 +1148,376 @@ document.getElementById('pnlSearch').addEventListener('input', function () {
 renderSection('revenue');
 renderSection('expense');
 
-// ── Export ─────────────────────────────────────────────────────────────────
-function pnlExport(format) {
-    const q    = document.getElementById('pnlSearch').value.trim().toLowerCase();
-    const rows = [];
-    ['revenue','expense'].forEach(type => {
-        const cats = type === 'revenue' ? PNL_REVENUE : PNL_EXPENSE;
-        cats.forEach(cat => {
-            const codes = q
-                ? cat.codes.filter(r => r.code.toLowerCase().includes(q) || r.name.toLowerCase().includes(q))
-                : cat.codes;
-            codes.forEach(r => rows.push({
-                Type: type === 'revenue' ? 'Revenue' : 'Expense',
-                Category: cat.name, Code: r.code, Account: r.name,
-                'Eff Budget': r.effective, 'YTD Actual': r.actual,
-                'Common Size%': r.common_size,
-                'Variance': r.variance, 'Var%': r.pct,
-                'Growth%': r.growth_pct ?? '',
-                'Prev Budget': r.prev_budget, 'Prev Actual': r.prev_actual,
-                'Prev Var%': r.prev_var_pct ?? '',
-                Q1: r.q1, Q2: r.q2, Q3: r.q3, Q4: r.q4,
-            }));
+// ── Configured statement inline expand/collapse ────────────────────────────
+@if($configuredStatement ?? false)
+const cfgExpandState = {};
+
+function toggleCfgSubCat(row) {
+    const subCatId = String(row.dataset.subcat || '');
+    if (!subCatId) return;
+
+    const chevron = row.querySelector('.cfg-chevron');
+    const isOpen  = !!cfgExpandState[subCatId];
+
+    // Remove any existing detail rows for this sub-cat
+    let sib = row.nextElementSibling;
+    while (sib && sib.classList.contains('cfg-detail-row')) {
+        const del = sib;
+        sib = sib.nextElementSibling;
+        del.remove();
+    }
+
+    if (isOpen) {
+        cfgExpandState[subCatId] = false;
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+        return;
+    }
+
+    // Gather matching categories from the already-computed PNL data
+    const allCats = [...PNL_REVENUE, ...PNL_EXPENSE]
+        .filter(c => String(c.sub_cat_id) === subCatId);
+
+    if (allCats.length === 0) {
+        // No category data mapped — nothing to show
+        cfgExpandState[subCatId] = false;
+        return;
+    }
+
+    // Build column helpers — match cfgTable column count
+    const numCols = HAS_PREV ? 7 : 4;
+
+    const csHidden = () => !cfgCsVisible;
+    const csPct    = (val, base) => base > 0 ? (val / base * 100).toFixed(1) + '%' : '—';
+    const csStyle  = (hide) => `padding:6px 10px;font-size:12px;color:#92400E;font-variant-numeric:tabular-nums${hide ? ';display:none' : ''}`;
+
+    // subCatId passed so we look up the correct per-line base
+    function catCols(t, subCatId) {
+        const base = CFG_HAS_CS ? (CFG_CS_BASES[subCatId] ?? null) : null;
+        let h = `<td class="text-end" style="padding:6px 10px;font-size:12px;font-variant-numeric:tabular-nums">${n0(t.effective)}</td>`;
+        if (CFG_HAS_CS) h += `<td class="text-end cfg-cs-col" style="${csStyle(csHidden())}">${base ? csPct(t.effective, base.bud) : '—'}</td>`;
+        h += `<td class="text-end" style="padding:6px 10px;font-size:12px;font-variant-numeric:tabular-nums">${n0(t.actual)}</td>
+              <td class="text-end" style="padding:6px 10px;font-size:12px;color:${vs(t.variance)};font-variant-numeric:tabular-nums">${pfx(t.variance)}${n0(t.variance)}</td>`;
+        if (HAS_PREV) h += `<td class="text-end" style="padding:6px 10px;font-size:12px;color:#8B5CF6;font-variant-numeric:tabular-nums">${n0(t.prev_budget)}</td>
+                            <td class="text-end" style="padding:6px 10px;font-size:12px;color:#8B5CF6;font-variant-numeric:tabular-nums">${n0(t.prev_actual)}</td>
+                            <td class="text-end" style="padding:6px 10px;font-size:12px">
+                                ${t.growth_pct != null ? `<span style="color:${vs(t.growth_pct)}">${pfx(t.growth_pct)}${t.growth_pct}%</span>` : '—'}
+                            </td>`;
+        if (CFG_HAS_CS && HAS_PREV) h += `<td class="text-end cfg-cs-col" style="${csStyle(csHidden())}">${base ? csPct(t.prev_budget, base.prev) : '—'}</td>`;
+        return h;
+    }
+
+    function codeCols(r, subCatId) {
+        const base = CFG_HAS_CS ? (CFG_CS_BASES[subCatId] ?? null) : null;
+        let h = `<td class="text-end" style="padding:5px 10px;font-size:12px;font-variant-numeric:tabular-nums">${n0(r.effective)}</td>`;
+        if (CFG_HAS_CS) h += `<td class="text-end cfg-cs-col" style="${csStyle(csHidden())}">${base ? csPct(r.effective, base.bud) : '—'}</td>`;
+        h += `<td class="text-end" style="padding:5px 10px;font-size:12px;font-variant-numeric:tabular-nums">${n0(r.actual)}</td>
+              <td class="text-end" style="padding:5px 10px;font-size:12px;color:${vs(r.variance)};font-variant-numeric:tabular-nums">${pfx(r.variance)}${n0(r.variance)}</td>`;
+        if (HAS_PREV) h += `<td class="text-end" style="padding:5px 10px;font-size:12px;color:#8B5CF6;font-variant-numeric:tabular-nums">${n0(r.prev_budget)}</td>
+                            <td class="text-end" style="padding:5px 10px;font-size:12px;color:#8B5CF6;font-variant-numeric:tabular-nums">${n0(r.prev_actual)}</td>
+                            <td class="text-end" style="padding:5px 10px;font-size:12px">
+                                ${r.growth_pct != null ? `<span style="color:${vs(r.growth_pct)}">${pfx(r.growth_pct)}${r.growth_pct}%</span>` : '—'}
+                            </td>`;
+        if (CFG_HAS_CS && HAS_PREV) h += `<td class="text-end cfg-cs-col" style="${csStyle(csHidden())}">${base ? csPct(r.prev_budget, base.prev) : '—'}</td>`;
+        return h;
+    }
+
+    let insertAfter = row;
+
+    allCats.forEach(cat => {
+        // Category summary row
+        const catTr = document.createElement('tr');
+        catTr.className = 'cfg-detail-row';
+        catTr.style.cssText = 'background:#F1F5F9;';
+        catTr.innerHTML =
+            `<td style="padding:6px 12px 6px 36px;font-weight:600;font-size:12px;color:#374151">
+                ${esc(cat.name)}
+                <span class="badge ms-1" style="background:#E2E8F0;color:#64748B;font-size:9px">${cat.codes.length}</span>
+             </td>${catCols(cat.total, subCatId)}`;
+        insertAfter.insertAdjacentElement('afterend', catTr);
+        insertAfter = catTr;
+
+        // Code rows
+        cat.codes.forEach(code => {
+            const codeTr = document.createElement('tr');
+            codeTr.className = 'cfg-detail-row';
+            codeTr.style.cssText = 'font-size:12px;border-bottom:1px solid #F1F5F9;';
+            codeTr.innerHTML =
+                `<td style="padding:5px 12px 5px 52px">
+                    <code style="font-size:11px;color:#64748B">${esc(code.code)}</code>
+                    <span class="ms-2" style="color:#374151">${esc(code.name)}</span>
+                 </td>${codeCols(code, subCatId)}`;
+            insertAfter.insertAdjacentElement('afterend', codeTr);
+            insertAfter = codeTr;
         });
     });
 
-    const headers = Object.keys(rows[0] ?? {});
-    const stamp   = new Date().toISOString().slice(0,10);
+    cfgExpandState[subCatId] = true;
+    if (chevron) chevron.style.transform = 'rotate(90deg)';
+}
 
+let cfgAllExpanded = false;
+let cfgCsVisible   = false;
+
+function cfgToggleCs() {
+    cfgCsVisible = !cfgCsVisible;
+    document.querySelectorAll('#cfgTable .cfg-cs-col').forEach(el => {
+        el.classList.toggle('d-none', !cfgCsVisible);
+        el.style.display = ''; // clear any inline display from JS-built rows
+    });
+    const btn = document.getElementById('cfgCsBtn');
+    if (btn) btn.classList.toggle('active', cfgCsVisible);
+}
+
+function cfgToggleExpandAll() {
+    const btn = document.getElementById('cfgExpandBtn');
+    if (cfgAllExpanded) {
+        document.querySelectorAll('#cfgTable .cfg-subcat-row').forEach(row => {
+            const id = String(row.dataset.subcat || '');
+            if (id && cfgExpandState[id]) toggleCfgSubCat(row);
+        });
+        cfgAllExpanded = false;
+        if (btn) btn.innerHTML = '<i class="fas fa-expand-alt me-1"></i>Expand All';
+    } else {
+        document.querySelectorAll('#cfgTable .cfg-subcat-row').forEach(row => {
+            const id = String(row.dataset.subcat || '');
+            if (id && !cfgExpandState[id]) toggleCfgSubCat(row);
+        });
+        cfgAllExpanded = true;
+        if (btn) btn.innerHTML = '<i class="fas fa-compress-alt me-1"></i>Collapse All';
+    }
+}
+@endif
+
+// ── Shared export helper ───────────────────────────────────────────────────
+function doExport(rows, headers, filename, format, copyBtnId) {
     if (format === 'csv') {
-        const csv = [headers, ...rows.map(r => Object.values(r))]
+        const csv = [headers, ...rows.map(r => headers.map(h => r[h] ?? ''))]
             .map(c => c.map(v => `"${String(v ?? '').replace(/"/g,'""')}"`).join(','))
             .join('\n');
-        dlBlob(csv, `income-statement-${stamp}.csv`, 'text/csv;charset=utf-8;');
+        dlBlob('﻿' + csv, filename + '.csv', 'text/csv;charset=utf-8;');
     }
     if (format === 'json') {
-        dlBlob(JSON.stringify(rows, null, 2), `income-statement-${stamp}.json`, 'application/json');
+        dlBlob(JSON.stringify(rows, null, 2), filename + '.json', 'application/json');
     }
     if (format === 'copy') {
-        const tsv = [headers, ...rows.map(r => Object.values(r))].map(c => c.join('\t')).join('\n');
+        const tsv = [headers, ...rows.map(r => headers.map(h => r[h] ?? ''))].map(c => c.join('\t')).join('\n');
         navigator.clipboard.writeText(tsv).then(() => {
-            const btn = document.getElementById('pnlCopyBtn');
+            const btn = document.getElementById(copyBtnId);
             const orig = btn.innerHTML;
             btn.innerHTML = '<i class="fas fa-check me-2 text-success"></i>Copied!';
             setTimeout(() => { btn.innerHTML = orig; }, 2000);
         });
     }
+}
+
+// ── Configured Statement Export ────────────────────────────────────────────
+@if($configuredStatement)
+const CFG_LINES        = @json($configuredStatement['lines']);
+const CFG_FINAL_BUDGET = {{ $configuredStatement['final_budget'] }};
+const CFG_FINAL_ACTUAL = {{ $configuredStatement['final_actual'] }};
+const CFG_HAS_CS  = {{ $configuredStatement['has_cs'] ? 'true' : 'false' }};
+const CFG_CS_BASES = @json($configuredStatement['cs_bases'] ?? []);
+// CFG_CS_BASES: { sub_cat_id: { bud: amount, prev: amount }, ... }
+
+function cfgExport() {
+    const stamp   = new Date().toISOString().slice(0,10);
+    const allCats = [...PNL_REVENUE, ...PNL_EXPENSE];
+
+    // Each entry: { _type: 'subcat'|'category'|'code'|'subtotal'|'spacer'|'total', label, nums... }
+    const rows = [];
+
+    CFG_LINES.forEach(line => {
+        if (line.type === 'spacer') { rows.push({ _type: 'spacer' }); return; }
+
+        // CS% for expanded inline category/code rows uses the same base as the sub_category line
+        const base    = CFG_CS_BASES[String(line.sub_cat_id ?? '')] ?? null;
+        const xcs     = v => base && base.bud  > 0 ? (v / base.bud  * 100).toFixed(1) + '%' : '';
+        const xcsp    = v => base && base.prev > 0 ? (v / base.prev * 100).toFixed(1) + '%' : '';
+
+        if (line.type === 'subtotal') {
+            rows.push({ _type: 'subtotal',
+                label: line.label,
+                bud: line.budget, act: line.actual,
+                vari: line.variance, pct: line.pct,
+                prevBud: line.prev_budget, prevAct: line.prev_actual,
+                csBud: line.cs_bud != null ? line.cs_bud + '%' : '',
+                csPrev: line.cs_prev_bud != null ? line.cs_prev_bud + '%' : '' });
+            return;
+        }
+
+        // sub_category line
+        rows.push({ _type: 'subcat',
+            label: (line.operator === 'subtract' ? '(Less) ' : '') + line.label,
+            bud: line.budget, act: line.actual,
+            vari: line.variance, pct: line.pct,
+            prevBud: line.prev_budget, prevAct: line.prev_actual,
+            csBud: line.cs_bud != null ? line.cs_bud + '%' : '',
+            csPrev: line.cs_prev_bud != null ? line.cs_prev_bud + '%' : '' });
+
+        const subCatId = String(line.sub_cat_id ?? '');
+        if (!subCatId || !cfgExpandState[subCatId]) return;
+
+        allCats.filter(c => String(c.sub_cat_id) === subCatId).forEach(cat => {
+            // category — bold in Excel
+            rows.push({ _type: 'category',
+                label: cat.name,
+                bud: cat.total.effective, act: cat.total.actual,
+                vari: cat.total.variance, pct: cat.total.pct,
+                prevBud: cat.total.prev_budget, prevAct: cat.total.prev_actual,
+                csBud: xcs(cat.total.effective), csPrev: xcsp(cat.total.prev_budget) });
+
+            cat.codes.forEach(code => {
+                rows.push({ _type: 'code',
+                    label: '[' + code.code + '] ' + code.name,
+                    bud: code.effective, act: code.actual,
+                    vari: code.variance, pct: code.pct,
+                    prevBud: code.prev_budget, prevAct: code.prev_actual,
+                    csBud: xcs(code.effective), csPrev: xcsp(code.prev_budget) });
+            });
+        });
+    });
+
+    const finalVar = CFG_FINAL_ACTUAL - CFG_FINAL_BUDGET;
+    rows.push({ _type: 'spacer' });
+    rows.push({ _type: 'total',
+        label: 'Net Income / (Loss)',
+        bud: CFG_FINAL_BUDGET, act: CFG_FINAL_ACTUAL,
+        vari: finalVar,
+        pct: CFG_FINAL_BUDGET !== 0 ? (finalVar / Math.abs(CFG_FINAL_BUDGET) * 100).toFixed(1) : 0,
+        prevBud: {{ $configuredStatement['final_prev_bud'] ?? 0 }},
+        prevAct: {{ $configuredStatement['final_prev_act'] ?? 0 }},
+        csBud: '', csPrev: '' });
+
+    // ── Build HTML table (Excel will open it with formatting) ──────────────
+    const fmtNum = v => v == null || v === '' ? '' : Number(v).toLocaleString('en-GH', {minimumFractionDigits:0, maximumFractionDigits:0});
+    const esc2   = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+    const colBg  = { subcat: '#EFF6FF', category: '#F1F5F9', code: '#FFFFFF', subtotal: '#F8FAFC', spacer: '', total: '#1B2A4A' };
+    const colFg  = { total: '#FFFFFF' };
+    const indent = { subcat: 0, category: 16, code: 32, subtotal: 0, spacer: 0, total: 0 };
+
+    let th = `<th style="background:#1B2A4A;color:#fff;padding:6px 10px;text-align:left">Account</th>
+              <th style="background:#1B4ED8;color:#fff;padding:6px 10px;text-align:right">Eff Budget</th>`;
+    if (CFG_HAS_CS) th += `<th style="background:#92400E;color:#fff;padding:6px 10px;text-align:right">CS% Bud</th>`;
+    th += `<th style="background:#1B4ED8;color:#fff;padding:6px 10px;text-align:right">YTD Actual</th>
+              <th style="background:#1B4ED8;color:#fff;padding:6px 10px;text-align:right">Variance</th>
+              <th style="background:#1B4ED8;color:#fff;padding:6px 10px;text-align:right">Var %</th>`;
+    if (HAS_PREV) th += `<th style="background:#6D28D9;color:#fff;padding:6px 10px;text-align:right">Prev Budget</th>
+                          <th style="background:#6D28D9;color:#fff;padding:6px 10px;text-align:right">Prev Actual</th>`;
+    if (CFG_HAS_CS && HAS_PREV) th += `<th style="background:#92400E;color:#fff;padding:6px 10px;text-align:right">CS% Prev</th>`;
+
+    const trs = rows.map(r => {
+        if (r._type === 'spacer') {
+            return `<tr><td colspan="99" style="padding:4px"></td></tr>`;
+        }
+        const bg      = colBg[r._type] ?? '';
+        const fg      = colFg[r._type] ?? '#1B2A4A';
+        const pad     = indent[r._type] ?? 0;
+        const isBold  = ['subcat','category','subtotal','total'].includes(r._type);
+        const isBig   = r._type === 'subtotal' || r._type === 'total';
+        const border  = isBig ? 'border-top:2px solid #CBD5E1;' : '';
+        const labelCell = `<td style="padding:6px 10px 6px ${10 + pad}px;${border}background:${bg};color:${fg};${isBold ? 'font-weight:700;' : ''}${isBig ? 'font-size:13px;' : 'font-size:12px;'}">
+            ${esc2(r.label)}</td>`;
+        const numStyle = `padding:6px 10px;text-align:right;${border}background:${bg};color:${fg};font-size:12px;${isBold ? 'font-weight:700;' : ''}font-variant-numeric:tabular-nums`;
+        const csStyle2 = `padding:6px 10px;text-align:right;${border}background:#FFFBEB;color:#92400E;font-size:12px;${isBold ? 'font-weight:700;' : ''}`;
+        let tds = labelCell
+            + `<td style="${numStyle}">${fmtNum(r.bud)}</td>`;
+        if (CFG_HAS_CS) tds += `<td style="${csStyle2}">${r.csBud ?? ''}</td>`;
+        tds += `<td style="${numStyle}">${fmtNum(r.act)}</td>`
+            + `<td style="${numStyle};color:${r.vari >= 0 ? '#059669' : '#DC2626'}">${fmtNum(r.vari)}</td>`
+            + `<td style="${numStyle};color:${r.vari >= 0 ? '#059669' : '#DC2626'}">${r.pct ?? ''}</td>`;
+        if (HAS_PREV) tds += `<td style="${numStyle}">${fmtNum(r.prevBud)}</td>`
+                           + `<td style="${numStyle}">${fmtNum(r.prevAct)}</td>`;
+        if (CFG_HAS_CS && HAS_PREV) tds += `<td style="${csStyle2}">${r.csPrev ?? ''}</td>`;
+        return `<tr>${tds}</tr>`;
+    }).join('\n');
+
+    const html = `<html xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="UTF-8"></head><body>
+    <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif">
+    <thead><tr>${th}</tr></thead>
+    <tbody>${trs}</tbody>
+    </table></body></html>`;
+
+    dlBlob(html, 'income-statement-' + stamp + '.xls', 'application/vnd.ms-excel;charset=utf-8');
+}
+@endif
+
+// ── Income Statement Export ────────────────────────────────────────────────
+function pnlExport(format) {
+    const stamp = new Date().toISOString().slice(0,10);
+    const IS_HEADERS = [
+        'Account', 'Eff Budget', 'YTD Actual', 'Variance', 'Var %', 'CS %',
+        'Prev Budget', 'Prev Actual', 'Growth %', 'Prev Var %',
+        'Q1', 'Q2', 'Q3', 'Q4',
+    ];
+    const blank = h => Object.fromEntries(IS_HEADERS.map(k => [k, '']));
+    const rows  = [];
+
+    ['revenue','expense'].forEach(type => {
+        const cats  = type === 'revenue' ? PNL_REVENUE : PNL_EXPENSE;
+        const tot   = PNL_TOTALS[type];
+        const label = type === 'revenue' ? 'REVENUE' : 'EXPENSES';
+
+        // Section header
+        rows.push({...blank(), Account: label});
+
+        cats.forEach(cat => {
+            const t  = cat.total;
+            const cq = {q1:0,q2:0,q3:0,q4:0};
+            cat.codes.forEach(r => { cq.q1+=r.q1; cq.q2+=r.q2; cq.q3+=r.q3; cq.q4+=r.q4; });
+
+            // Category row
+            rows.push({
+                Account:        cat.name,
+                'Eff Budget':   t.effective,  'YTD Actual': t.actual,
+                Variance:       t.variance,   'Var %': t.pct,  'CS %': t.common_size,
+                'Prev Budget':  HAS_PREV ? t.prev_budget : '',
+                'Prev Actual':  HAS_PREV ? t.prev_actual : '',
+                'Growth %':     HAS_PREV ? (t.growth_pct ?? '') : '',
+                'Prev Var %':   HAS_PREV ? (t.prev_var_pct ?? '') : '',
+                Q1: cq.q1, Q2: cq.q2, Q3: cq.q3, Q4: cq.q4,
+            });
+
+            // Code rows
+            cat.codes.forEach(r => rows.push({
+                Account:       `  ${r.code} — ${r.name}`,
+                'Eff Budget':  r.effective,  'YTD Actual': r.actual,
+                Variance:      r.variance,   'Var %': r.pct,  'CS %': r.common_size,
+                'Prev Budget': HAS_PREV ? r.prev_budget : '',
+                'Prev Actual': HAS_PREV ? r.prev_actual : '',
+                'Growth %':    HAS_PREV ? (r.growth_pct ?? '') : '',
+                'Prev Var %':  HAS_PREV ? (r.prev_var_pct ?? '') : '',
+                Q1: r.q1, Q2: r.q2, Q3: r.q3, Q4: r.q4,
+            }));
+        });
+
+        // Section total
+        rows.push({
+            Account:       `Total ${label}`,
+            'Eff Budget':  tot.effective,  'YTD Actual': tot.actual,
+            Variance:      tot.variance,   'Var %': tot.pct,  'CS %': '',
+            'Prev Budget': HAS_PREV ? tot.prev_budget : '',
+            'Prev Actual': HAS_PREV ? tot.prev_actual : '',
+            'Growth %':    HAS_PREV ? (tot.growth_pct ?? '') : '',
+            'Prev Var %':  HAS_PREV ? (tot.prev_var_pct ?? '') : '',
+            Q1: '', Q2: '', Q3: '', Q4: '',
+        });
+        rows.push({...blank()});  // blank spacer
+    });
+
+    // Net income row
+    rows.push({
+        Account:       'NET INCOME / (LOSS)',
+        'Eff Budget':  PNL_NET.budget,  'YTD Actual': PNL_NET.actual,
+        Variance:      PNL_NET.variance, 'Var %': PNL_NET.pct,  'CS %': '',
+        'Prev Budget': HAS_PREV ? PNL_NET.prev_net_budget : '',
+        'Prev Actual': HAS_PREV ? PNL_NET.prev_net_actual : '',
+        'Growth %':    HAS_PREV ? (PNL_NET.growth_pct ?? '') : '',
+        'Prev Var %':  '', Q1: '', Q2: '', Q3: '', Q4: '',
+    });
+
+    doExport(rows, IS_HEADERS, `income-statement-${stamp}`, format, 'pnlCopyBtn');
 }
 
 function dlBlob(content, filename, mime) {
@@ -931,10 +1576,16 @@ function bsToggleCat(type, ci) {
     renderBsSection(type);
 }
 
-function bsExpandAll() {
+let bsAllExpanded = false;
+function bsToggleExpandAll() {
+    bsAllExpanded = !bsAllExpanded;
+    const btn = document.getElementById('bsExpandBtn');
+    btn.innerHTML = bsAllExpanded
+        ? '<i class="fas fa-compress-alt me-1"></i>Collapse All'
+        : '<i class="fas fa-expand-alt me-1"></i>Expand All';
     ['assets','liabilities'].forEach(type => {
         const data = type === 'assets' ? BS_ASSETS : BS_LIABILITIES;
-        data.forEach((_, i) => { bsState[type][i] = {expanded: true}; });
+        data.forEach((_, i) => { bsState[type][i] = {expanded: bsAllExpanded}; });
         renderBsSection(type);
     });
 }
@@ -944,6 +1595,111 @@ document.querySelector('[data-bs-target="#pane-bs"]')?.addEventListener('shown.b
     renderBsSection('assets');
     renderBsSection('liabilities');
 });
+
+// ── Cash Flow Export ───────────────────────────────────────────────────────
+function cfExport(format) {
+    const stamp = new Date().toISOString().slice(0,10);
+    const CF_HEADERS = [
+        'Period', 'Month', 'Quarter',
+        'Budget In', 'Budget Out', 'Net Budget',
+        'Actual In', 'Actual Out', 'Net Actual', 'Cumulative',
+    ];
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const rows = [];
+
+    // Monthly detail
+    Object.entries(CF_MONTHLY).forEach(([m, d]) => {
+        const mi = parseInt(m);
+        rows.push({
+            Period:        'Monthly',
+            Month:         monthNames[mi - 1],
+            Quarter:       `Q${Math.ceil(mi / 3)}`,
+            'Budget In':   Math.round(d.budget_in),
+            'Budget Out':  Math.round(d.budget_out),
+            'Net Budget':  Math.round(d.net_budget),
+            'Actual In':   Math.round(d.actual_in),
+            'Actual Out':  Math.round(d.actual_out),
+            'Net Actual':  Math.round(d.net_actual),
+            Cumulative:    Math.round(d.cum_actual),
+        });
+    });
+
+    // Blank spacer
+    rows.push(Object.fromEntries(CF_HEADERS.map(h => [h, ''])));
+
+    // Quarterly summary
+    Object.entries(CF_QUARTERLY).forEach(([q, d]) => {
+        rows.push({
+            Period:        'Quarterly',
+            Month:         `Q${q}`,
+            Quarter:       `Q${q}`,
+            'Budget In':   Math.round(d.budget_in),
+            'Budget Out':  Math.round(d.budget_out),
+            'Net Budget':  Math.round(d.net_budget),
+            'Actual In':   Math.round(d.actual_in),
+            'Actual Out':  Math.round(d.actual_out),
+            'Net Actual':  Math.round(d.net_actual),
+            Cumulative:    '',
+        });
+    });
+
+    doExport(rows, CF_HEADERS, `cash-flow-${stamp}`, format, 'cfCopyBtn');
+}
+
+// ── Balance Sheet Export ───────────────────────────────────────────────────
+function bsExport(format) {
+    const stamp = new Date().toISOString().slice(0,10);
+    const BS_HEADERS = ['Account', 'Eff Budget', 'YTD Actual', 'Prev Budget', 'Growth %'];
+    const blank = () => Object.fromEntries(BS_HEADERS.map(h => [h, '']));
+    const rows  = [];
+
+    ['assets', 'liabilities'].forEach(type => {
+        const data  = type === 'assets' ? BS_ASSETS : BS_LIABILITIES;
+        const tot   = BS_TOTALS[type] ?? {};
+        const label = type === 'assets' ? 'ASSETS' : 'LIABILITIES';
+
+        // Section header
+        rows.push({...blank(), Account: label});
+
+        data.forEach(cat => {
+            const t = cat.total;
+            rows.push({
+                Account:        cat.name,
+                'Eff Budget':   t.effective,
+                'YTD Actual':   t.actual,
+                'Prev Budget':  HAS_PREV ? (t.prev_budget ?? '') : '',
+                'Growth %':     HAS_PREV ? (t.growth_pct ?? '') : '',
+            });
+            cat.codes.forEach(r => rows.push({
+                Account:       `  ${r.code} — ${r.name}`,
+                'Eff Budget':  r.effective,
+                'YTD Actual':  r.actual,
+                'Prev Budget': HAS_PREV ? (r.prev_budget ?? '') : '',
+                'Growth %':    HAS_PREV ? (r.growth_pct ?? '') : '',
+            }));
+        });
+
+        rows.push({
+            Account:       `Total ${label}`,
+            'Eff Budget':  tot.effective ?? '',
+            'YTD Actual':  tot.actual ?? '',
+            'Prev Budget': HAS_PREV ? (tot.prev_budget ?? '') : '',
+            'Growth %':    HAS_PREV ? (tot.growth_pct ?? '') : '',
+        });
+        rows.push({...blank()});
+    });
+
+    // Net position
+    rows.push({
+        Account:       'NET ASSETS / (LIABILITIES)',
+        'Eff Budget':  BS_NET.budget,
+        'YTD Actual':  BS_NET.actual,
+        'Prev Budget': HAS_PREV ? BS_NET.prev_budget : '',
+        'Growth %':    '',
+    });
+
+    doExport(rows, BS_HEADERS, `balance-sheet-${stamp}`, format, 'bsCopyBtn');
+}
 </script>
 @endif
 @endsection

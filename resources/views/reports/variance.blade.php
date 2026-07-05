@@ -66,7 +66,7 @@
     </div>
 </form>
 
-{{-- Summary --}}
+{{-- Summary KPI cards --}}
 <div class="row g-3 mb-4">
     <div class="col-md-4">
         <div class="stat-card">
@@ -79,12 +79,11 @@
     </div>
     <div class="col-md-4">
         <div class="stat-card">
-            <div class="stat-accent" style="background:#64748B"></div>
+            <div class="stat-accent" style="background:#10B981"></div>
             <div class="stat-label">Total Actual</div>
             <div class="stat-value" style="font-size:18px">
                 {{ currency() }} {{ number_format($summary['total_actual'],0) }}
             </div>
-            <div class="stat-sub">Actuals module coming soon</div>
         </div>
     </div>
     <div class="col-md-4">
@@ -102,247 +101,499 @@
 </div>
 @else
 
-{{-- Variance horizontal bar chart --}}
-<div class="chart-card mb-4">
-    <div class="chart-title">Variance by Account Code (Top 20)</div>
-    <canvas id="varianceBar" height="140"></canvas>
-</div>
-
-{{-- Pre-compute flat item arrays from varianceData --}}
-@php
-    $varianceCatsData = [];
-    foreach ($varianceData as $catName => $codes) {
-        $items = [];
-        foreach ($codes as $code => $row) {
-            $items[] = [
-                'code'   => $code,
-                'name'   => $row['name'],
-                'orig'   => $row['original'] ?? $row['budget'],
-                'supp'   => $row['supplementary'],
-                'budget' => $row['budget'],
-                'actual' => $row['actual'],
-                'var'    => $row['variance'],
-                'pct'    => $row['pct'],
-            ];
-        }
-        $varianceCatsData[] = ['name' => $catName, 'items' => $items];
-    }
-@endphp
-
-{{-- Search + export toolbar --}}
-<div class="chart-card mb-3">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <i class="fas fa-search text-muted" style="font-size:13px"></i>
-            <input type="text" id="varSearch"
-                   class="form-control form-control-sm"
-                   placeholder="Search code or account name across all categories…"
-                   style="width:340px">
-            <span class="small text-muted" id="varSearchInfo" style="white-space:nowrap"></span>
+{{-- Charts row 1: Budget Type grouped bar + Status donut --}}
+<div class="row g-3 mb-4">
+    <div class="col-md-8">
+        <div class="chart-card h-100">
+            <div class="chart-title">Budget vs Actual by Type</div>
+            <canvas id="typeBar" height="160"></canvas>
         </div>
-        <div class="dropdown">
-            <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                    data-bs-toggle="dropdown" style="font-size:12px">
-                <i class="fas fa-download me-1"></i>Export
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="font-size:13px">
-                <li>
-                    <a class="dropdown-item" href="#" onclick="varExport('csv');return false">
-                        <i class="fas fa-file-csv me-2 text-success"></i>CSV (all codes)
-                    </a>
-                </li>
-                <li>
-                    <a class="dropdown-item" href="#" onclick="varExport('json');return false">
-                        <i class="fas fa-file-code me-2 text-primary"></i>JSON (all codes)
-                    </a>
-                </li>
-                <li><hr class="dropdown-divider my-1"></li>
-                <li>
-                    <a class="dropdown-item" href="#" id="varCopyBtn"
-                       onclick="varExport('copy');return false">
-                        <i class="fas fa-copy me-2 text-muted"></i>Copy (TSV)
-                    </a>
-                </li>
-            </ul>
+    </div>
+    <div class="col-md-4">
+        <div class="chart-card h-100">
+            <div class="chart-title">Variance Status</div>
+            <canvas id="statusDonut" height="160"></canvas>
         </div>
     </div>
 </div>
 
-{{-- Search results container (hidden until user types) --}}
-<div id="varSearchResults" class="chart-card mb-3" style="display:none">
-    <div class="chart-title mb-2" id="varSearchTitle"></div>
+{{-- Charts row 2: Category + Department --}}
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="chart-card h-100">
+            <div class="chart-title">Variance by Category</div>
+            <canvas id="catBar" height="200"></canvas>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="chart-card h-100">
+            <div class="chart-title">Variance by Department</div>
+            <canvas id="deptBar" height="200"></canvas>
+        </div>
+    </div>
+</div>
+
+{{-- Flatten varianceData into a single array with category + budget_type attached --}}
+@php
+    $varAllRows    = [];
+    $varCatNames   = [];
+    $varTypeMap    = []; // budget_type_key => human label
+
+    $budgetTypeLabels = [
+        'revenue'             => 'Revenue',
+        'expense'             => 'Expense',
+        'both'                => 'Revenue & Expense',
+        'capital_expenditure' => 'Capital Expenditure',
+        'assets'              => 'Assets',
+        'liabilities'         => 'Liabilities',
+    ];
+
+    foreach ($varianceData as $catName => $codes) {
+        $varCatNames[] = $catName;
+        foreach ($codes as $code => $row) {
+            $typeKey   = $row['budget_type'] ?? 'expense';
+            $typeLabel = $budgetTypeLabels[$typeKey] ?? ucfirst(str_replace('_', ' ', $typeKey));
+            $varTypeMap[$typeKey] = $typeLabel;
+            $varAllRows[] = [
+                'cat'       => $catName,
+                'type_key'  => $typeKey,
+                'type_label'=> $typeLabel,
+                'code'      => $code,
+                'name'      => $row['name'],
+                'orig'      => $row['original'] ?? $row['budget'],
+                'supp'      => $row['supplementary'],
+                'budget'    => $row['budget'],
+                'actual'    => $row['actual'],
+                'var'       => $row['variance'],
+                'pct'       => $row['pct'],
+            ];
+        }
+    }
+    sort($varCatNames);
+    ksort($varTypeMap);
+@endphp
+
+@push('styles')
+<style>
+.var-check-dd .dropdown-menu {
+    min-width: 220px;
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 8px 0;
+}
+.var-check-dd .dd-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 14px;
+    cursor: pointer;
+    font-size: 12px;
+    color: #374151;
+    white-space: nowrap;
+}
+.var-check-dd .dd-item:hover { background: #F8FAFC; }
+.var-check-dd .dd-item input[type=checkbox] { cursor: pointer; accent-color: #1B2A4A; }
+.var-check-dd .dd-divider { border-top: 1px solid #E2E8F0; margin: 4px 0; }
+.var-check-dd .dd-label-all { font-weight: 700; color: #1B2A4A; }
+.var-filter-badge {
+    display: inline-flex;
+    align-items: center;
+    background: #1B2A4A;
+    color: #fff;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 7px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+</style>
+@endpush
+
+{{-- Combined table card --}}
+<div class="chart-card" id="varianceTableCard">
+
+    {{-- Row 1: title + search + export --}}
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="chart-title mb-0">
+            All Variance Lines
+            <span class="text-muted fw-normal small" id="varRowCount"></span>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                        data-bs-toggle="dropdown" data-bs-auto-close="outside"
+                        style="font-size:12px">
+                    <i class="fas fa-download me-1"></i>Export
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="font-size:13px">
+                    <li>
+                        <a class="dropdown-item" href="#"
+                           onclick="varExport('csv');return false">
+                            <i class="fas fa-file-csv me-2 text-success"></i>CSV (filtered)
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="#"
+                           onclick="varExport('json');return false">
+                            <i class="fas fa-file-code me-2 text-primary"></i>JSON (filtered)
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider my-1"></li>
+                    <li>
+                        <a class="dropdown-item" href="#" id="varCopyBtn"
+                           onclick="varExport('copy');return false">
+                            <i class="fas fa-copy me-2 text-muted"></i>Copy (TSV)
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <input type="text" id="varSearch"
+                   class="form-control form-control-sm"
+                   placeholder="Search code, account or category…"
+                   style="width:260px">
+        </div>
+    </div>
+
+    {{-- Row 2: filter dropdowns + page size --}}
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+
+            {{-- Budget Type dropdown --}}
+            <div class="dropdown var-check-dd">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                        id="typeDdBtn"
+                        data-bs-toggle="dropdown" data-bs-auto-close="outside"
+                        style="font-size:12px">
+                    Budget Type
+                </button>
+                <div class="dropdown-menu shadow-sm" id="typeDdMenu">
+                    <label class="dd-item dd-label-all">
+                        <input type="checkbox" id="typeAll" checked
+                               onchange="handleTypeAll(this)">
+                        All Types
+                    </label>
+                    <div class="dd-divider"></div>
+                    @foreach($varTypeMap as $tKey => $tLabel)
+                    <label class="dd-item">
+                        <input type="checkbox" class="type-cb" value="{{ $tKey }}"
+                               onchange="handleTypeCb()">
+                        {{ $tLabel }}
+                    </label>
+                    @endforeach
+                </div>
+            </div>
+
+            {{-- Category dropdown --}}
+            <div class="dropdown var-check-dd">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                        id="catDdBtn"
+                        data-bs-toggle="dropdown" data-bs-auto-close="outside"
+                        style="font-size:12px">
+                    Category
+                </button>
+                <div class="dropdown-menu shadow-sm" id="catDdMenu">
+                    <label class="dd-item dd-label-all">
+                        <input type="checkbox" id="catAll" checked
+                               onchange="handleCatAll(this)">
+                        All Categories
+                    </label>
+                    <div class="dd-divider"></div>
+                    @foreach($varCatNames as $cn)
+                    <label class="dd-item">
+                        <input type="checkbox" class="cat-cb" value="{{ $cn }}"
+                               onchange="handleCatCb()">
+                        {{ $cn }}
+                    </label>
+                    @endforeach
+                </div>
+            </div>
+
+            {{-- Active filter pills --}}
+            <div id="varActivePills" class="d-flex align-items-center gap-1 flex-wrap"></div>
+
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="small text-muted">Show</span>
+            <select id="varPageSize" class="form-select form-select-sm" style="width:auto"
+                    onchange="varCurrentPage=1;varRender()">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="all">All</option>
+            </select>
+            <span class="small text-muted">per page</span>
+        </div>
+    </div>
+
+    {{-- Table --}}
     <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
-            <thead style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#64748B">
+            <thead style="font-size:11px;text-transform:uppercase;
+                          letter-spacing:.5px;color:var(--slate)">
                 <tr>
                     <th>Code</th>
                     <th>Account</th>
                     <th>Category</th>
-                    <th class="text-end">Original Budget</th>
+                    <th>Type</th>
+                    <th class="text-end">Orig Budget</th>
                     <th class="text-end">Supplementary</th>
                     <th class="text-end">Effective Budget</th>
                     <th class="text-end">Actual</th>
                     <th class="text-end">Variance</th>
-                    <th class="text-end">%</th>
+                    <th class="text-end">Var %</th>
                 </tr>
             </thead>
-            <tbody id="varSearchBody"></tbody>
-        </table>
-    </div>
-</div>
-
-{{-- Category cards — static shells; rows injected by JS --}}
-@foreach($varianceCatsData as $catIndex => $catInfo)
-<div class="chart-card mb-3 var-cat-card" id="var_card_{{ $catIndex }}">
-    <div class="chart-title">{{ $catInfo['name'] }}</div>
-    <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0">
-            <thead style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#64748B">
+            <tbody id="varTableBody"></tbody>
+            <tfoot style="background:#F8FAFC;font-weight:700;font-size:12px">
                 <tr>
-                    <th>Code</th>
-                    <th>Account</th>
-                    <th class="text-end">Original Budget</th>
-                    <th class="text-end">Supplementary</th>
-                    <th class="text-end">Effective Budget</th>
-                    <th class="text-end">Actual</th>
-                    <th class="text-end">Variance</th>
-                    <th class="text-end">%</th>
+                    <td colspan="6">Total (visible)</td>
+                    <td class="text-end" id="varFootBudget"></td>
+                    <td class="text-end" id="varFootActual"></td>
+                    <td class="text-end" id="varFootVar"></td>
+                    <td></td>
                 </tr>
-            </thead>
-            <tbody id="tbody_var_{{ $catIndex }}"></tbody>
+            </tfoot>
         </table>
     </div>
-    <div class="d-flex justify-content-between align-items-center mt-2"
-         id="var_footer_{{ $catIndex }}">
-        <span class="small text-muted" id="var_info_{{ $catIndex }}"></span>
-        <button class="btn btn-sm btn-outline-secondary" style="font-size:12px"
-                id="var_toggle_{{ $catIndex }}"
-                onclick="toggleVarCat({{ $catIndex }})"></button>
+
+    {{-- Pagination --}}
+    <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+        <span class="small text-muted" id="varPageInfo"></span>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary"
+                    id="varPrev" onclick="varPage(-1)">← Prev</button>
+            <button class="btn btn-sm btn-outline-secondary"
+                    id="varNext" onclick="varPage(1)">Next →</button>
+        </div>
     </div>
 </div>
-@endforeach
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-// ── Variance category row renderer ─────────────────────────────────────────
-const VAR_CATS    = @json($varianceCatsData);
-const VAR_INITIAL = 10;
-const varExpanded = new Array(VAR_CATS.length).fill(false);
+// ── Data ───────────────────────────────────────────────────────────────────
+const VAR_ROWS = @json($varAllRows);
+const TYPE_LABELS = @json($varTypeMap);      // { expense: 'Expense', ... }
 
-function numFmt2(n) {
-    return Number(n ?? 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// ── State ──────────────────────────────────────────────────────────────────
+let varSelTypes    = new Set();  // empty = all
+let varSelCats     = new Set();  // empty = all
+let varSearchTerm  = '';
+let varCurrentPage = 1;
+
+// ── Filter helpers ──────────────────────────────────────────────────────────
+function getFiltered() {
+    const q = varSearchTerm.toLowerCase();
+    return VAR_ROWS.filter(r => {
+        const typeOk   = varSelTypes.size === 0 || varSelTypes.has(r.type_key);
+        const catOk    = varSelCats.size  === 0 || varSelCats.has(r.cat);
+        const termOk   = !q ||
+            r.code.toLowerCase().includes(q) ||
+            r.name.toLowerCase().includes(q) ||
+            r.cat.toLowerCase().includes(q) ||
+            r.type_label.toLowerCase().includes(q);
+        return typeOk && catOk && termOk;
+    });
+}
+
+// ── Budget type checkbox handlers ──────────────────────────────────────────
+function handleTypeAll(el) {
+    document.querySelectorAll('.type-cb').forEach(cb => cb.checked = false);
+    varSelTypes.clear();
+    varCurrentPage = 1;
+    updateTypeBtnLabel();
+    updatePills();
+    varRender();
+}
+function handleTypeCb() {
+    const checked = [...document.querySelectorAll('.type-cb:checked')];
+    varSelTypes   = new Set(checked.map(cb => cb.value));
+    document.getElementById('typeAll').checked = varSelTypes.size === 0;
+    varCurrentPage = 1;
+    updateTypeBtnLabel();
+    updatePills();
+    varRender();
+}
+
+// ── Category checkbox handlers ─────────────────────────────────────────────
+function handleCatAll(el) {
+    document.querySelectorAll('.cat-cb').forEach(cb => cb.checked = false);
+    varSelCats.clear();
+    varCurrentPage = 1;
+    updateCatBtnLabel();
+    updatePills();
+    varRender();
+}
+function handleCatCb() {
+    const checked = [...document.querySelectorAll('.cat-cb:checked')];
+    varSelCats    = new Set(checked.map(cb => cb.value));
+    document.getElementById('catAll').checked = varSelCats.size === 0;
+    varCurrentPage = 1;
+    updateCatBtnLabel();
+    updatePills();
+    varRender();
+}
+
+// ── Button label updaters ──────────────────────────────────────────────────
+function updateTypeBtnLabel() {
+    const btn = document.getElementById('typeDdBtn');
+    if (varSelTypes.size === 0) {
+        btn.innerHTML = 'Budget Type';
+    } else {
+        btn.innerHTML = `Budget Type <span class="var-filter-badge">${varSelTypes.size}</span>`;
+    }
+}
+function updateCatBtnLabel() {
+    const btn = document.getElementById('catDdBtn');
+    if (varSelCats.size === 0) {
+        btn.innerHTML = 'Category';
+    } else {
+        btn.innerHTML = `Category <span class="var-filter-badge">${varSelCats.size}</span>`;
+    }
+}
+
+// ── Active filter pills ────────────────────────────────────────────────────
+function updatePills() {
+    const container = document.getElementById('varActivePills');
+    container.innerHTML = '';
+
+    varSelTypes.forEach(t => {
+        const label = TYPE_LABELS[t] || t;
+        const pill  = document.createElement('span');
+        pill.style.cssText = `display:inline-flex;align-items:center;gap:4px;
+            background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;
+            border-radius:12px;font-size:11px;font-weight:600;padding:2px 8px;
+            cursor:pointer;white-space:nowrap`;
+        pill.innerHTML = `${label} <span style="opacity:.7">×</span>`;
+        pill.onclick   = () => {
+            document.querySelector(`.type-cb[value="${t}"]`).checked = false;
+            handleTypeCb();
+        };
+        container.appendChild(pill);
+    });
+
+    varSelCats.forEach(c => {
+        const pill = document.createElement('span');
+        pill.style.cssText = `display:inline-flex;align-items:center;gap:4px;
+            background:#F0FDF4;color:#15803D;border:1px solid #BBF7D0;
+            border-radius:12px;font-size:11px;font-weight:600;padding:2px 8px;
+            cursor:pointer;white-space:nowrap`;
+        pill.innerHTML = `${c} <span style="opacity:.7">×</span>`;
+        pill.onclick   = () => {
+            document.querySelector(`.cat-cb[value="${CSS.escape(c)}"]`).checked = false;
+            handleCatCb();
+        };
+        container.appendChild(pill);
+    });
+}
+
+// ── Row builder ────────────────────────────────────────────────────────────
+function numFmt(n) {
+    return Number(n ?? 0).toLocaleString('en-GH', {
+        minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
 }
 function esc(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function buildVarRow(r, withCat) {
+function buildRow(r) {
     const suppCell = r.supp > 0
-        ? `<td class="text-end" style="color:#92400E">+${numFmt2(r.supp)}</td>`
-        : `<td class="text-end">—</td>`;
-    // negative variance (actual > budget) = bad = red; positive = good = green
+        ? `<td class="text-end" style="color:#92400E">+${numFmt(r.supp)}</td>`
+        : `<td class="text-end text-muted">—</td>`;
     const varColor = r.var < 0 ? '#F43F5E' : '#10B981';
-    const catCell  = withCat ? `<td class="small text-muted">${esc(r._cat)}</td>` : '';
     return `<tr>
-        <td><code>${esc(r.code)}</code></td>
-        <td>${esc(r.name)}</td>
-        ${catCell}
-        <td class="text-end">${numFmt2(r.orig)}</td>
+        <td><code style="font-size:11px;font-weight:700;color:#1B2A4A">${esc(r.code)}</code></td>
+        <td class="small fw-semibold">${esc(r.name)}</td>
+        <td>
+            <span style="font-size:10px;background:#F1F5F9;color:#475569;
+                         border-radius:10px;padding:2px 8px;white-space:nowrap">
+                ${esc(r.cat)}
+            </span>
+        </td>
+        <td>
+            <span style="font-size:10px;background:#EFF6FF;color:#1D4ED8;
+                         border-radius:10px;padding:2px 8px;white-space:nowrap">
+                ${esc(r.type_label)}
+            </span>
+        </td>
+        <td class="text-end small text-muted">${numFmt(r.orig)}</td>
         ${suppCell}
-        <td class="text-end fw-bold">${numFmt2(r.budget)}</td>
-        <td class="text-end">${numFmt2(r.actual)}</td>
-        <td class="text-end" style="color:${varColor}">${r.var > 0 ? '+' : ''}${numFmt2(r.var)}</td>
-        <td class="text-end" style="color:${varColor}">${r.pct > 0 ? '+' : ''}${r.pct}%</td>
+        <td class="text-end small fw-semibold">${numFmt(r.budget)}</td>
+        <td class="text-end small" style="color:#10B981">${numFmt(r.actual)}</td>
+        <td class="text-end small fw-semibold" style="color:${varColor}">
+            ${r.var > 0 ? '+' : ''}${numFmt(r.var)}
+        </td>
+        <td class="text-end small fw-semibold" style="color:${varColor}">
+            ${r.pct > 0 ? '+' : ''}${r.pct}%
+        </td>
     </tr>`;
 }
 
-function renderVarCat(idx) {
-    const cat      = VAR_CATS[idx];
-    const expanded = varExpanded[idx];
-    const items    = cat.items;
-    const shown    = expanded ? items : items.slice(0, VAR_INITIAL);
+// ── Render ─────────────────────────────────────────────────────────────────
+function varRender() {
+    const filtered = getFiltered();
+    const pageSzEl = document.getElementById('varPageSize');
+    const pageSz   = pageSzEl.value === 'all' ? Infinity : parseInt(pageSzEl.value);
+    const total    = filtered.length;
+    const pages    = pageSz === Infinity ? 1 : Math.max(1, Math.ceil(total / pageSz));
 
-    document.getElementById(`tbody_var_${idx}`).innerHTML =
-        shown.length
-            ? shown.map(r => buildVarRow(r, false)).join('')
-            : '<tr><td colspan="8" class="text-muted text-center py-3">No items.</td></tr>';
+    if (varCurrentPage > pages) varCurrentPage = 1;
 
-    const footer   = document.getElementById(`var_footer_${idx}`);
-    const infoEl   = document.getElementById(`var_info_${idx}`);
-    const toggleEl = document.getElementById(`var_toggle_${idx}`);
+    const start = pageSz === Infinity ? 0 : (varCurrentPage - 1) * pageSz;
+    const end   = pageSz === Infinity ? total : Math.min(start + pageSz, total);
+    const slice = filtered.slice(start, end);
 
-    if (items.length <= VAR_INITIAL) {
-        footer.style.display = 'none';
-    } else {
-        footer.style.display = '';
-        infoEl.textContent   = expanded
-            ? `All ${items.length} items shown`
-            : `Showing ${VAR_INITIAL} of ${items.length} items`;
-        toggleEl.textContent = expanded
-            ? 'Show less'
-            : `Show all ${items.length} items`;
-    }
+    document.getElementById('varTableBody').innerHTML =
+        slice.length
+            ? slice.map(buildRow).join('')
+            : '<tr><td colspan="10" class="text-center text-muted py-4">No matching lines.</td></tr>';
+
+    // Footer totals
+    const fBudget = slice.reduce((s, r) => s + Number(r.budget), 0);
+    const fActual = slice.reduce((s, r) => s + Number(r.actual), 0);
+    const fVar    = slice.reduce((s, r) => s + Number(r.var),    0);
+    document.getElementById('varFootBudget').textContent =
+        '{{ currency() }} ' + numFmt(fBudget);
+    document.getElementById('varFootActual').style.color  = '#10B981';
+    document.getElementById('varFootActual').textContent  =
+        '{{ currency() }} ' + numFmt(fActual);
+    document.getElementById('varFootVar').style.color    = fVar < 0 ? '#F43F5E' : '#10B981';
+    document.getElementById('varFootVar').textContent    =
+        (fVar >= 0 ? '+' : '') + '{{ currency() }} ' + numFmt(fVar);
+
+    document.getElementById('varRowCount').textContent =
+        total > 0 ? `— ${total} line${total !== 1 ? 's' : ''}` : '';
+    document.getElementById('varPageInfo').textContent =
+        pageSz === Infinity
+            ? `Showing all ${total} lines`
+            : `Showing ${total === 0 ? 0 : start + 1}–${end} of ${total}`;
+
+    document.getElementById('varPrev').disabled = varCurrentPage <= 1;
+    document.getElementById('varNext').disabled = varCurrentPage >= pages;
 }
 
-function toggleVarCat(idx) {
-    varExpanded[idx] = !varExpanded[idx];
-    renderVarCat(idx);
+function varPage(dir) {
+    varCurrentPage += dir;
+    varRender();
 }
 
-VAR_CATS.forEach((_, i) => renderVarCat(i));
-
-// ── Global search ──────────────────────────────────────────────────────────
-document.getElementById('varSearch').addEventListener('input', function () {
-    const q          = this.value.trim().toLowerCase();
-    const catCards   = document.querySelectorAll('.var-cat-card');
-    const resultsDiv = document.getElementById('varSearchResults');
-    const infoEl     = document.getElementById('varSearchInfo');
-
-    if (!q) {
-        catCards.forEach(el => el.style.display = '');
-        resultsDiv.style.display = 'none';
-        infoEl.textContent = '';
-        return;
-    }
-
-    catCards.forEach(el => el.style.display = 'none');
-    resultsDiv.style.display = '';
-
-    const matches = [];
-    VAR_CATS.forEach(cat => {
-        cat.items.forEach(r => {
-            if (r.code.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)) {
-                matches.push({ ...r, _cat: cat.name });
-            }
-        });
-    });
-
-    document.getElementById('varSearchTitle').textContent =
-        `${matches.length} result${matches.length !== 1 ? 's' : ''} for "${this.value}"`;
-    infoEl.textContent = `${matches.length} match${matches.length !== 1 ? 'es' : ''}`;
-
-    document.getElementById('varSearchBody').innerHTML =
-        matches.length
-            ? matches.map(r => buildVarRow(r, true)).join('')
-            : '<tr><td colspan="9" class="text-center text-muted py-4">No matching codes found.</td></tr>';
+document.getElementById('varSearch').addEventListener('input', function() {
+    varSearchTerm  = this.value.trim();
+    varCurrentPage = 1;
+    varRender();
 });
+
+// Initial render
+varRender();
 
 // ── Export ─────────────────────────────────────────────────────────────────
 function varExport(format) {
-    const q = document.getElementById('varSearch').value.trim().toLowerCase();
-    const rows = [];
-    VAR_CATS.forEach(cat => {
-        cat.items.forEach(r => {
-            if (!q || r.code.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)) {
-                rows.push({ ...r, category: cat.name });
-            }
-        });
-    });
-
-    const headers = ['Category','Code','Account','Original Budget','Supplementary',
-                     'Effective Budget','Actual','Variance','Variance %'];
-    const rowData = r => [r.category, r.code, r.name, r.orig, r.supp,
-                          r.budget, r.actual, r.var, r.pct];
+    const rows    = getFiltered();
+    const headers = ['Category','Budget Type','Code','Account','Original Budget',
+                     'Supplementary','Effective Budget','Actual','Variance','Variance %'];
+    const rowData = r => [r.cat, r.type_label, r.code, r.name,
+                          r.orig, r.supp, r.budget, r.actual, r.var, r.pct];
     const stamp   = new Date().toISOString().slice(0, 10);
 
     if (format === 'csv') {
@@ -379,50 +630,172 @@ function dlBlob(content, filename, mime) {
     document.body.removeChild(a);
 }
 
-// ── Chart.js ───────────────────────────────────────────────────────────────
+// ── Shared helpers ─────────────────────────────────────────────────────────
+const NAVY    = '#1B2A4A';
+const EMERALD = '#10B981';
+const SLATE   = '#64748B';
+
+function fmtK(v) {
+    v = Number(v);
+    return v >= 1e6  ? (v/1e6).toFixed(1)+'M'
+         : v >= 1000 ? (v/1000).toFixed(0)+'K'
+         : v.toFixed(0);
+}
+
+const scaleY = {
+    beginAtZero: true,
+    grid: { color: '#F1F5F9' },
+    ticks: { font:{ size:10 }, callback: fmtK }
+};
+const scaleYH = {   // for horizontal charts (index axis = y)
+    grid: { display: false },
+    ticks: { font:{ size:10 } }
+};
+const scaleXH = {
+    beginAtZero: true,
+    grid: { color: '#F1F5F9' },
+    ticks: { font:{ size:10 }, callback: fmtK }
+};
+
+// ── 1. Budget vs Actual by Type (grouped vertical bar) ────────────────────
 @php
-    $allRows = [];
-    foreach($varianceData as $cat => $codes) {
-        foreach($codes as $code => $row) {
-            $allRows[] = ['code'=>$code,'variance'=>$row['variance'],'budget'=>$row['budget']];
-        }
-    }
-    usort($allRows, fn($a,$b) => abs($b['variance']) <=> abs($a['variance']));
-    $top20 = array_slice($allRows, 0, 20);
+    $typeKeys     = array_keys($typeSummary);
+    $typeLabelsJs = array_column($typeSummary, 'label');
+    $typeBudgets  = array_column($typeSummary, 'budget');
+    $typeActuals  = array_column($typeSummary, 'actual');
 @endphp
-new Chart(document.getElementById('varianceBar'), {
+new Chart(document.getElementById('typeBar'), {
     type: 'bar',
     data: {
-        labels: {!! json_encode(array_column($top20,'code')) !!},
+        labels: {!! json_encode($typeLabelsJs) !!},
         datasets: [
             {
                 label: 'Budget',
-                data:  {!! json_encode(array_column($top20,'budget')) !!},
-                backgroundColor: '#E2E8F0',
+                data:  {!! json_encode($typeBudgets) !!},
+                backgroundColor: NAVY,
                 borderRadius: 4, borderSkipped: false,
             },
             {
-                label: 'Variance',
-                data:  {!! json_encode(array_column($top20,'variance')) !!},
-                backgroundColor: {!! json_encode(array_map(
-                    fn($r) => $r['variance'] < 0 ? '#FCA5A5' : '#6EE7B7',
-                    $top20
-                )) !!},
+                label: 'Actual',
+                data:  {!! json_encode($typeActuals) !!},
+                backgroundColor: EMERALD,
                 borderRadius: 4, borderSkipped: false,
-            }
+            },
         ]
     },
     options: {
-        responsive:true,
-        plugins:{ legend:{ position:'top', labels:{font:{size:11},boxWidth:12} } },
-        scales:{
-            y:{ beginAtZero:true, grid:{color:'#F1F5F9'},
-                ticks:{ font:{size:11},
-                    callback:v=>v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000).toFixed(0)+'K':v
+        responsive: true,
+        plugins: {
+            legend: { position:'top', labels:{ font:{size:11}, boxWidth:12 } },
+            tooltip: {
+                callbacks: {
+                    label: ctx => ` ${ctx.dataset.label}: {{ currency() }} ${ctx.parsed.y.toLocaleString()}`
                 }
-            },
-            x:{ grid:{display:false}, ticks:{font:{size:10}} }
+            }
+        },
+        scales: { y: scaleY, x: { grid:{ display:false }, ticks:{ font:{size:11} } } }
+    }
+});
+
+// ── 2. Variance Status donut ───────────────────────────────────────────────
+new Chart(document.getElementById('statusDonut'), {
+    type: 'doughnut',
+    data: {
+        labels: ['Underspend / Favorable', 'On Budget', 'Overspend / Unfavorable'],
+        datasets: [{
+            data: [
+                {{ $summary['underspend'] }},
+                {{ $summary['on_budget'] }},
+                {{ $summary['overspend'] }},
+            ],
+            backgroundColor: ['#6EE7B7', '#CBD5E1', '#FCA5A5'],
+            borderWidth: 2,
+            borderColor: '#fff',
+            hoverOffset: 6,
+        }]
+    },
+    options: {
+        cutout: '62%',
+        plugins: {
+            legend: { position:'bottom', labels:{ font:{size:11}, padding:10, boxWidth:10 } },
+            tooltip: {
+                callbacks: {
+                    label: ctx => ` ${ctx.label}: ${ctx.parsed} line${ctx.parsed !== 1 ? 's' : ''}`
+                }
+            }
         }
+    }
+});
+
+// ── 3. Variance by Category (horizontal bar) ──────────────────────────────
+@php
+    $catNames     = array_keys($catSummary);
+    $catVariances = array_column($catSummary, 'variance');
+    $catBgColors  = array_map(fn($v) => $v < 0 ? '#FCA5A5' : '#6EE7B7', $catSummary);
+@endphp
+new Chart(document.getElementById('catBar'), {
+    type: 'bar',
+    indexAxis: 'y',
+    data: {
+        labels: {!! json_encode($catNames) !!},
+        datasets: [{
+            label: 'Variance',
+            data:  {!! json_encode($catVariances) !!},
+            backgroundColor: {!! json_encode(array_values($catBgColors)) !!},
+            borderRadius: 4,
+            borderSkipped: false,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                callbacks: {
+                    label: ctx => {
+                        const v = ctx.parsed.x;
+                        return ` ${v >= 0 ? 'Underspend' : 'Overspend'}: {{ currency() }} ${Math.abs(v).toLocaleString()}`;
+                    }
+                }
+            }
+        },
+        scales: { y: scaleYH, x: scaleXH }
+    }
+});
+
+// ── 4. Variance by Department (horizontal bar) ────────────────────────────
+@php
+    $deptNames     = array_keys($deptSummary);
+    $deptVariances = array_column($deptSummary, 'variance');
+    $deptBgColors  = array_map(fn($v) => $v < 0 ? '#FCA5A5' : '#6EE7B7', $deptSummary);
+@endphp
+new Chart(document.getElementById('deptBar'), {
+    type: 'bar',
+    indexAxis: 'y',
+    data: {
+        labels: {!! json_encode($deptNames) !!},
+        datasets: [{
+            label: 'Variance',
+            data:  {!! json_encode($deptVariances) !!},
+            backgroundColor: {!! json_encode(array_values($deptBgColors)) !!},
+            borderRadius: 4,
+            borderSkipped: false,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                callbacks: {
+                    label: ctx => {
+                        const v = ctx.parsed.x;
+                        return ` ${v >= 0 ? 'Underspend' : 'Overspend'}: {{ currency() }} ${Math.abs(v).toLocaleString()}`;
+                    }
+                }
+            }
+        },
+        scales: { y: scaleYH, x: scaleXH }
     }
 });
 </script>
