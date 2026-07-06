@@ -20,7 +20,8 @@
       "PowerShell(php -l app/Exports/BudgetReadOnlyExport.php)",
       "PowerShell(php -l app/Http/Controllers/Reports/ReportController.php 2>&1)",
       "PowerShell(php -l app/Exports/AccountCategoryExport.php)",
-      "PowerShell(php -l app/Imports/AccountCategoryImport.php 2>&1)"
+      "PowerShell(php -l app/Imports/AccountCategoryImport.php 2>&1)",
+      "Bash(php -r \"require 'vendor/autoload.php'; echo 'autoload ok';\")"
     ]
   }
 }

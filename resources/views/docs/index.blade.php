@@ -197,6 +197,8 @@
       <a class="docs-nav-link" href="#admin-periods">Budget Periods</a>
       <a class="docs-nav-link" href="#admin-approval-stages">Approval Stages</a>
       <a class="docs-nav-link" href="#admin-settings">System Settings</a>
+      <a class="docs-nav-link" href="#admin-pnl-layout">P&amp;L Layout</a>
+      <a class="docs-nav-link" href="#admin-bs-layout">BS Layout</a>
       <a class="docs-nav-link" href="#admin-audit">Audit Log</a>
       <a class="docs-nav-link" href="#admin-backups">Backups</a>
       <a class="docs-nav-link" href="#admin-overrides">Deadline Overrides</a>
@@ -650,6 +652,164 @@
       <div class="doc-title">System Settings</div>
       <div class="doc-lead">System-wide behaviour is controlled from Admin → Settings. All changes are immediately applied and recorded in the audit log.</div>
       <p>Settings are grouped into four sections: <strong>General</strong>, <strong>Budget</strong>, <strong>Notifications</strong>, and <strong>Security</strong>. See the <a href="#settings-ref">Settings Reference</a> below for a complete list of keys and their defaults.</p>
+    </div>
+    <hr class="docs-divider">
+
+    {{-- P&L Configurable Layout ────────────────────────── --}}
+    <div class="doc-section" id="admin-pnl-layout">
+      <div class="doc-eyebrow">Admin Guide</div>
+      <div class="doc-title">P&amp;L Configurable Layout</div>
+      <div class="doc-lead">Design a custom income-statement structure that controls how the Financial Statement P&amp;L tab renders budget, actual, and prior-year figures. When an active layout exists, the report renders your layout instead of the default grouped view.</div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Data hierarchy</div>
+        <p>Understanding the three-tier account hierarchy is essential before building a layout:</p>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>Tier</th><th>Example</th><th>Role in layout</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Account Sub-Category</strong></td><td>Petroleum Sales, Staff Costs</td><td>The unit you add to a layout row. Groups one or more account categories.</td></tr>
+              <tr><td><strong>Account Category</strong></td><td>Fuel Sales, Salaries</td><td>Belongs to one sub-category. Shown when a sub-category row is expanded in the report.</td></tr>
+              <tr><td><strong>Account Code</strong></td><td>4001 – Petrol, 5010 – Basic Salary</td><td>The leaf level. Shown under its parent category when expanded.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="doc-note">A sub-category row in the layout aggregates the budget/actual totals of all account codes that belong to any category under it.</div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Setting up a layout</div>
+        <div class="wf">
+          <div class="wf-step"><div class="wf-box"><div class="wf-num">Step 1</div><div class="wf-label">Open P&amp;L Layout</div><div class="wf-sub">Admin → P&amp;L Layout</div></div></div>
+          <div class="wf-step"><div class="wf-box"><div class="wf-num">Step 2</div><div class="wf-label">Create layout</div><div class="wf-sub">Give it a name</div></div></div>
+          <div class="wf-step"><div class="wf-box"><div class="wf-num">Step 3</div><div class="wf-label">Add lines</div><div class="wf-sub">Sub-category, subtotal, or spacer</div></div></div>
+          <div class="wf-step wf-done"><div class="wf-box"><div class="wf-num">Step 4</div><div class="wf-label">Activate</div><div class="wf-sub">Report uses the layout</div></div></div>
+        </div>
+        <p>Only one layout may be active at a time. Activating a new layout automatically deactivates the previous one.</p>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Line types</div>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>Type</th><th>What it does</th><th>Configuration</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="db db-blue">Sub-Category</span></td>
+                <td>Displays the aggregated budget and actual totals for one account sub-category. Clickable in the report to expand into account categories and their code items.</td>
+                <td><strong>Sub-category</strong> (required) · <strong>Operator</strong>: Add or Less · <strong>Label</strong> (optional override) · <strong>CS% base</strong> toggle</td>
+              </tr>
+              <tr>
+                <td><span class="db db-gold">Subtotal</span></td>
+                <td>Computes and displays the running total of all Add lines minus all Less lines since the previous subtotal (or the start of the layout). Renders in a highlighted row.</td>
+                <td><strong>Label</strong> (e.g. "Gross Profit", "Net Income")</td>
+              </tr>
+              <tr>
+                <td><span class="db db-slate">Spacer</span></td>
+                <td>A blank row for visual breathing room between sections. No data displayed.</td>
+                <td>None</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Operator: Add vs. Less</div>
+        <p>Each sub-category row carries an operator that controls its contribution to the next subtotal:</p>
+        <ul>
+          <li><strong>Add</strong> — the sub-category total is added to the running sum (typical for revenue lines).</li>
+          <li><strong>Less</strong> — the sub-category total is subtracted from the running sum (typical for expense lines).</li>
+        </ul>
+        <p>A subtotal row shows: <em>sum of all Add lines above it − sum of all Less lines above it</em>, since the previous subtotal.</p>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">CS% base</div>
+        <p>Marking a sub-category row as the <strong>CS% base</strong> designates it as the denominator for Cost-of-Sales percentage calculations. Subtotal rows will display the CS% figure alongside the monetary total, computed as: <em>subtotal ÷ CS% base × 100</em>.</p>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Editing and reordering lines</div>
+        <p>Drag the <strong>⠿</strong> handle to reorder any line. Click the <strong>pencil icon</strong> on a sub-category or subtotal row to open an inline edit panel where you can change the sub-category, operator, or label without deleting and recreating the row.</p>
+        <div class="doc-tip">Reordering lines in the editor immediately affects which codes are included in each running subtotal — review the layout on the report after making structural changes.</div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">In the report</div>
+        <p>When the P&amp;L tab of the Financial Statement report loads and an active layout exists:</p>
+        <ul>
+          <li>Each sub-category row shows budget, actual, previous-year budget, and variance columns.</li>
+          <li>Subtotal rows display the computed running total in a highlighted band.</li>
+          <li><strong>Click any sub-category row</strong> to expand it — the report inserts the account categories under that sub-category and their individual account code items inline, showing each code's budget and actual figures.</li>
+          <li>Click the row again to collapse it.</li>
+          <li>Use <strong>Expand All / Collapse All</strong> in the toolbar to toggle every sub-category at once.</li>
+          <li>Use <strong>Export CSV</strong> to download the full layout including all expanded code items.</li>
+        </ul>
+      </div>
+    </div>
+    <hr class="docs-divider">
+
+    {{-- Balance Sheet Configurable Layout ──────────────── --}}
+    <div class="doc-section" id="admin-bs-layout">
+      <div class="doc-eyebrow">Admin Guide</div>
+      <div class="doc-title">Balance Sheet Configurable Layout</div>
+      <div class="doc-lead">Design a custom balance sheet structure that controls how the Financial Statement Balance Sheet tab renders asset and liability figures. The feature mirrors the P&amp;L layout system but operates across two independent sections — Assets and Liabilities.</div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Two-section model</div>
+        <p>The balance sheet maintains two separate running totals:</p>
+        <ul>
+          <li><strong>Assets</strong> — sub-categories whose account sub-category <span class="sk">budget_type</span> is <em>assets</em>.</li>
+          <li><strong>Liabilities</strong> — sub-categories whose account sub-category <span class="sk">budget_type</span> is <em>liabilities</em>.</li>
+        </ul>
+        <p>The report footer always shows <strong>Total Assets</strong>, <strong>Total Liabilities</strong>, and <strong>Net Assets/(Liabilities)</strong> (Total Assets minus Total Liabilities) regardless of how many subtotal rows the layout contains.</p>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Setting up a layout</div>
+        <p>Go to <strong>Admin → BS Layout</strong> and follow the same four-step process as the P&amp;L layout. The line type palette is identical — sub-category, subtotal, and spacer — with one key difference: subtotal rows require an explicit <strong>section</strong> choice.</p>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Line type differences vs. P&amp;L</div>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>Line type</th><th>BS-specific behaviour</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="db db-blue">Sub-Category</span></td>
+                <td>The section badge (ASSETS / LIABILITIES) is derived automatically from the chosen sub-category's <span class="sk">budget_type</span>. No operator field — all sub-category lines are additive within their section. The section badge updates automatically when you change the sub-category in the inline editor.</td>
+              </tr>
+              <tr>
+                <td><span class="db db-gold">Subtotal</span></td>
+                <td>Requires an explicit <strong>Section</strong> selection (Assets or Liabilities) that determines which running total the row displays. This allows you to insert named sub-totals within either section (e.g. "Total Non-Current Assets", "Total Current Liabilities") before the overall footer totals.</td>
+              </tr>
+              <tr>
+                <td><span class="db db-slate">Spacer</span></td>
+                <td>Identical to P&amp;L.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">In the report</div>
+        <p>When the Balance Sheet tab loads with an active layout:</p>
+        <ul>
+          <li>Asset sub-category rows are accented in blue; liability rows in red.</li>
+          <li>Subtotal rows are colour-coded by section (blue for assets, red for liabilities).</li>
+          <li><strong>Click any sub-category row</strong> to expand it — account categories and their code items appear inline, showing budget and actual figures for each code. Single click expands both categories and codes together.</li>
+          <li>Expand All / Collapse All and Export CSV work identically to the P&amp;L layout view.</li>
+        </ul>
+        <div class="doc-warning">When exporting the balance sheet to CSV, subtotal row labels are written as plain text. Do not prefix labels with <strong>=</strong>, <strong>+</strong>, or <strong>-</strong> as spreadsheet applications may interpret these as formulas.</div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Data hierarchy (same as P&amp;L)</div>
+        <p>Balance sheet account codes are organised in the same three-tier hierarchy: <strong>Account Sub-Category → Account Category → Account Code</strong>. Assign account codes of type <span class="db db-purple">Assets / Liabilities</span> to the relevant categories, then assign those categories to sub-categories, before building the BS layout.</p>
+      </div>
     </div>
     <hr class="docs-divider">
 

@@ -10,6 +10,8 @@ use App\Http\Controllers\Admin\AccountCodeController;
 use App\Http\Controllers\Admin\AccountCategoryController;
 use App\Http\Controllers\Admin\AccountSubCategoryController;
 use App\Http\Controllers\Admin\IncomeStatementConfigController;
+use App\Http\Controllers\Admin\BalanceSheetConfigController;
+use App\Http\Controllers\Admin\CapexConfigController;
 use App\Http\Controllers\Admin\BudgetPeriodController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\SystemSettingController;
@@ -74,6 +76,16 @@ Route::middleware('auth')->group(function () {
         Route::resource('income-statement-configs', IncomeStatementConfigController::class)->except('show');
         Route::post('income-statement-configs/{incomeStatementConfig}/activate',   [IncomeStatementConfigController::class, 'activate'])->name('income-statement-configs.activate');
         Route::post('income-statement-configs/{incomeStatementConfig}/deactivate', [IncomeStatementConfigController::class, 'deactivate'])->name('income-statement-configs.deactivate');
+
+        // Balance sheet layout configuration
+        Route::resource('balance-sheet-configs', BalanceSheetConfigController::class)->except('show');
+        Route::post('balance-sheet-configs/{balanceSheetConfig}/activate',   [BalanceSheetConfigController::class, 'activate'])->name('balance-sheet-configs.activate');
+        Route::post('balance-sheet-configs/{balanceSheetConfig}/deactivate', [BalanceSheetConfigController::class, 'deactivate'])->name('balance-sheet-configs.deactivate');
+
+        // CapEx layout configuration
+        Route::resource('capex-configs', CapexConfigController::class)->except('show');
+        Route::post('capex-configs/{capexConfig}/activate',   [CapexConfigController::class, 'activate'])->name('capex-configs.activate');
+        Route::post('capex-configs/{capexConfig}/deactivate', [CapexConfigController::class, 'deactivate'])->name('capex-configs.deactivate');
 
         // Account sub-categories, categories & codes
         Route::resource('account-sub-categories', AccountSubCategoryController::class);

@@ -48,7 +48,330 @@
     </div>
 </form>
 
-@if(!$period || !$capex || empty($capex['sections']))
+@if(!$period)
+<div class="chart-card text-center py-5 text-muted">
+    <i class="fas fa-hard-hat fa-2x mb-3 opacity-25"></i>
+    <p class="mb-1">No Capital Expenditure budget data for this period.</p>
+    <p class="small">Add account categories with type <strong>Capital Expenditure</strong> to populate this report.</p>
+</div>
+
+{{-- ══ Configured CapEx layout ══ --}}
+@elseif($configuredCapex)
+@php
+    $ct      = $capex ? $capex['totals'] : ['effective'=>0,'actual'=>0,'prev_actual'=>0,'growth_pct'=>null];
+    $hasPrev = $prevPeriod !== null;
+    $colCount = $hasPrev ? 4 : 2;
+@endphp
+
+{{-- KPI strip --}}
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-accent" style="background:#1B2A4A"></div>
+            <div class="stat-label">Total CapEx Budget</div>
+            <div class="stat-value" style="font-size:16px">{{ currency() }} {{ number_format($ct['effective'], 0) }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-accent" style="background:#E65C00"></div>
+            <div class="stat-label">YTD Actual Spend</div>
+            <div class="stat-value" style="font-size:16px">{{ currency() }} {{ number_format($ct['actual'], 0) }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            @php
+                $util = $ct['effective'] > 0 ? round($ct['actual'] / $ct['effective'] * 100, 1) : 0;
+                $utc  = $util > 90 ? '#F43F5E' : ($util > 70 ? '#F59E0B' : '#10B981');
+            @endphp
+            <div class="stat-accent" style="background:{{ $utc }}"></div>
+            <div class="stat-label">Budget Utilisation</div>
+            <div class="stat-value" style="font-size:16px;color:{{ $utc }}">{{ $util }}%</div>
+        </div>
+    </div>
+    @if($hasPrev)
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-accent" style="background:#6D28D9"></div>
+            <div class="stat-label">Prior Year ({{ $prevPeriod->name }})</div>
+            <div class="stat-value" style="font-size:16px">{{ currency() }} {{ number_format($ct['prev_actual'], 0) }}</div>
+            <div class="stat-sub">
+                @if($ct['growth_pct'] !== null)
+                    Growth: {{ $ct['growth_pct'] >= 0 ? '+' : '' }}{{ $ct['growth_pct'] }}%
+                @else vs prior
+                @endif
+            </div>
+        </div>
+    </div>
+    @endif
+</div>
+
+<div class="chart-card">
+    {{-- Toolbar --}}
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="d-flex gap-3 flex-wrap align-items-center" style="font-size:11px">
+            @if($hasPrev)
+            <span class="badge" style="background:#FFF7ED;color:#C2410C;font-weight:500">Current: {{ $period->name }}</span>
+            <span class="badge" style="background:#F5F3FF;color:#6D28D9;font-weight:500">Prior: {{ $prevPeriod->name }}</span>
+            @endif
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="ccxExpandAll()" style="font-size:12px">
+                <i class="fas fa-expand-alt me-1"></i>Expand All
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="ccxCollapseAll()" style="font-size:12px">
+                <i class="fas fa-compress-alt me-1"></i>Collapse All
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="ccxExport()" style="font-size:12px">
+                <i class="fas fa-file-csv me-1"></i>Export CSV
+            </button>
+        </div>
+    </div>
+
+    {{-- Configured CapEx Table --}}
+    <div class="table-responsive" style="max-height:70vh;overflow-y:auto">
+    <table class="table table-sm mb-0" id="ccxTable" style="min-width:800px">
+        <thead style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#64748B;
+                      position:sticky;top:0;background:#fff;z-index:2">
+            <tr>
+                <th rowspan="2" style="min-width:280px;vertical-align:bottom">Account</th>
+                <th colspan="2" class="text-center"
+                    style="border-bottom:1px solid #E2E8F0;background:#FFF7ED;color:#C2410C">
+                    {{ $period->name }}
+                </th>
+                @if($hasPrev)
+                <th colspan="2" class="text-center"
+                    style="border-bottom:1px solid #E2E8F0;background:#F5F3FF;color:#6D28D9">
+                    {{ $prevPeriod->name }}
+                </th>
+                @endif
+            </tr>
+            <tr>
+                <th class="text-end" style="background:#FFF7ED;min-width:120px">Eff. Budget</th>
+                <th class="text-end" style="background:#FFF7ED;min-width:120px">YTD Actual</th>
+                @if($hasPrev)
+                <th class="text-end" style="background:#F5F3FF;min-width:120px">Prev Budget</th>
+                <th class="text-end" style="background:#F5F3FF;min-width:120px">Growth %</th>
+                @endif
+            </tr>
+        </thead>
+        <tbody id="ccxBody">
+        @foreach($configuredCapex['lines'] as $ccxLine)
+            @if($ccxLine['type'] === 'spacer')
+            <tr><td colspan="{{ $colCount + 2 }}" style="height:14px;border:none"></td></tr>
+
+            @elseif($ccxLine['type'] === 'sub_category')
+            @php
+                $ccxUtil = $ccxLine['budget'] > 0 ? round($ccxLine['actual'] / $ccxLine['budget'] * 100) : 0;
+                $ccxUtc  = $ccxUtil > 90 ? '#F43F5E' : ($ccxUtil > 70 ? '#F59E0B' : '#10B981');
+            @endphp
+            <tr class="ccx-subcat-row"
+                data-subcat="{{ $ccxLine['sub_cat_id'] ?? '' }}"
+                onclick="ccxToggleRow(this)"
+                style="cursor:pointer">
+                <td style="padding-left:12px;font-weight:600;font-size:13px;color:#C2410C">
+                    <span class="ccx-chevron" style="margin-right:6px;opacity:.5;display:inline-block;transition:transform .15s">▸</span>
+                    {{ $ccxLine['label'] }}
+                </td>
+                <td class="text-end fw-semibold">{{ number_format($ccxLine['budget'], 0) }}</td>
+                <td class="text-end fw-semibold">
+                    {{ number_format($ccxLine['actual'], 0) }}
+                    <div style="height:2px;background:#E2E8F0;border-radius:1px;margin-top:2px">
+                        <div style="height:2px;width:{{ min($ccxUtil,100) }}%;background:{{ $ccxUtc }};border-radius:1px"></div>
+                    </div>
+                </td>
+                @if($hasPrev)
+                <td class="text-end fw-semibold">{{ number_format($ccxLine['prev_budget'], 0) }}</td>
+                <td class="text-end fw-semibold"
+                    style="color:{{ ($ccxLine['growth_pct'] ?? 0) >= 0 ? '#F43F5E' : '#10B981' }}">
+                    @if($ccxLine['growth_pct'] !== null)
+                        {{ $ccxLine['growth_pct'] >= 0 ? '+' : '' }}{{ $ccxLine['growth_pct'] }}%
+                    @else —
+                    @endif
+                </td>
+                @endif
+            </tr>
+
+            @elseif($ccxLine['type'] === 'subtotal')
+            <tr style="background:#FFF7ED;border-top:1.5px solid #FED7AA">
+                <td style="padding-left:20px;font-weight:700;font-size:13px;color:#C2410C;letter-spacing:.3px">
+                    {{ $ccxLine['label'] }}
+                </td>
+                <td class="text-end fw-bold" style="color:#C2410C">{{ number_format($ccxLine['budget'], 0) }}</td>
+                <td class="text-end fw-bold" style="color:#C2410C">{{ number_format($ccxLine['actual'], 0) }}</td>
+                @if($hasPrev)
+                <td class="text-end fw-bold" style="color:#9A3412">{{ number_format($ccxLine['prev_budget'], 0) }}</td>
+                <td class="text-end fw-bold"
+                    style="color:{{ ($ccxLine['growth_pct'] ?? 0) >= 0 ? '#F43F5E' : '#10B981' }}">
+                    @if($ccxLine['growth_pct'] !== null)
+                        {{ $ccxLine['growth_pct'] >= 0 ? '+' : '' }}{{ $ccxLine['growth_pct'] }}%
+                    @else —
+                    @endif
+                </td>
+                @endif
+            </tr>
+            @endif
+        @endforeach
+        </tbody>
+
+        {{-- Grand Total --}}
+        <tbody>
+            <tr style="background:#0F172A;font-weight:700;border-top:3px solid #C9A84C">
+                <td style="padding-left:12px;color:#C9A84C;font-size:13px">TOTAL CAPITAL EXPENDITURE</td>
+                <td class="text-end" style="color:#E2E8F0">{{ number_format($configuredCapex['grand_budget'], 0) }}</td>
+                <td class="text-end" style="color:#E2E8F0">{{ number_format($configuredCapex['grand_actual'], 0) }}</td>
+                @if($hasPrev)
+                <td class="text-end" style="color:#94A3B8">{{ number_format($configuredCapex['grand_prev_bud'], 0) }}</td>
+                <td class="text-end"
+                    style="color:{{ ($configuredCapex['grand_growth_pct'] ?? 0) >= 0 ? '#F43F5E' : '#10B981' }}">
+                    @if($configuredCapex['grand_growth_pct'] !== null)
+                        {{ $configuredCapex['grand_growth_pct'] >= 0 ? '+' : '' }}{{ $configuredCapex['grand_growth_pct'] }}%
+                    @else —
+                    @endif
+                </td>
+                @endif
+            </tr>
+        </tbody>
+    </table>
+    </div>
+</div>
+
+<script>
+const CCX_LINES  = @json($configuredCapex['lines'] ?? []);
+const CCX_EXPAND = @json($configuredCapex['capex_expand'] ?? []);
+const CCX_PREV   = {{ $hasPrev ? 'true' : 'false' }};
+
+// Build lookup: sub_cat_id (string) → array of categories
+const CCX_BY_SC = {};
+CCX_EXPAND.forEach(cat => {
+    const sc = String(cat.sub_cat_id);
+    if (!CCX_BY_SC[sc]) CCX_BY_SC[sc] = [];
+    CCX_BY_SC[sc].push(cat);
+});
+
+const ccxRowState = {};
+
+function n0(v) { return Number(v ?? 0).toLocaleString('en-GH', {minimumFractionDigits:0, maximumFractionDigits:0}); }
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function ccxToggleRow(tr) {
+    const scId   = String(tr.dataset.subcat || '');
+    const isOpen = !!ccxRowState[scId];
+    const chev   = tr.querySelector('.ccx-chevron');
+
+    // Remove existing detail rows
+    let sib = tr.nextElementSibling;
+    while (sib && sib.classList.contains('ccx-detail-row')) {
+        const rem = sib; sib = sib.nextElementSibling; rem.remove();
+    }
+
+    if (isOpen) {
+        ccxRowState[scId] = false;
+        if (chev) chev.style.transform = '';
+        return;
+    }
+
+    const cats = CCX_BY_SC[scId] || [];
+    if (cats.length === 0) { return; }
+
+    let insertAfter = tr;
+    cats.forEach(cat => {
+        const catTr = document.createElement('tr');
+        catTr.className = 'ccx-detail-row';
+        catTr.innerHTML = `
+            <td style="padding:7px 12px 7px 32px;font-size:12.5px;font-weight:600;background:#FFF7ED;color:#9A3412">
+                ${esc(cat.name)}
+            </td>
+            <td class="text-end" style="background:#FFF7ED;font-size:12px;font-weight:600">${n0(cat.effective)}</td>
+            <td class="text-end" style="background:#FFF7ED;font-size:12px;font-weight:600">${n0(cat.actual)}</td>
+            ${CCX_PREV ? `<td class="text-end" style="background:#FFF7ED;font-size:12px">${n0(cat.prev_budget)}</td>
+            <td class="text-end" style="background:#FFF7ED;font-size:12px"></td>` : ''}`;
+        insertAfter.insertAdjacentElement('afterend', catTr);
+        insertAfter = catTr;
+
+        cat.codes.forEach(r => {
+            const codeTr = document.createElement('tr');
+            codeTr.className = 'ccx-detail-row';
+            const gpct = r.growth_pct !== null
+                ? `<span style="color:${(r.growth_pct??0)>=0?'#F43F5E':'#10B981'}">${(r.growth_pct>=0?'+':'')+r.growth_pct}%</span>`
+                : '—';
+            codeTr.innerHTML = `
+                <td style="padding:5px 12px 5px 52px;font-size:11.5px">
+                    <span style="color:#64748B;font-family:monospace;margin-right:6px">${esc(r.code)}</span>${esc(r.name)}
+                </td>
+                <td class="text-end" style="font-size:11.5px">${n0(r.effective)}</td>
+                <td class="text-end" style="font-size:11.5px">${n0(r.actual)}</td>
+                ${CCX_PREV ? `<td class="text-end" style="font-size:11.5px">${n0(r.prev_budget)}</td>
+                <td class="text-end" style="font-size:11.5px">${gpct}</td>` : ''}`;
+            insertAfter.insertAdjacentElement('afterend', codeTr);
+            insertAfter = codeTr;
+        });
+    });
+
+    ccxRowState[scId] = true;
+    if (chev) chev.style.transform = 'rotate(90deg)';
+}
+
+function ccxExpandAll() {
+    document.querySelectorAll('.ccx-subcat-row').forEach(tr => {
+        const scId = String(tr.dataset.subcat || '');
+        if (!ccxRowState[scId]) ccxToggleRow(tr);
+    });
+}
+
+function ccxCollapseAll() {
+    document.querySelectorAll('.ccx-subcat-row').forEach(tr => {
+        const scId = String(tr.dataset.subcat || '');
+        if (ccxRowState[scId]) ccxToggleRow(tr);
+    });
+}
+
+function ccxExport() {
+    const hdrs = ['Account', 'Eff. Budget', 'YTD Actual'];
+    if (CCX_PREV) hdrs.push('Prev Budget', 'Growth %');
+
+    const rows = [];
+    CCX_LINES.forEach(line => {
+        if (line.type === 'spacer') return;
+        if (line.type === 'sub_category') {
+            rows.push([
+                `"${line.label}"`, line.budget, line.actual,
+                ...(CCX_PREV ? [line.prev_budget, line.growth_pct !== null ? (line.growth_pct >= 0 ? '+' : '') + line.growth_pct + '%' : ''] : [])
+            ]);
+            const cats = CCX_BY_SC[String(line.sub_cat_id)] || [];
+            cats.forEach(cat => {
+                rows.push([
+                    `"  ${cat.name}"`, cat.effective, cat.actual,
+                    ...(CCX_PREV ? [cat.prev_budget, ''] : [])
+                ]);
+                cat.codes.forEach(r => {
+                    rows.push([
+                        `"    ${r.code} – ${r.name}"`, r.effective, r.actual,
+                        ...(CCX_PREV ? [r.prev_budget, r.growth_pct !== null ? (r.growth_pct >= 0 ? '+' : '') + r.growth_pct + '%' : ''] : [])
+                    ]);
+                });
+            });
+        } else {
+            rows.push([
+                `"${line.label}"`, line.budget, line.actual,
+                ...(CCX_PREV ? [line.prev_budget, line.growth_pct !== null ? (line.growth_pct >= 0 ? '+' : '') + line.growth_pct + '%' : ''] : [])
+            ]);
+        }
+    });
+
+    const stamp = new Date().toISOString().slice(0,10);
+    let csv = hdrs.join(',') + '\n';
+    rows.forEach(r => { csv += r.join(',') + '\n'; });
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = `capex-configured-${stamp}.csv`;
+    a.click();
+}
+</script>
+
+{{-- ══ Standard CapEx layout ══ --}}
+@elseif(!$capex || empty($capex['sections']))
 <div class="chart-card text-center py-5 text-muted">
     <i class="fas fa-hard-hat fa-2x mb-3 opacity-25"></i>
     <p class="mb-1">No Capital Expenditure budget data for this period.</p>

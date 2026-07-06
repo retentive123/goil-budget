@@ -1,14 +1,16 @@
 @php
-$subType  = $line->subCategory?->budget_type ?? 'expense';
-$color    = $typeColors[$subType] ?? '#64748B';
-$typeLabel = $typeLabels[$subType] ?? strtoupper($subType);
+$budgetType = $line->subCategory?->budget_type ?? 'assets';
+$isAssets   = $budgetType === 'assets';
+$typeColor  = $isAssets ? '#1D4ED8' : '#991B1B';
+$typeBg     = $isAssets ? '#DBEAFE' : '#FEE2E2';
+$typeLabel  = $isAssets ? 'ASSETS' : 'LIABILITIES';
 
 if ($line->line_type === 'sub_category') {
     $displayLabel = $line->label
-        ? $line->label
-        : (($line->operator === 'subtract' ? 'Less: ' : '') . ($line->subCategory?->name ?? '—'));
+        ?: ($line->subCategory?->name ?? '—');
 } elseif ($line->line_type === 'subtotal') {
     $displayLabel = $line->label ?? 'Subtotal';
+    $secLabel     = $line->section === 'assets' ? 'Assets' : ($line->section === 'liabilities' ? 'Liabilities' : '?');
 } else {
     $displayLabel = '— blank row —';
 }
@@ -19,34 +21,18 @@ if ($line->line_type === 'sub_category') {
      data-line_type="{{ $line->line_type }}"
      data-sub_category_id="{{ $line->sub_category_id ?? '' }}"
      data-label="{{ $line->label ?? '' }}"
-     data-operator="{{ $line->operator ?? '' }}"
-     data-cs_base_sub_category_id="{{ $line->cs_base_sub_category_id ?? '' }}"
-     data-cs_base_subtotal_label="{{ $line->cs_base_subtotal_label ?? '' }}">
+     data-section="{{ $line->section ?? ($line->subCategory?->budget_type ?? '') }}">
 
     <span class="drag-handle text-muted me-1" style="cursor:grab;font-size:16px">⠿</span>
 
     @if($line->line_type === 'sub_category')
     <span class="row-badge badge me-1"
-          style="font-size:10px;border-radius:4px;background:{{ $color }}22;color:{{ $color }}">
-        {{ strtoupper($subType) }}
+          style="font-size:10px;border-radius:4px;background:{{ $typeBg }};color:{{ $typeColor }}">
+        {{ $typeLabel }}
     </span>
     <span class="row-main fw-semibold"
           style="color:#1B2A4A;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
         {{ $displayLabel }}
-    </span>
-    <select class="cs-base-sel"
-            data-selected="{{ $line->cs_base_sub_category_id ?? '' }}"
-            onchange="onCsBaseChange(this)"
-            style="font-size:10px;border:1px solid #FFFBEB;background:#FFFBEB;color:#92400E;
-                   border-radius:4px;padding:2px 4px;max-width:130px;cursor:pointer"
-            title="CS% base line">
-        <option value="">CS%: none</option>
-    </select>
-    <span class="row-op badge"
-          style="font-size:10px;border-radius:4px;
-                 background:{{ $line->operator === 'add' ? '#D1FAE5' : '#FEE2E2' }};
-                 color:{{ $line->operator === 'add' ? '#065F46' : '#991B1B' }}">
-        {{ $line->operator === 'add' ? '+ Add' : '− Less' }}
     </span>
 
     @elseif($line->line_type === 'subtotal')
@@ -56,20 +42,12 @@ if ($line->line_type === 'sub_category') {
           style="color:#1D4ED8;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
         {{ $displayLabel }}
     </span>
-    @php
-        $stCsKey = $line->cs_base_sub_category_id
-            ? 'sc:' . $line->cs_base_sub_category_id
-            : ($line->cs_base_subtotal_label ? 'st:' . $line->cs_base_subtotal_label : '');
-    @endphp
-    <select class="cs-base-sel"
-            data-selected="{{ $stCsKey }}"
-            onchange="onCsBaseChange(this)"
-            style="font-size:10px;border:1px solid #FFFBEB;background:#FFFBEB;color:#92400E;
-                   border-radius:4px;padding:2px 4px;max-width:130px;cursor:pointer"
-            title="CS% base line">
-        <option value="">CS%: none</option>
-    </select>
-    <span class="row-op"></span>
+    <span class="row-op badge"
+          style="font-size:10px;border-radius:4px;
+                 background:{{ $line->section === 'assets' ? '#DBEAFE' : '#FEE2E2' }};
+                 color:{{ $line->section === 'assets' ? '#1E40AF' : '#991B1B' }}">
+        {{ $secLabel ?? '?' }}
+    </span>
 
     @else {{-- spacer --}}
     <span class="row-badge badge me-1"

@@ -228,7 +228,12 @@ $typeLabels = ['revenue' => 'Revenue', 'expense' => 'Expense'];
 
         <span class="row-op badge" style="font-size:10px;border-radius:4px"></span>
 
-        <button type="button" class="btn btn-sm ms-2 p-0 px-2"
+        <button type="button" class="btn btn-sm p-0 px-2 edit-btn"
+                style="background:#EFF6FF;color:#1D4ED8;border:none;border-radius:5px;font-size:11px"
+                onclick="editLine(this)">
+            <i class="fas fa-pen" style="font-size:10px"></i>
+        </button>
+        <button type="button" class="btn btn-sm ms-1 p-0 px-2"
                 style="background:#FEE2E2;color:#991B1B;border:none;border-radius:5px;font-size:11px"
                 onclick="removeLine(this)">
             <i class="fas fa-times"></i>
@@ -325,6 +330,8 @@ function addLine() {
         row.querySelector('.row-main').textContent       = '— blank row —';
         row.querySelector('.row-main').style.color       = '#94A3B8';
         row.querySelector('.row-op').style.display       = 'none';
+        const eb = row.querySelector('.edit-btn');
+        if (eb) eb.style.display = 'none';
     }
 
     document.getElementById('sortableLines').appendChild(row);
@@ -437,6 +444,105 @@ function refreshCsBaseOptions() {
     });
 }
 
+// ── Inline edit ──────────────────────────────────────────────────────────
+function escAttr(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+
+function editLine(btn) {
+    const row = btn.closest('.line-row');
+    if (row.classList.contains('editing')) return;
+    row.classList.add('editing');
+    btn.style.display = 'none';
+
+    const lt = row.dataset.line_type;
+    let html = '<div class="row-edit-panel">';
+
+    if (lt === 'sub_category') {
+        const curScId = row.dataset.sub_category_id;
+        const curOp   = row.dataset.operator || 'add';
+        const curLbl  = row.dataset.label || '';
+
+        const scOpts = SUB_CATS.map(s =>
+            `<option value="${s.id}" data-type="${escAttr(s.budget_type)}" ${s.id == curScId ? 'selected' : ''}>${escAttr(s.name)}</option>`
+        ).join('');
+        html += `<label class="small text-muted mb-0">Sub-cat:</label>
+                 <select class="edit-subcat form-select form-select-sm" style="max-width:200px">${scOpts}</select>
+                 <label class="small text-muted mb-0 ms-1">Op:</label>
+                 <select class="edit-op form-select form-select-sm" style="max-width:120px">
+                     <option value="add" ${curOp==='add'?'selected':''}>+ Add</option>
+                     <option value="subtract" ${curOp==='subtract'?'selected':''}>− Less</option>
+                 </select>
+                 <label class="small text-muted mb-0 ms-1">Label:</label>
+                 <input type="text" class="edit-lbl form-control form-control-sm" style="max-width:180px"
+                        placeholder="Override (optional)" value="${escAttr(curLbl)}">`;
+
+    } else if (lt === 'subtotal') {
+        const curLbl = row.dataset.label || '';
+        html += `<label class="small text-muted mb-0">Label:</label>
+                 <input type="text" class="edit-lbl form-control form-control-sm" style="max-width:280px"
+                        placeholder="Subtotal label" value="${escAttr(curLbl)}">`;
+    }
+
+    html += `<button type="button" class="btn btn-sm fw-semibold px-3 ms-2"
+                     style="background:#1B2A4A;color:#fff;border:none;border-radius:6px;font-size:11px"
+                     onclick="saveEdit(this)"><i class="fas fa-check me-1"></i>Save</button>
+             <button type="button" class="btn btn-sm px-2"
+                     style="background:#F1F5F9;color:#64748B;border:none;border-radius:6px;font-size:11px"
+                     onclick="cancelEdit(this)">Cancel</button></div>`;
+
+    row.insertAdjacentHTML('beforeend', html);
+}
+
+function saveEdit(btn) {
+    const row = btn.closest('.line-row');
+    const lt  = row.dataset.line_type;
+
+    if (lt === 'sub_category') {
+        const scSel  = row.querySelector('.edit-subcat');
+        const scId   = scSel.value;
+        const scName = scSel.selectedOptions[0]?.text ?? '';
+        const scType = scSel.selectedOptions[0]?.dataset.type ?? '';
+        const op     = row.querySelector('.edit-op').value;
+        const lbl    = row.querySelector('.edit-lbl').value.trim();
+
+        row.dataset.sub_category_id = scId;
+        row.dataset.operator        = op;
+        row.dataset.label           = lbl;
+
+        const displayLabel = lbl || (op === 'subtract' ? 'Less: ' : '') + scName;
+        const color = scType === 'revenue' ? '#10B981' : '#F43F5E';
+
+        row.querySelector('.row-badge').textContent      = scType.toUpperCase();
+        row.querySelector('.row-badge').style.background = color + '22';
+        row.querySelector('.row-badge').style.color      = color;
+        row.querySelector('.row-main').textContent       = displayLabel;
+
+        const opBadge = row.querySelector('.row-op');
+        opBadge.textContent      = op === 'add' ? '+ Add' : '− Less';
+        opBadge.style.background = op === 'add' ? '#D1FAE5' : '#FEE2E2';
+        opBadge.style.color      = op === 'add' ? '#065F46' : '#991B1B';
+
+    } else if (lt === 'subtotal') {
+        const lbl = row.querySelector('.edit-lbl').value.trim();
+        if (!lbl) { alert('Subtotal label is required.'); return; }
+        row.dataset.label = lbl;
+        row.querySelector('.row-main').textContent = lbl;
+    }
+
+    exitEditMode(row);
+    rebuildCsSelects();
+}
+
+function cancelEdit(btn) { exitEditMode(btn.closest('.line-row')); }
+
+function exitEditMode(row) {
+    row.querySelector('.row-edit-panel')?.remove();
+    row.classList.remove('editing');
+    const eb = row.querySelector('.edit-btn');
+    if (eb) eb.style.display = '';
+}
+
 function prepareSubmit() {
     const container = document.getElementById('hiddenLines');
     container.innerHTML = '';
@@ -456,6 +562,17 @@ function prepareSubmit() {
 .sort-ghost { opacity: .4; background: #EFF6FF !important; }
 .line-row:hover { background: #F8FAFC; }
 .drag-handle:hover { color: #E65C00 !important; }
+.line-row.editing { flex-wrap: wrap; align-items: flex-start; }
+.row-edit-panel {
+    flex-basis: 100%;
+    background: #EFF6FF;
+    border-top: 1px solid #BFDBFE;
+    padding: 8px 44px 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
 </style>
 
 @endsection

@@ -871,6 +871,16 @@
                 <i class="fas fa-sliders-h nav-icon"></i>
                 <span class="link-text">P&L Layout</span>
             </a>
+            <a href="{{ route('admin.balance-sheet-configs.index') }}"
+               class="sidebar-link {{ request()->routeIs('admin.balance-sheet-configs.*') ? 'active' : '' }}">
+                <i class="fas fa-balance-scale nav-icon"></i>
+                <span class="link-text">BS Layout</span>
+            </a>
+            <a href="{{ route('admin.capex-configs.index') }}"
+               class="sidebar-link {{ request()->routeIs('admin.capex-configs.*') ? 'active' : '' }}">
+                <i class="fas fa-hard-hat nav-icon"></i>
+                <span class="link-text">CapEx Layout</span>
+            </a>
             <a href="{{ route('admin.account-categories.index') }}"
                class="sidebar-link {{ request()->routeIs('admin.account-categories.*') ? 'active' : '' }}">
                 <i class="fas fa-folder nav-icon"></i>

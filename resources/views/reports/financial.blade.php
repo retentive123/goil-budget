@@ -764,7 +764,229 @@
 <div class="tab-pane fade" id="pane-bs" role="tabpanel">
 <div class="chart-card" style="border-radius:0 0 12px 12px;border-top:none">
 
-@if(!$balanceSheet || (empty($balanceSheet['sections']['assets']) && empty($balanceSheet['sections']['liabilities'])))
+@if($configuredBalanceSheet)
+{{-- ── Configured Balance Sheet layout ── --}}
+@php
+    $cbs     = $configuredBalanceSheet;
+    $cbsAt   = $cbs['total_assets'];
+    $cbsLt   = $cbs['total_liabs'];
+    $cbsNetA = $cbs['net_actual'];
+    $cbsNetB = $cbs['net_budget'];
+    $cbsnc   = $cbsNetA >= 0 ? '#10B981' : '#F43F5E';
+@endphp
+
+{{-- KPI strip --}}
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-accent" style="background:#1B2A4A"></div>
+            <div class="stat-label">Total Assets (Budget)</div>
+            <div class="stat-value" style="font-size:16px">{{ currency() }} {{ number_format($cbsAt['budget'], 0) }}</div>
+            <div class="stat-sub">YTD Actual: {{ currency() }} {{ number_format($cbsAt['actual'], 0) }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-accent" style="background:#7C2D12"></div>
+            <div class="stat-label">Total Liabilities (Budget)</div>
+            <div class="stat-value" style="font-size:16px">{{ currency() }} {{ number_format($cbsLt['budget'], 0) }}</div>
+            <div class="stat-sub">YTD Actual: {{ currency() }} {{ number_format($cbsLt['actual'], 0) }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-accent" style="background:{{ $cbsNetB >= 0 ? '#10B981' : '#F43F5E' }}"></div>
+            <div class="stat-label">Net Position (Budget)</div>
+            <div class="stat-value" style="font-size:16px;color:{{ $cbsNetB >= 0 ? '#10B981' : '#F43F5E' }}">
+                {{ $cbsNetB >= 0 ? '+' : '' }}{{ currency() }} {{ number_format($cbsNetB, 0) }}
+            </div>
+            <div class="stat-sub">Assets − Liabilities</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-accent" style="background:{{ $cbsnc }}"></div>
+            <div class="stat-label">Net Position (YTD Actual)</div>
+            <div class="stat-value" style="font-size:16px;color:{{ $cbsnc }}">
+                {{ $cbsNetA >= 0 ? '+' : '' }}{{ currency() }} {{ number_format($cbsNetA, 0) }}
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Toolbar --}}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span class="badge" style="background:#EFF6FF;color:#1D4ED8;font-size:11px">
+            <i class="fas fa-layer-group me-1"></i>{{ $activeBsConfig->name }}
+        </span>
+        @if($prevPeriod)
+        <span class="badge" style="background:#EFF6FF;color:#1D4ED8;font-weight:500">{{ $period->name }}</span>
+        <span class="badge" style="background:#F5F3FF;color:#6D28D9;font-weight:500">Prior: {{ $prevPeriod->name }}</span>
+        @endif
+    </div>
+    <div class="d-flex gap-2">
+        <button id="cbsExpandBtn" class="btn btn-sm btn-outline-secondary"
+                onclick="cbsToggleAll()" style="font-size:12px">
+            <i class="fas fa-expand-alt me-1"></i>Expand All
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="cbsExport()" style="font-size:12px">
+            <i class="fas fa-download me-1"></i>Export
+        </button>
+    </div>
+</div>
+
+{{-- Table --}}
+<div class="table-responsive" style="max-height:70vh;overflow-y:auto">
+<table class="table table-sm mb-0" id="cbsTable" style="min-width:800px">
+    <thead style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#64748B;
+                  position:sticky;top:0;background:#fff;z-index:2">
+        <tr>
+            <th rowspan="2" style="min-width:260px;vertical-align:bottom">Account</th>
+            <th colspan="{{ $prevPeriod ? 2 : 1 }}" class="text-center"
+                style="border-bottom:1px solid #E2E8F0;background:#EFF6FF;color:#1D4ED8">
+                {{ $period->name }}
+            </th>
+            @if($prevPeriod)
+            <th colspan="2" class="text-center"
+                style="border-bottom:1px solid #E2E8F0;background:#F5F3FF;color:#6D28D9">
+                {{ $prevPeriod->name }}
+            </th>
+            @endif
+        </tr>
+        <tr>
+            <th class="text-end" style="background:#EFF6FF;min-width:120px">Eff. Budget</th>
+            <th class="text-end" style="background:#EFF6FF;min-width:120px">YTD Actual</th>
+            @if($prevPeriod)
+            <th class="text-end" style="background:#F5F3FF;min-width:120px">Prev Budget</th>
+            <th class="text-end" style="background:#F5F3FF;min-width:120px">Growth %</th>
+            @endif
+        </tr>
+    </thead>
+    <tbody>
+    @foreach($cbs['lines'] as $cbsRow)
+    @if($cbsRow['type'] === 'spacer')
+    <tr><td colspan="99" style="padding:4px 0;background:#F8FAFC"></td></tr>
+
+    @elseif($cbsRow['type'] === 'subtotal')
+    @php
+        $secColor = $cbsRow['section'] === 'assets' ? '#1E3A5F' : '#7C2D12';
+        $secBg    = $cbsRow['section'] === 'assets' ? '#DBEAFE' : '#FFE4E6';
+        $secBor   = $cbsRow['section'] === 'assets' ? '#93C5FD' : '#FCA5A5';
+    @endphp
+    <tr style="background:{{ $secBg }};font-weight:700;border-top:2px solid {{ $secBor }}">
+        <td style="padding:9px 16px;color:{{ $secColor }};font-size:13px">
+            <i class="fas fa-equals me-2" style="color:#64748B;font-size:10px"></i>
+            {{ $cbsRow['label'] }}
+        </td>
+        <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">
+            {{ number_format($cbsRow['budget'], 0) }}
+        </td>
+        <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">
+            {{ number_format($cbsRow['actual'], 0) }}
+        </td>
+        @if($prevPeriod)
+        <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">
+            {{ number_format($cbsRow['prev_budget'], 0) }}
+        </td>
+        <td class="text-end" style="padding:9px 12px">
+            @if($cbsRow['growth_pct'] !== null)
+            <span style="color:{{ $cbsRow['growth_pct'] >= 0 ? '#10B981' : '#F43F5E' }}">
+                {{ $cbsRow['growth_pct'] >= 0 ? '+' : '' }}{{ $cbsRow['growth_pct'] }}%
+            </span>
+            @else —
+            @endif
+        </td>
+        @endif
+    </tr>
+
+    @else {{-- sub_category --}}
+    @php $isAssets = $cbsRow['section'] === 'assets'; @endphp
+    <tr class="cbs-subcat-row"
+        data-subcat="{{ $cbsRow['sub_cat_id'] ?? '' }}"
+        onclick="cbsToggleRow(this)"
+        style="border-bottom:1px solid #F1F5F9;cursor:pointer">
+        <td style="padding:8px 12px 8px 16px;font-size:13px;color:#374151">
+            <i class="fas fa-chevron-right cbs-chevron"
+               style="font-size:9px;margin-right:6px;transition:transform .15s;color:#94A3B8"></i>
+            {{ $cbsRow['label'] }}
+        </td>
+        <td class="text-end" style="padding:8px 12px;font-size:13px;font-variant-numeric:tabular-nums">
+            {{ number_format($cbsRow['budget'], 0) }}
+        </td>
+        <td class="text-end" style="padding:8px 12px;font-size:13px;font-variant-numeric:tabular-nums">
+            {{ number_format($cbsRow['actual'], 0) }}
+        </td>
+        @if($prevPeriod)
+        <td class="text-end" style="padding:8px 12px;font-size:12px;color:#8B5CF6;font-variant-numeric:tabular-nums">
+            {{ number_format($cbsRow['prev_budget'], 0) }}
+        </td>
+        <td class="text-end" style="padding:8px 12px;font-size:12px">
+            @if($cbsRow['growth_pct'] !== null)
+            <span style="color:{{ $cbsRow['growth_pct'] >= 0 ? '#10B981' : '#F43F5E' }}">
+                {{ $cbsRow['growth_pct'] >= 0 ? '+' : '' }}{{ $cbsRow['growth_pct'] }}%
+            </span>
+            @else —
+            @endif
+        </td>
+        @endif
+    </tr>
+    @endif
+    @endforeach
+    </tbody>
+
+    {{-- Total Assets --}}
+    <tbody>
+    <tr style="background:#DBEAFE;font-weight:700;border-top:2px solid #93C5FD">
+        <td style="padding:9px 12px 9px 16px;color:#1E3A5F">Total Assets</td>
+        <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">{{ number_format($cbsAt['budget'], 0) }}</td>
+        <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">{{ number_format($cbsAt['actual'], 0) }}</td>
+        @if($prevPeriod)
+        <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">{{ number_format($cbsAt['prev_budget'], 0) }}</td>
+        <td class="text-end" style="padding:9px 12px;color:{{ ($cbsAt['growth_pct'] ?? 0) >= 0 ? '#10B981' : '#F43F5E' }}">
+            @if($cbsAt['growth_pct'] !== null) {{ $cbsAt['growth_pct'] >= 0 ? '+' : '' }}{{ $cbsAt['growth_pct'] }}% @else — @endif
+        </td>
+        @endif
+    </tr>
+    </tbody>
+
+    {{-- Total Liabilities --}}
+    <tbody>
+    <tr style="background:#FFE4E6;font-weight:700;border-top:2px solid #FCA5A5">
+        <td style="padding:9px 12px 9px 16px;color:#7C2D12">Total Liabilities</td>
+        <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">{{ number_format($cbsLt['budget'], 0) }}</td>
+        <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">{{ number_format($cbsLt['actual'], 0) }}</td>
+        @if($prevPeriod)
+        <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">{{ number_format($cbsLt['prev_budget'], 0) }}</td>
+        <td class="text-end" style="padding:9px 12px;color:{{ ($cbsLt['growth_pct'] ?? 0) >= 0 ? '#F43F5E' : '#10B981' }}">
+            @if($cbsLt['growth_pct'] !== null) {{ $cbsLt['growth_pct'] >= 0 ? '+' : '' }}{{ $cbsLt['growth_pct'] }}% @else — @endif
+        </td>
+        @endif
+    </tr>
+    </tbody>
+
+    {{-- Net Position --}}
+    <tbody>
+    <tr style="background:#0F172A;font-weight:700;border-top:3px solid #C9A84C">
+        <td style="padding:11px 16px;color:#C9A84C;font-size:13px">NET ASSETS / (LIABILITIES)</td>
+        <td class="text-end" style="padding:11px 12px;color:{{ $cbsNetB >= 0 ? '#10B981' : '#F43F5E' }};font-variant-numeric:tabular-nums">
+            {{ $cbsNetB >= 0 ? '+' : '' }}{{ number_format($cbsNetB, 0) }}
+        </td>
+        <td class="text-end" style="padding:11px 12px;color:{{ $cbsNetA >= 0 ? '#10B981' : '#F43F5E' }};font-variant-numeric:tabular-nums">
+            {{ $cbsNetA >= 0 ? '+' : '' }}{{ number_format($cbsNetA, 0) }}
+        </td>
+        @if($prevPeriod)
+        <td class="text-end" style="padding:11px 12px;color:#94A3B8;font-variant-numeric:tabular-nums">
+            {{ number_format($cbs['net_prev_bud'], 0) }}
+        </td>
+        <td class="text-end" style="color:#94A3B8">—</td>
+        @endif
+    </tr>
+    </tbody>
+</table>
+</div>
+
+@elseif(!$balanceSheet || (empty($balanceSheet['sections']['assets']) && empty($balanceSheet['sections']['liabilities'])))
 <div class="text-center py-5 text-muted">
     <i class="fas fa-balance-scale fa-2x mb-3 opacity-25"></i>
     <p class="mb-1">No Assets or Liabilities budget data for this period.</p>
@@ -1700,6 +1922,146 @@ function bsExport(format) {
 
     doExport(rows, BS_HEADERS, `balance-sheet-${stamp}`, format, 'bsCopyBtn');
 }
+
+@if($configuredBalanceSheet)
+// ── Configured Balance Sheet ────────────────────────────────────────────────
+const CBS_LINES = @json($configuredBalanceSheet['lines'] ?? []);
+
+const cbsRowState = {};
+
+function cbsToggleRow(tr) {
+    const subCatId = String(tr.dataset.subcat || '');
+    if (!subCatId) return;
+
+    const chevron = tr.querySelector('.cbs-chevron');
+    const isOpen  = !!cbsRowState[subCatId];
+
+    // Remove existing detail rows for this sub-cat
+    let sib = tr.nextElementSibling;
+    while (sib && sib.classList.contains('cbs-detail-row')) {
+        const rem = sib; sib = sib.nextElementSibling; rem.remove();
+    }
+
+    if (isOpen) {
+        cbsRowState[subCatId] = false;
+        if (chevron) chevron.style.transform = '';
+        return;
+    }
+
+    // Gather matching account categories from the standard BS data
+    const allCats = [...BS_ASSETS, ...BS_LIABILITIES]
+        .filter(c => String(c.sub_cat_id) === subCatId);
+
+    if (allCats.length === 0) {
+        cbsRowState[subCatId] = false;
+        return;
+    }
+
+    let insertAfter = tr;
+
+    allCats.forEach(cat => {
+        // Category summary row
+        const catTr = document.createElement('tr');
+        catTr.className = 'cbs-detail-row';
+        catTr.style.cssText = 'background:#F1F5F9;font-size:12px;';
+        catTr.innerHTML =
+            `<td style="padding:7px 12px 7px 32px;font-weight:600;color:#374151">
+                 ${esc(cat.name)}
+                 <span class="badge ms-1" style="background:#E2E8F0;color:#64748B;font-size:9px">${cat.codes.length}</span>
+             </td>
+             <td class="text-end fw-semibold" style="padding:7px 12px;font-variant-numeric:tabular-nums">${n0(cat.total.effective)}</td>
+             <td class="text-end fw-semibold" style="padding:7px 12px;font-variant-numeric:tabular-nums">${n0(cat.total.actual)}</td>
+             ${HAS_PREV
+                 ? `<td class="text-end fw-semibold" style="padding:7px 12px;color:#8B5CF6;font-variant-numeric:tabular-nums">${n0(cat.total.prev_budget)}</td>
+                    <td class="text-end fw-semibold" style="padding:7px 12px;color:${(cat.total.growth_pct??0)>=0?'#10B981':'#F43F5E'}">
+                        ${cat.total.growth_pct!==null?(cat.total.growth_pct>=0?'+':'')+cat.total.growth_pct+'%':'—'}</td>`
+                 : ''}`;
+        insertAfter.insertAdjacentElement('afterend', catTr);
+        insertAfter = catTr;
+
+        // Code rows immediately after the category row
+        cat.codes.forEach(r => {
+            const codeTr = document.createElement('tr');
+            codeTr.className = 'cbs-detail-row';
+            codeTr.style.cssText = 'font-size:12px;border-bottom:1px solid #F1F5F9;';
+            codeTr.innerHTML =
+                `<td style="padding:5px 12px 5px 52px;color:#374151">
+                     <span style="color:#64748B;font-family:monospace;font-size:11px;margin-right:6px">${esc(r.code)}</span>
+                     ${esc(r.name)}
+                 </td>
+                 <td class="text-end" style="padding:5px 12px;font-variant-numeric:tabular-nums">${n0(r.effective)}</td>
+                 <td class="text-end" style="padding:5px 12px;font-variant-numeric:tabular-nums">${n0(r.actual)}</td>
+                 ${HAS_PREV
+                     ? `<td class="text-end" style="padding:5px 12px;color:#8B5CF6;font-variant-numeric:tabular-nums">${n0(r.prev_budget)}</td>
+                        <td class="text-end" style="padding:5px 12px;color:${(r.growth_pct??0)>=0?'#10B981':'#F43F5E'}">
+                            ${r.growth_pct!==null?(r.growth_pct>=0?'+':'')+r.growth_pct+'%':'—'}</td>`
+                     : ''}`;
+            insertAfter.insertAdjacentElement('afterend', codeTr);
+            insertAfter = codeTr;
+        });
+    });
+
+    cbsRowState[subCatId] = true;
+    if (chevron) chevron.style.transform = 'rotate(90deg)';
+}
+
+let cbsAllExpanded = false;
+function cbsToggleAll() {
+    const btn = document.getElementById('cbsExpandBtn');
+    if (cbsAllExpanded) {
+        document.querySelectorAll('#cbsTable .cbs-subcat-row').forEach(tr => {
+            const id = String(tr.dataset.subcat || '');
+            if (id && cbsRowState[id]) cbsToggleRow(tr);
+        });
+        cbsAllExpanded = false;
+        if (btn) btn.innerHTML = '<i class="fas fa-expand-alt me-1"></i>Expand All';
+    } else {
+        document.querySelectorAll('#cbsTable .cbs-subcat-row').forEach(tr => {
+            const id = String(tr.dataset.subcat || '');
+            if (id && !cbsRowState[id]) cbsToggleRow(tr);
+        });
+        cbsAllExpanded = true;
+        if (btn) btn.innerHTML = '<i class="fas fa-compress-alt me-1"></i>Collapse All';
+    }
+}
+
+function cbsExport() {
+    const stamp = new Date().toISOString().slice(0,10);
+    const HDRS  = ['Account', 'Section', 'Eff Budget', 'YTD Actual', 'Prev Budget', 'Growth %'];
+    const blank = () => Object.fromEntries(HDRS.map(h => [h, '']));
+    const rows  = [];
+
+    CBS_LINES.forEach(line => {
+        if (line.type === 'spacer') { rows.push(blank()); return; }
+        if (line.type === 'subtotal') {
+            rows.push({ Account: line.label, Section: line.section,
+                'Eff Budget': line.budget, 'YTD Actual': line.actual,
+                'Prev Budget': HAS_PREV ? (line.prev_budget ?? '') : '',
+                'Growth %':    HAS_PREV ? (line.growth_pct  ?? '') : '' });
+            return;
+        }
+        rows.push({ Account: line.label, Section: line.section,
+            'Eff Budget': line.budget, 'YTD Actual': line.actual,
+            'Prev Budget': HAS_PREV ? (line.prev_budget ?? '') : '',
+            'Growth %':    HAS_PREV ? (line.growth_pct  ?? '') : '' });
+        const cats = [...BS_ASSETS, ...BS_LIABILITIES]
+            .filter(c => String(c.sub_cat_id) === String(line.sub_cat_id));
+        cats.forEach(cat => {
+            rows.push({ Account: '  ' + cat.name, Section: line.section,
+                'Eff Budget': cat.total.effective, 'YTD Actual': cat.total.actual,
+                'Prev Budget': HAS_PREV ? (cat.total.prev_budget ?? '') : '',
+                'Growth %':    HAS_PREV ? (cat.total.growth_pct  ?? '') : '' });
+            cat.codes.forEach(r => rows.push({
+                Account: '    ' + r.code + ' — ' + r.name, Section: line.section,
+                'Eff Budget': r.effective, 'YTD Actual': r.actual,
+                'Prev Budget': HAS_PREV ? (r.prev_budget ?? '') : '',
+                'Growth %':    HAS_PREV ? (r.growth_pct  ?? '') : '' }));
+        });
+    });
+
+    doExport(rows, HDRS, `balance-sheet-configured-${stamp}`, 'csv', null);
+}
+@endif
 </script>
 @endif
 @endsection
