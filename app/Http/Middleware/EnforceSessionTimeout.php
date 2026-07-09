@@ -13,9 +13,15 @@ class EnforceSessionTimeout
     {
         if (Auth::check()) {
             $timeoutMinutes = (int) SystemSetting::get('session_timeout_minutes', 60);
-            $lastActivity   = session('last_activity_at');
 
-            if ($lastActivity && now()->diffInMinutes($lastActivity) > $timeoutMinutes) {
+            // Sync the cookie lifetime so the browser cookie expiry matches the admin setting.
+            // StartSession stamps the cookie on the response after this middleware runs,
+            // so updating the config here is picked up before the cookie is written.
+            config(['session.lifetime' => $timeoutMinutes]);
+
+            $lastActivity = session('last_activity_at');
+
+            if ($lastActivity && now()->diffInMinutes($lastActivity) >= $timeoutMinutes) {
                 Auth::logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();

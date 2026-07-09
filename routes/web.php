@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\AccountSubCategoryController;
 use App\Http\Controllers\Admin\IncomeStatementConfigController;
 use App\Http\Controllers\Admin\BalanceSheetConfigController;
 use App\Http\Controllers\Admin\CapexConfigController;
+use App\Http\Controllers\Admin\ExpumpTemplateController;
 use App\Http\Controllers\Admin\BudgetPeriodController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\SystemSettingController;
@@ -40,7 +41,7 @@ Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
     Route::post('/login',[LoginController::class, 'login']);
     Route::get('/2fa',           [TwoFactorController::class, 'show'])->name('2fa.show');
-    Route::post('/2fa/verify',   [TwoFactorController::class, 'verify'])->name('2fa.verify');
+    Route::post('/2fa/verify',   [TwoFactorController::class, 'verify'])->name('2fa.verify')->middleware('throttle:6,1');
 });
 
 // Authenticated routes
@@ -86,6 +87,11 @@ Route::middleware('auth')->group(function () {
         Route::resource('capex-configs', CapexConfigController::class)->except('show');
         Route::post('capex-configs/{capexConfig}/activate',   [CapexConfigController::class, 'activate'])->name('capex-configs.activate');
         Route::post('capex-configs/{capexConfig}/deactivate', [CapexConfigController::class, 'deactivate'])->name('capex-configs.deactivate');
+
+        // Ex-pump price templates
+        Route::resource('expump-templates', ExpumpTemplateController::class);
+        Route::post('expump-templates/{expumpTemplate}/activate',   [ExpumpTemplateController::class, 'activate'])->name('expump-templates.activate');
+        Route::post('expump-templates/{expumpTemplate}/deactivate', [ExpumpTemplateController::class, 'deactivate'])->name('expump-templates.deactivate');
 
         // Account sub-categories, categories & codes
         Route::resource('account-sub-categories', AccountSubCategoryController::class);

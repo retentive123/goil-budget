@@ -104,6 +104,13 @@ class SupplementaryBudgetController extends Controller
             'items.*.requested_amount'      => ['required','numeric','min:1'],
         ]);
 
+        // Ensure the requester can only file against their own department
+        $user = auth()->user();
+        if (!$user->hasAnyRole(['finance_reviewer','bdu_admin','super_admin'])
+            && (int) $request->department_id !== (int) $user->department_id) {
+            abort(403, 'You can only submit supplementary budgets for your own department.');
+        }
+
         // Resolve the dept's approved version and collect valid line item IDs
         $approvedVersion = BudgetVersion::where('department_id', $request->department_id)
             ->where('budget_period_id', $request->budget_period_id)

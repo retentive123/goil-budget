@@ -9,7 +9,7 @@ use App\Models\BudgetLineItem;
 class FixSupplementaryInflation extends Command
 {
     protected $signature   = 'fix:supplementary-inflation {--dry-run}';
-    protected $description = 'Reverse the q4_amount inflation caused by the old supplementary approval bug';
+    protected $description = 'Reverse supplementary inflation by subtracting the diff proportionally from monthly amounts';
 
     public function handle(): void
     {
@@ -34,20 +34,25 @@ class FixSupplementaryInflation extends Command
                 $this->line(
                     "Line {$item->id} ({$item->accountCode->code}): " .
                     "current={$currentTotal}, original={$expectedOriginalTotal}, " .
-                    "will subtract={$diff} from q4_amount"
+                    "will subtract={$diff} proportionally from monthly amounts"
                 );
 
                 if (!$dryRun) {
-                    $item->update([
-                        'q4_amount' => max(0, $item->q4_amount - $diff),
-                    ]);
+                    // Subtract proportionally from each month
+                    $total = $item->total_amount ?: 1;
+                    $update = [];
+                    foreach (range(1, 12) as $m) {
+                        $col = "m{$m}_amount";
+                        $update[$col] = max(0, $item->{$col} - ($diff * ($item->{$col} / $total)));
+                    }
+                    $item->update($update);
                 }
             }
         }
 
         $this->info($dryRun
             ? 'Dry run complete — no changes made. Remove --dry-run to apply.'
-            : 'Correction applied. q1-q4_amount now reflect original approved budget only.'
+            : 'Correction applied. Monthly amounts now reflect original approved budget only.'
         );
     }
 }

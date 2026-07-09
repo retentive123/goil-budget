@@ -9,9 +9,8 @@ class Virement extends Model
     protected $fillable = [
         'budget_period_id', 'department_id',
         'from_line_item_id', 'to_line_item_id',
-        'amount', 'justification', 'status',
-        'requested_by', 'approved_by',
-        'approval_comments', 'approved_at'
+        'amount', 'justification',
+        'requested_by',
     ];
 
     protected $casts = [

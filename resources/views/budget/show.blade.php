@@ -22,6 +22,10 @@
                     default        => 'secondary'
                 }
             }}">{{ ucfirst(str_replace('_',' ',$budgetVersion->status)) }}</span>
+            &nbsp;
+            <span class="badge" style="background:{{ $entryMode === 'monthly' ? '#0369A1' : '#6B7280' }};font-size:10px;">
+                {{ $entryMode === 'monthly' ? 'Monthly entry' : 'Quarterly entry' }}
+            </span>
         </p>
     </div>
 
@@ -233,15 +237,24 @@
                 @endif
             </span>
         </div>
-        <div class="card-body p-0">
-            <table class="table table-sm table-hover mb-0">
+        @php
+            $monthLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        @endphp
+        <div class="card-body p-0" style="{{ $entryMode === 'monthly' ? 'overflow-x:auto;' : '' }}">
+            <table class="table table-sm table-hover mb-0" style="{{ $entryMode === 'monthly' ? 'min-width:1400px;' : '' }}">
                 <thead class="table-light">
                     <tr>
-                        <th style="width:22%">Account</th>
-                        <th class="text-end">Q1 ({{ currency() }})</th>
-                        <th class="text-end">Q2 ({{ currency() }})</th>
-                        <th class="text-end">Q3 ({{ currency() }})</th>
-                        <th class="text-end">Q4 ({{ currency() }})</th>
+                        <th style="min-width:180px;">Account</th>
+                        @if($entryMode === 'monthly')
+                            @foreach($monthLabels as $ml)
+                                <th class="text-end" style="min-width:90px;">{{ $ml }} ({{ currency() }})</th>
+                            @endforeach
+                        @else
+                            <th class="text-end">Q1 ({{ currency() }})</th>
+                            <th class="text-end">Q2 ({{ currency() }})</th>
+                            <th class="text-end">Q3 ({{ currency() }})</th>
+                            <th class="text-end">Q4 ({{ currency() }})</th>
+                        @endif
                         <th class="text-end">Original Total</th>
                         <th class="text-end">Supplementary</th>
                         <th class="text-end">Effective Total</th>
@@ -276,18 +289,27 @@
                             @endif
                         </td>
                         @if($budgetVersion->isEditable())
-                            <td><input type="number" class="form-control form-control-sm q-input q1 text-end"
-                                value="{{ $item->q1_amount }}" min="0" step="0.01"
-                                oninput="liveUpdate(this)"></td>
-                            <td><input type="number" class="form-control form-control-sm q-input q2 text-end"
-                                value="{{ $item->q2_amount }}" min="0" step="0.01"
-                                oninput="liveUpdate(this)"></td>
-                            <td><input type="number" class="form-control form-control-sm q-input q3 text-end"
-                                value="{{ $item->q3_amount }}" min="0" step="0.01"
-                                oninput="liveUpdate(this)"></td>
-                            <td><input type="number" class="form-control form-control-sm q-input q4 text-end"
-                                value="{{ $item->q4_amount }}" min="0" step="0.01"
-                                oninput="liveUpdate(this)"></td>
+                            @if($entryMode === 'monthly')
+                                @foreach(range(1,12) as $mn)
+                                <td><input type="number"
+                                    class="form-control form-control-sm q-input m{{ $mn }} text-end"
+                                    value="{{ $item->{'m'.$mn.'_amount'} }}"
+                                    min="0" step="0.01" oninput="liveUpdate(this)"></td>
+                                @endforeach
+                            @else
+                                <td><input type="number" class="form-control form-control-sm q-input q1 text-end"
+                                    value="{{ $item->q1_amount }}" min="0" step="0.01"
+                                    oninput="liveUpdate(this)"></td>
+                                <td><input type="number" class="form-control form-control-sm q-input q2 text-end"
+                                    value="{{ $item->q2_amount }}" min="0" step="0.01"
+                                    oninput="liveUpdate(this)"></td>
+                                <td><input type="number" class="form-control form-control-sm q-input q3 text-end"
+                                    value="{{ $item->q3_amount }}" min="0" step="0.01"
+                                    oninput="liveUpdate(this)"></td>
+                                <td><input type="number" class="form-control form-control-sm q-input q4 text-end"
+                                    value="{{ $item->q4_amount }}" min="0" step="0.01"
+                                    oninput="liveUpdate(this)"></td>
+                            @endif
                             <td class="text-end text-muted small row-original">
                                 {{ number_format($item->total_amount, 2) }}
                             </td>
@@ -302,10 +324,16 @@
                                 placeholder="Optional note"
                                 onkeyup="scheduleAutoSave()"></td>
                         @else
-                            <td class="text-end small">{{ number_format($item->q1_amount, 2) }}</td>
-                            <td class="text-end small">{{ number_format($item->q2_amount, 2) }}</td>
-                            <td class="text-end small">{{ number_format($item->q3_amount, 2) }}</td>
-                            <td class="text-end small">{{ number_format($item->q4_amount, 2) }}</td>
+                            @if($entryMode === 'monthly')
+                                @foreach(range(1,12) as $mn)
+                                <td class="text-end small">{{ number_format($item->{'m'.$mn.'_amount'}, 2) }}</td>
+                                @endforeach
+                            @else
+                                <td class="text-end small">{{ number_format($item->q1_amount, 2) }}</td>
+                                <td class="text-end small">{{ number_format($item->q2_amount, 2) }}</td>
+                                <td class="text-end small">{{ number_format($item->q3_amount, 2) }}</td>
+                                <td class="text-end small">{{ number_format($item->q4_amount, 2) }}</td>
+                            @endif
                             <td class="text-end small text-muted">{{ number_format($item->total_amount, 2) }}</td>
                             <td class="text-end" style="color:{{ $itemSupp > 0 ? '#10B981' : 'inherit' }}">
                                 {{ $itemSupp > 0 ? '+'.number_format($itemSupp, 2) : '—' }}
@@ -318,10 +346,16 @@
                 <tfoot style="background:#F8FAFC;font-weight:700;" data-cat-supp="{{ $catSupp }}">
                     <tr>
                         <td>Category Total</td>
-                        <td class="text-end">{{ number_format($categoryData['q1'], 2) }}</td>
-                        <td class="text-end">{{ number_format($categoryData['q2'], 2) }}</td>
-                        <td class="text-end">{{ number_format($categoryData['q3'], 2) }}</td>
-                        <td class="text-end">{{ number_format($categoryData['q4'], 2) }}</td>
+                        @if($entryMode === 'monthly')
+                            @foreach(range(1,12) as $mn)
+                            <td class="text-end">{{ number_format($categoryData["m{$mn}"], 2) }}</td>
+                            @endforeach
+                        @else
+                            <td class="text-end">{{ number_format($categoryData['q1'], 2) }}</td>
+                            <td class="text-end">{{ number_format($categoryData['q2'], 2) }}</td>
+                            <td class="text-end">{{ number_format($categoryData['q3'], 2) }}</td>
+                            <td class="text-end">{{ number_format($categoryData['q4'], 2) }}</td>
+                        @endif
                         <td class="text-end">{{ number_format($categoryData['total'], 2) }}</td>
                         <td class="text-end" style="color:{{ $catSupp > 0 ? '#10B981' : 'inherit' }}">
                             {{ $catSupp > 0 ? '+'.number_format($catSupp, 2) : '—' }}
@@ -363,21 +397,29 @@
         });
     }
 
-    // Called on every Q input keystroke — updates row, category footer, grand total bar
+    const ENTRY_MODE = '{{ $entryMode }}';
+
+    // Called on every input keystroke — updates row totals, category footer, grand total bar
     function liveUpdate(input) {
         const row  = input.closest('tr');
-        const q1   = parseFloat(row.querySelector('.q1')?.value) || 0;
-        const q2   = parseFloat(row.querySelector('.q2')?.value) || 0;
-        const q3   = parseFloat(row.querySelector('.q3')?.value) || 0;
-        const q4   = parseFloat(row.querySelector('.q4')?.value) || 0;
         const supp = parseFloat(row.dataset.supp) || 0;
-        const orig = q1 + q2 + q3 + q4;
-        const eff  = orig + supp;
+        let orig = 0;
+
+        if (ENTRY_MODE === 'monthly') {
+            for (let m = 1; m <= 12; m++) {
+                orig += parseFloat(row.querySelector(`.m${m}`)?.value) || 0;
+            }
+        } else {
+            orig = (parseFloat(row.querySelector('.q1')?.value) || 0)
+                 + (parseFloat(row.querySelector('.q2')?.value) || 0)
+                 + (parseFloat(row.querySelector('.q3')?.value) || 0)
+                 + (parseFloat(row.querySelector('.q4')?.value) || 0);
+        }
 
         const origEl = row.querySelector('.row-original');
         const effEl  = row.querySelector('.row-total');
         if (origEl) origEl.textContent = numFmt(orig);
-        if (effEl)  effEl.textContent  = numFmt(eff);
+        if (effEl)  effEl.textContent  = numFmt(orig + supp);
 
         updateCategoryFooter(row.closest('table'));
         updateGrandTotals();
@@ -385,49 +427,83 @@
     }
 
     function updateCategoryFooter(table) {
-        const rows = table.querySelectorAll('tbody tr[data-item-id]');
-        let q1=0, q2=0, q3=0, q4=0, orig=0;
-        rows.forEach(row => {
-            const rq1 = parseFloat(row.querySelector('.q1')?.value) || 0;
-            const rq2 = parseFloat(row.querySelector('.q2')?.value) || 0;
-            const rq3 = parseFloat(row.querySelector('.q3')?.value) || 0;
-            const rq4 = parseFloat(row.querySelector('.q4')?.value) || 0;
-            q1 += rq1; q2 += rq2; q3 += rq3; q4 += rq4;
-            orig += rq1 + rq2 + rq3 + rq4;
-        });
-        const tfoot   = table.querySelector('tfoot');
+        const rows  = table.querySelectorAll('tbody tr[data-item-id]');
+        const tfoot = table.querySelector('tfoot');
         if (!tfoot) return;
         const catSupp = parseFloat(tfoot.dataset.catSupp) || 0;
-        const eff     = orig + catSupp;
         const cells   = tfoot.querySelectorAll('td');
-        if (cells[1]) cells[1].textContent = numFmt(q1);
-        if (cells[2]) cells[2].textContent = numFmt(q2);
-        if (cells[3]) cells[3].textContent = numFmt(q3);
-        if (cells[4]) cells[4].textContent = numFmt(q4);
-        if (cells[5]) cells[5].textContent = numFmt(orig);
-        if (cells[7]) cells[7].textContent = numFmt(eff);
 
-        // Update card header "Original:" and "Effective:" labels
-        const card = table.closest('.card');
-        if (card) {
-            const hOrig = card.querySelector('.cat-header-orig');
-            const hEff  = card.querySelector('.cat-header-eff');
-            if (hOrig) hOrig.textContent = CUR + ' ' + numFmt(orig);
-            if (hEff)  hEff.textContent  = '| Effective: ' + CUR + ' ' + numFmt(eff);
+        if (ENTRY_MODE === 'monthly') {
+            const ms = new Array(12).fill(0);
+            let orig = 0;
+            rows.forEach(row => {
+                for (let m = 1; m <= 12; m++) {
+                    const v = parseFloat(row.querySelector(`.m${m}`)?.value) || 0;
+                    ms[m - 1] += v;
+                    orig += v;
+                }
+            });
+            // cells[0]=label, cells[1..12]=months, cells[13]=orig, cells[14]=supp, cells[15]=eff
+            for (let m = 0; m < 12; m++) {
+                if (cells[m + 1]) cells[m + 1].textContent = numFmt(ms[m]);
+            }
+            if (cells[13]) cells[13].textContent = numFmt(orig);
+            if (cells[15]) cells[15].textContent = numFmt(orig + catSupp);
+            const card = table.closest('.card');
+            if (card) {
+                const hOrig = card.querySelector('.cat-header-orig');
+                const hEff  = card.querySelector('.cat-header-eff');
+                if (hOrig) hOrig.textContent = CUR + ' ' + numFmt(orig);
+                if (hEff)  hEff.textContent  = '| Effective: ' + CUR + ' ' + numFmt(orig + catSupp);
+            }
+        } else {
+            let q1=0, q2=0, q3=0, q4=0, orig=0;
+            rows.forEach(row => {
+                const rq1 = parseFloat(row.querySelector('.q1')?.value) || 0;
+                const rq2 = parseFloat(row.querySelector('.q2')?.value) || 0;
+                const rq3 = parseFloat(row.querySelector('.q3')?.value) || 0;
+                const rq4 = parseFloat(row.querySelector('.q4')?.value) || 0;
+                q1 += rq1; q2 += rq2; q3 += rq3; q4 += rq4;
+                orig += rq1 + rq2 + rq3 + rq4;
+            });
+            // cells[0]=label, cells[1..4]=Q1-Q4, cells[5]=orig, cells[6]=supp, cells[7]=eff
+            if (cells[1]) cells[1].textContent = numFmt(q1);
+            if (cells[2]) cells[2].textContent = numFmt(q2);
+            if (cells[3]) cells[3].textContent = numFmt(q3);
+            if (cells[4]) cells[4].textContent = numFmt(q4);
+            if (cells[5]) cells[5].textContent = numFmt(orig);
+            if (cells[7]) cells[7].textContent = numFmt(orig + catSupp);
+            const card = table.closest('.card');
+            if (card) {
+                const hOrig = card.querySelector('.cat-header-orig');
+                const hEff  = card.querySelector('.cat-header-eff');
+                if (hOrig) hOrig.textContent = CUR + ' ' + numFmt(orig);
+                if (hEff)  hEff.textContent  = '| Effective: ' + CUR + ' ' + numFmt(orig + catSupp);
+            }
         }
     }
 
     function updateGrandTotals() {
         let q1=0, q2=0, q3=0, q4=0, orig=0, totalSupp=0;
         document.querySelectorAll('tr[data-item-id]').forEach(row => {
-            const rq1  = parseFloat(row.querySelector('.q1')?.value) || 0;
-            const rq2  = parseFloat(row.querySelector('.q2')?.value) || 0;
-            const rq3  = parseFloat(row.querySelector('.q3')?.value) || 0;
-            const rq4  = parseFloat(row.querySelector('.q4')?.value) || 0;
             const supp = parseFloat(row.dataset.supp) || 0;
-            q1 += rq1; q2 += rq2; q3 += rq3; q4 += rq4;
-            orig      += rq1 + rq2 + rq3 + rq4;
             totalSupp += supp;
+            if (ENTRY_MODE === 'monthly') {
+                const ms = [1,2,3,4,5,6,7,8,9,10,11,12].map(n =>
+                    parseFloat(row.querySelector(`.m${n}`)?.value) || 0);
+                q1 += ms[0]+ms[1]+ms[2];
+                q2 += ms[3]+ms[4]+ms[5];
+                q3 += ms[6]+ms[7]+ms[8];
+                q4 += ms[9]+ms[10]+ms[11];
+                orig += ms.reduce((a,b) => a+b, 0);
+            } else {
+                const rq1 = parseFloat(row.querySelector('.q1')?.value) || 0;
+                const rq2 = parseFloat(row.querySelector('.q2')?.value) || 0;
+                const rq3 = parseFloat(row.querySelector('.q3')?.value) || 0;
+                const rq4 = parseFloat(row.querySelector('.q4')?.value) || 0;
+                q1 += rq1; q2 += rq2; q3 += rq3; q4 += rq4;
+                orig += rq1 + rq2 + rq3 + rq4;
+            }
         });
         const fmt = v => CUR + ' ' + numFmt(v);
         const el  = id => document.getElementById(id);
@@ -440,14 +516,24 @@
     }
 
     function collectItems() {
-        return Array.from(document.querySelectorAll('tr[data-item-id]')).map(row => ({
-            id:    row.dataset.itemId,
-            q1:    parseFloat(row.querySelector('.q1')?.value)  || 0,
-            q2:    parseFloat(row.querySelector('.q2')?.value)  || 0,
-            q3:    parseFloat(row.querySelector('.q3')?.value)  || 0,
-            q4:    parseFloat(row.querySelector('.q4')?.value)  || 0,
-            notes: row.querySelector('.notes-input')?.value     || '',
-        }));
+        return Array.from(document.querySelectorAll('tr[data-item-id]')).map(row => {
+            const notes = row.querySelector('.notes-input')?.value || '';
+            if (ENTRY_MODE === 'monthly') {
+                const item = { id: row.dataset.itemId, notes };
+                [1,2,3,4,5,6,7,8,9,10,11,12].forEach(n => {
+                    item[`m${n}`] = parseFloat(row.querySelector(`.m${n}`)?.value) || 0;
+                });
+                return item;
+            }
+            return {
+                id:    row.dataset.itemId,
+                q1:    parseFloat(row.querySelector('.q1')?.value) || 0,
+                q2:    parseFloat(row.querySelector('.q2')?.value) || 0,
+                q3:    parseFloat(row.querySelector('.q3')?.value) || 0,
+                q4:    parseFloat(row.querySelector('.q4')?.value) || 0,
+                notes,
+            };
+        });
     }
 
     async function saveBudget() {

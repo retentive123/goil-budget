@@ -64,6 +64,11 @@
                             Capital Expenditure — long-term investment
                         </option>
                     </optgroup>
+                    <optgroup label="Pricing">
+                        <option value="ex_pump_item" {{ old('budget_type')==='ex_pump_item' ?'selected':'' }}>
+                            Ex-pump Item — ex-pump price forecasting
+                        </option>
+                    </optgroup>
                 </select>
                 @error('budget_type')
                     <div class="invalid-feedback">{{ $message }}</div>

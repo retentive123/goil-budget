@@ -11,7 +11,7 @@ class BudgetPeriod extends Model
 
     protected $fillable = [
         'name', 'year', 'start_date', 'end_date',
-        'status', 'opened_at', 'closed_at', 'created_by'
+        'status', 'opened_at', 'closed_at', 'created_by', 'entry_mode',
     ];
 
     protected $casts = [
@@ -39,6 +39,18 @@ class BudgetPeriod extends Model
     public function isClosed(): bool
     {
         return in_array($this->status, ['closed', 'approved']);
+    }
+
+    public function isMonthly(): bool
+    {
+        return $this->entry_mode === 'monthly';
+    }
+
+    public function hasEntries(): bool
+    {
+        return $this->budgetVersions()
+            ->whereHas('lineItems', fn($q) => $q->where('total_amount', '>', 0))
+            ->exists();
     }
 
     // Get the single currently open period (there should only ever be one)

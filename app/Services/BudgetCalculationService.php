@@ -42,10 +42,10 @@ class BudgetCalculationService
                     'account_code_id'   => $code->id,
                 ],
                 [
-                    'q1_amount'       => 0,
-                    'q2_amount'       => 0,
-                    'q3_amount'       => 0,
-                    'q4_amount'       => 0,
+                    'm1_amount'  => 0, 'm2_amount'  => 0, 'm3_amount'  => 0,
+                    'm4_amount'  => 0, 'm5_amount'  => 0, 'm6_amount'  => 0,
+                    'm7_amount'  => 0, 'm8_amount'  => 0, 'm9_amount'  => 0,
+                    'm10_amount' => 0, 'm11_amount' => 0, 'm12_amount' => 0,
                     'line_type'       => $lineType,
                     'last_updated_by' => auth()->id(),
                 ]
@@ -180,12 +180,12 @@ public function isOverBudget(int $departmentId, int $periodId): array
 
         if (!isset($summary[$categoryName])) {
             $summary[$categoryName] = [
-                'q1'    => 0,
-                'q2'    => 0,
-                'q3'    => 0,
-                'q4'    => 0,
+                'q1' => 0, 'q2' => 0, 'q3' => 0, 'q4' => 0,
+                'm1'  => 0, 'm2'  => 0, 'm3'  => 0, 'm4'  => 0,
+                'm5'  => 0, 'm6'  => 0, 'm7'  => 0, 'm8'  => 0,
+                'm9'  => 0, 'm10' => 0, 'm11' => 0, 'm12' => 0,
                 'total' => 0,
-                'items' => collect(), // ✅ Initialize as a Collection
+                'items' => collect(),
             ];
         }
 
@@ -193,8 +193,11 @@ public function isOverBudget(int $departmentId, int $periodId): array
         $summary[$categoryName]['q2']    += $item->q2_amount;
         $summary[$categoryName]['q3']    += $item->q3_amount;
         $summary[$categoryName]['q4']    += $item->q4_amount;
+        foreach (range(1, 12) as $m) {
+            $summary[$categoryName]["m{$m}"] += $item->{"m{$m}_amount"};
+        }
         $summary[$categoryName]['total'] += $item->total_amount;
-        $summary[$categoryName]['items']->push($item); // ✅ Use push() on Collection
+        $summary[$categoryName]['items']->push($item);
     }
 
     return $summary;
@@ -243,7 +246,7 @@ public function isOverBudget(int $departmentId, int $periodId): array
 
             if ($prevVersionIds->isNotEmpty()) {
                 $prevBudgets = BudgetLineItem::whereIn('budget_version_id', $prevVersionIds)
-                    ->selectRaw('account_code_id, sum(q1_amount + q2_amount + q3_amount + q4_amount) as total')
+                    ->selectRaw('account_code_id, sum(total_amount) as total')
                     ->groupBy('account_code_id')
                     ->pluck('total', 'account_code_id')
                     ->map(fn($v) => (float) $v)

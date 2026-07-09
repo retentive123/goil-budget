@@ -88,6 +88,7 @@ class BudgetEntryController extends Controller
 
         $summary     = $this->calculator->summaryByCategory($budgetVersion);
         $grandTotals = $this->calculator->grandTotals($budgetVersion);
+        $entryMode   = $budgetVersion->period->entry_mode ?? 'quarterly';
 
         // Revenue categories first, then expense
         $revenueTypes = ['revenue', 'both'];
@@ -97,7 +98,7 @@ class BudgetEntryController extends Controller
             return (in_array($typeA, $revenueTypes) ? 0 : 1) <=> (in_array($typeB, $revenueTypes) ? 0 : 1);
         });
 
-        return view('budget.show', compact('budgetVersion', 'summary', 'grandTotals'));
+        return view('budget.show', compact('budgetVersion', 'summary', 'grandTotals', 'entryMode'));
     }
 
     // Show the P&L-style budget entry form
@@ -133,38 +134,78 @@ class BudgetEntryController extends Controller
             return response()->json(['error' => 'This budget is no longer editable.'], 403);
         }
 
-        $justificationRule = \App\Models\SystemSetting::get('require_justification', false)
+        $justificationRules = explode('|', \App\Models\SystemSetting::get('require_justification', false)
             ? 'required|string|max:500'
-            : 'nullable|string|max:500';
+            : 'nullable|string|max:500');
 
-        $justificationRules = explode('|', $justificationRule);
+        $mode = $budgetVersion->period->entry_mode ?? 'quarterly';
 
-        $request->validate([
-            'items'          => ['required', 'array'],
-            'items.*.id'     => ['required', 'exists:budget_line_items,id'],
-            'items.*.q1'     => ['required', 'numeric', 'min:0'],
-            'items.*.q2'     => ['required', 'numeric', 'min:0'],
-            'items.*.q3'     => ['required', 'numeric', 'min:0'],
-            'items.*.q4'     => ['required', 'numeric', 'min:0'],
-            'items.*.notes'  => $justificationRules,
-        ]);
+        if ($mode === 'monthly') {
+            $request->validate([
+                'items'       => ['required', 'array'],
+                'items.*.id'  => ['required', 'exists:budget_line_items,id'],
+                'items.*.m1'  => ['required', 'numeric', 'min:0'],
+                'items.*.m2'  => ['required', 'numeric', 'min:0'],
+                'items.*.m3'  => ['required', 'numeric', 'min:0'],
+                'items.*.m4'  => ['required', 'numeric', 'min:0'],
+                'items.*.m5'  => ['required', 'numeric', 'min:0'],
+                'items.*.m6'  => ['required', 'numeric', 'min:0'],
+                'items.*.m7'  => ['required', 'numeric', 'min:0'],
+                'items.*.m8'  => ['required', 'numeric', 'min:0'],
+                'items.*.m9'  => ['required', 'numeric', 'min:0'],
+                'items.*.m10' => ['required', 'numeric', 'min:0'],
+                'items.*.m11' => ['required', 'numeric', 'min:0'],
+                'items.*.m12' => ['required', 'numeric', 'min:0'],
+                'items.*.notes' => $justificationRules,
+            ]);
 
-        DB::transaction(function () use ($request, $budgetVersion) {
-            foreach ($request->items as $itemData) {
-                BudgetLineItem::where('id', $itemData['id'])
-                    ->where('budget_version_id', $budgetVersion->id)
-                    ->update([
-                        'q1_amount'       => $itemData['q1'],
-                        'q2_amount'       => $itemData['q2'],
-                        'q3_amount'       => $itemData['q3'],
-                        'q4_amount'       => $itemData['q4'],
-                        'justification'   => $itemData['notes'] ?? null,
-                        'last_updated_by' => auth()->id(),
-                    ]);
-            }
-        });
+            DB::transaction(function () use ($request, $budgetVersion) {
+                foreach ($request->items as $d) {
+                    BudgetLineItem::where('id', $d['id'])
+                        ->where('budget_version_id', $budgetVersion->id)
+                        ->update([
+                            'm1_amount'  => $d['m1'],  'm2_amount'  => $d['m2'],  'm3_amount'  => $d['m3'],
+                            'm4_amount'  => $d['m4'],  'm5_amount'  => $d['m5'],  'm6_amount'  => $d['m6'],
+                            'm7_amount'  => $d['m7'],  'm8_amount'  => $d['m8'],  'm9_amount'  => $d['m9'],
+                            'm10_amount' => $d['m10'], 'm11_amount' => $d['m11'], 'm12_amount' => $d['m12'],
+                            'justification'   => $d['notes'] ?? null,
+                            'last_updated_by' => auth()->id(),
+                        ]);
+                }
+            });
+        } else {
+            // Quarterly mode: validate Q1–Q4, spread each quarter equally across 3 months
+            $request->validate([
+                'items'         => ['required', 'array'],
+                'items.*.id'    => ['required', 'exists:budget_line_items,id'],
+                'items.*.q1'    => ['required', 'numeric', 'min:0'],
+                'items.*.q2'    => ['required', 'numeric', 'min:0'],
+                'items.*.q3'    => ['required', 'numeric', 'min:0'],
+                'items.*.q4'    => ['required', 'numeric', 'min:0'],
+                'items.*.notes' => $justificationRules,
+            ]);
 
-        // Return updated totals for live UI refresh
+            DB::transaction(function () use ($request, $budgetVersion) {
+                foreach ($request->items as $d) {
+                    [$m1, $m2, $m3]   = $this->spreadQuarter((float) $d['q1']);
+                    [$m4, $m5, $m6]   = $this->spreadQuarter((float) $d['q2']);
+                    [$m7, $m8, $m9]   = $this->spreadQuarter((float) $d['q3']);
+                    [$m10, $m11, $m12] = $this->spreadQuarter((float) $d['q4']);
+
+                    BudgetLineItem::where('id', $d['id'])
+                        ->where('budget_version_id', $budgetVersion->id)
+                        ->update([
+                            'm1_amount'  => $m1,  'm2_amount'  => $m2,  'm3_amount'  => $m3,
+                            'm4_amount'  => $m4,  'm5_amount'  => $m5,  'm6_amount'  => $m6,
+                            'm7_amount'  => $m7,  'm8_amount'  => $m8,  'm9_amount'  => $m9,
+                            'm10_amount' => $m10, 'm11_amount' => $m11, 'm12_amount' => $m12,
+                            'justification'   => $d['notes'] ?? null,
+                            'last_updated_by' => auth()->id(),
+                        ]);
+                }
+            });
+        }
+
         $grandTotals = $this->calculator->grandTotals($budgetVersion->fresh());
 
         return response()->json([
@@ -173,6 +214,13 @@ class BudgetEntryController extends Controller
             'grand_total' => number_format($grandTotals['total'], 2),
             'totals'      => $grandTotals,
         ]);
+    }
+
+    // Split a quarter total equally into 3 months, putting any remainder in the last month
+    private function spreadQuarter(float $total): array
+    {
+        $third = round($total / 3, 2);
+        return [$third, $third, round($total - $third * 2, 2)];
     }
 
     // Ensure only the owning department can access this version

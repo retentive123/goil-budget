@@ -14,11 +14,9 @@ class SupplementaryBudget extends Model
         'batch_id',
         'budget_period_id','department_id','budget_line_item_id',
         'account_code_id','line_type',
-        'original_amount','requested_amount','approved_amount',
-        'justification','supporting_evidence','status',
-        'rejection_reason',
-        'requested_by','reviewed_by','approved_by',
-        'submitted_at','reviewed_at','approved_at',
+        'original_amount','requested_amount',
+        'justification','supporting_evidence',
+        'requested_by',
     ];
 
     protected $casts = [

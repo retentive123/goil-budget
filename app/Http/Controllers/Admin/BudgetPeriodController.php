@@ -30,6 +30,7 @@ class BudgetPeriodController extends Controller
             'year'       => ['required', 'integer', 'min:2020', 'max:2100'],
             'start_date' => ['required', 'date'],
             'end_date'   => ['required', 'date', 'after:start_date'],
+            'entry_mode' => ['required', 'in:quarterly,monthly'],
         ]);
 
         BudgetPeriod::create([
@@ -73,7 +74,16 @@ class BudgetPeriodController extends Controller
             'year'       => ['required', 'integer', 'min:2020', 'max:2100'],
             'start_date' => ['required', 'date'],
             'end_date'   => ['required', 'date', 'after:start_date'],
+            'entry_mode' => ['required', 'in:quarterly,monthly'],
         ]);
+
+        // Lock entry_mode once any entries exist
+        if (isset($validated['entry_mode']) &&
+            $validated['entry_mode'] !== $budgetPeriod->entry_mode &&
+            $budgetPeriod->hasEntries()) {
+            return back()->withInput()
+                ->with('error', 'Entry mode cannot be changed after budget entries have been saved.');
+        }
 
         $budgetPeriod->update($validated);
 

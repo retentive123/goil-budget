@@ -113,14 +113,24 @@ class TwoFactorController extends Controller
             return redirect()->route('login');
         }
 
-        $valid = $this->google2fa->verifyKey(
+        $code       = str_replace(' ', '', $request->code);
+        $tsKey      = "totp_ts_{$user->id}";
+        $lastTs     = Cache::get($tsKey);
+
+        // verifyKeyNewer rejects codes at or before the last-used timestamp,
+        // preventing replay within the ~30-90 second TOTP window.
+        $newTs = $this->google2fa->verifyKeyNewer(
             $user->two_factor_secret,
-            str_replace(' ', '', $request->code)
+            $code,
+            $lastTs
         );
 
-        if (!$valid) {
+        if ($newTs === false) {
             return back()->withErrors(['code' => 'Invalid authentication code.']);
         }
+
+        // Record the timestamp so this code cannot be replayed
+        Cache::put($tsKey, $newTs, now()->addMinutes(5));
 
         // ✅ Clear 2FA session data
         session()->forget(['2fa_user_id', '2fa_remember']);

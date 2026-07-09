@@ -164,6 +164,8 @@ class ImportExportController extends Controller
         $version = BudgetVersion::with('lineItems.accountCode.category','department','period')
             ->findOrFail($request->budget_version_id);
 
+        $this->authorizeBudgetAccess($version);
+
         $month    = (int) $request->month;
         $year     = (int) $request->year;
         $monthName = BudgetActual::MONTHS[$month];
@@ -189,6 +191,9 @@ class ImportExportController extends Controller
         ]);
 
         $version = BudgetVersion::findOrFail($request->budget_version_id);
+
+        $this->authorizeBudgetAccess($version);
+
         $month   = (int) $request->month;
         $year    = (int) $request->year;
 

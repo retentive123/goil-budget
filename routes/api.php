@@ -30,8 +30,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // ── Budgets ──
     Route::get('/budgets',                          [BudgetController::class, 'index']);
     Route::get('/budgets/{budget}',                 [BudgetController::class, 'show']);
-    Route::patch('/budgets/{budget}/line-items',    [BudgetController::class, 'updateLineItems']);
-    Route::post('/budgets/{budget}/submit',         [BudgetController::class, 'submit']);
+    Route::patch('/budgets/{budget}/line-items',    [BudgetController::class, 'updateLineItems'])->middleware('permission:create budget');
+    Route::post('/budgets/{budget}/submit',         [BudgetController::class, 'submit'])->middleware('permission:create budget');
 
     // ── Departments ──
     Route::get('/departments',              [DepartmentController::class, 'index']);

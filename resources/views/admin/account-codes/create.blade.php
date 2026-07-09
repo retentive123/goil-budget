@@ -1,5 +1,6 @@
 @extends('layouts.app')
 @section('title', 'Add Account Code')
+@php $isExpump = old('account_category_id') ? ($categories->find(old('account_category_id'))?->budget_type === 'ex_pump_item') : false; @endphp
 
 @push('styles')
 <link rel="stylesheet"
@@ -87,14 +88,32 @@
                 @error('name')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
 
-            <div class="mb-4">
+            <div class="mb-3">
                 <label class="form-label small fw-semibold">Description</label>
                 <textarea name="description" rows="2"
                     class="form-control">{{ old('description') }}</textarea>
             </div>
 
+            {{-- Ex-pump–specific fields: shown only when category type = ex_pump_item --}}
+            <div id="expumpFields" style="display:{{ $isExpump ? '' : 'none' }};">
+                <div class="row g-2 mb-3">
+                    <div class="col-8">
+                        <label class="form-label small fw-semibold">Unit</label>
+                        <input type="text" name="unit" value="{{ old('unit') }}"
+                            class="form-control form-control-sm" placeholder="e.g. GHS/litre">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small fw-semibold">Sort Order</label>
+                        <input type="number" name="sort_order" value="{{ old('sort_order', 0) }}"
+                            class="form-control form-control-sm" min="0">
+                    </div>
+                </div>
+
+                @include('admin.account-codes._formula_builder')
+            </div>
+
             <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary">Create</button>
+                <button type="submit" class="btn btn-primary" onclick="return onCreateSubmit(event)">Create</button>
                 <a href="{{ route('admin.account-codes.index') }}" class="btn btn-outline-secondary">Cancel</a>
             </div>
         </form>
@@ -112,6 +131,7 @@ const TYPE_CONFIG = {
     assets:              { label: 'Assets',     color: '#5B21B6', bg: '#EDE9FE' },
     liabilities:         { label: 'Liabilities',color: '#7C3AED', bg: '#F3E8FF' },
     capital_expenditure: { label: 'CapEx',      color: '#92400E', bg: '#FEF3C7' },
+    ex_pump_item:        { label: 'Ex-pump',   color: '#1B2A4A', bg: '#FEF9EC' },
 };
 
 function typeBadge(typeKey) {
@@ -122,7 +142,7 @@ function typeBadge(typeKey) {
             </span>`;
 }
 
-new TomSelect('#categorySelect', {
+const ts = new TomSelect('#categorySelect', {
     placeholder: '— Search or select a category —',
     allowEmptyOption: true,
     maxOptions: null,
@@ -145,7 +165,39 @@ new TomSelect('#categorySelect', {
                     </div>`;
         },
     },
+
+    onChange: function(value) {
+        const opt  = this.options[value];
+        const type = opt?.element?.dataset?.type || '';
+        const show = type === 'ex_pump_item';
+        document.getElementById('expumpFields').style.display = show ? '' : 'none';
+        if (!show) {
+            // reset calc_type back to values when switching away
+            const r = document.getElementById('calc_type_values');
+            if (r) { r.checked = true; r.dispatchEvent(new Event('change')); }
+        } else {
+            // show/hide calcTypeSection inside expumpFields
+            const cs = document.getElementById('calcTypeSection');
+            if (cs) cs.style.display = '';
+        }
+    },
 });
+
+// show calcTypeSection if ex_pump_item is already selected (on validation error repopulate)
+(function() {
+    const cs = document.getElementById('calcTypeSection');
+    if (cs && document.getElementById('expumpFields').style.display !== 'none') {
+        cs.style.display = '';
+    }
+})();
+
+function onCreateSubmit(e) {
+    if (typeof fbSerialize === 'function' && !fbSerialize()) {
+        e.preventDefault();
+        return false;
+    }
+    return true;
+}
 </script>
 
 @endsection

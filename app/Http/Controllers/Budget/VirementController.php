@@ -259,17 +259,16 @@ class VirementController extends Controller
             ->with('success', 'Virement rejected. Department has been notified.');
     }
 
-    // Spread virement amount proportionally across quarters
+    // Spread virement amount proportionally across all 12 months
     private function adjustLineItem(BudgetLineItem $item, float $amount): void
     {
         $total = $item->total_amount ?: 1;
-
-        $item->update([
-            'q1_amount' => max(0, $item->q1_amount + ($amount * ($item->q1_amount / $total))),
-            'q2_amount' => max(0, $item->q2_amount + ($amount * ($item->q2_amount / $total))),
-            'q3_amount' => max(0, $item->q3_amount + ($amount * ($item->q3_amount / $total))),
-            'q4_amount' => max(0, $item->q4_amount + ($amount * ($item->q4_amount / $total))),
-        ]);
+        $update = [];
+        foreach (range(1, 12) as $m) {
+            $col = "m{$m}_amount";
+            $update[$col] = max(0, $item->{$col} + ($amount * ($item->{$col} / $total)));
+        }
+        $item->update($update);
     }
 
     private function notifyFinance(Virement $virement): void

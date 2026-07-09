@@ -89,9 +89,12 @@ class DashboardController extends Controller
 
         if ($myBudget) {
             $data['quarterTotals'] = BudgetLineItem::where('budget_version_id', $myBudget->id)
-                ->selectRaw('SUM(q1_amount) as q1, SUM(q2_amount) as q2,
-                             SUM(q3_amount) as q3, SUM(q4_amount) as q4')
-                ->first();
+                ->selectRaw('
+                    SUM(m1_amount+m2_amount+m3_amount)   as q1,
+                    SUM(m4_amount+m5_amount+m6_amount)   as q2,
+                    SUM(m7_amount+m8_amount+m9_amount)   as q3,
+                    SUM(m10_amount+m11_amount+m12_amount) as q4
+                ')->first();
 
             $data['topItems'] = BudgetLineItem::where('budget_version_id', $myBudget->id)
                 ->with('accountCode.category')

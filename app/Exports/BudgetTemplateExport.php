@@ -23,9 +23,10 @@ class BudgetTemplateExport implements WithMultipleSheets
 
     public function sheets(): array
     {
+        $mode = $this->version->period->entry_mode ?? 'quarterly';
         return [
             new BudgetDataSheet($this->version),
-            new BudgetInstructionsSheet(),
+            new BudgetInstructionsSheet($mode),
         ];
     }
 }
@@ -34,9 +35,31 @@ class BudgetDataSheet implements
     FromCollection, WithHeadings, WithTitle,
     WithStyles, ShouldAutoSize
 {
-    public function __construct(protected BudgetVersion $version) {}
+    protected string $mode;
+
+    public function __construct(protected BudgetVersion $version)
+    {
+        $this->mode = $version->period->entry_mode ?? 'quarterly';
+    }
 
     public function title(): string { return 'Budget Entry'; }
+
+    public function headings(): array
+    {
+        if ($this->mode === 'monthly') {
+            return [
+                'line_item_id', 'Category', 'Account Code', 'Account Name',
+                'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+                'Total', 'Justification',
+            ];
+        }
+        return [
+            'line_item_id', 'Category', 'Account Code', 'Account Name',
+            'Q1 (Jan-Mar)', 'Q2 (Apr-Jun)', 'Q3 (Jul-Sep)', 'Q4 (Oct-Dec)',
+            'Total', 'Justification',
+        ];
+    }
 
     public function collection()
     {
@@ -44,122 +67,118 @@ class BudgetDataSheet implements
             ->with('accountCode.category')
             ->get();
 
-        return $items->map(fn($item) => [
-            $item->id,                                 // A — hidden ID
-            $item->accountCode->category->name,        // B
-            $item->accountCode->code,                  // C
-            $item->accountCode->name,                  // D
-            $item->q1_amount,                          // E
-            $item->q2_amount,                          // F
-            $item->q3_amount,                          // G
-            $item->q4_amount,                          // H
-            $item->total_amount,                       // I — formula
-            $item->justification,                      // J
-        ]);
-    }
+        if ($this->mode === 'monthly') {
+            return $items->map(fn($item) => [
+                $item->id,
+                $item->accountCode->category->name,
+                $item->accountCode->code,
+                $item->accountCode->name,
+                $item->m1_amount,  $item->m2_amount,  $item->m3_amount,
+                $item->m4_amount,  $item->m5_amount,  $item->m6_amount,
+                $item->m7_amount,  $item->m8_amount,  $item->m9_amount,
+                $item->m10_amount, $item->m11_amount, $item->m12_amount,
+                $item->total_amount,
+                $item->justification,
+            ]);
+        }
 
-    public function headings(): array
-    {
-        return [
-            'line_item_id',    // A — do not edit
-            'Category',        // B
-            'Account Code',    // C
-            'Account Name',    // D
-            'Q1',    // E
-            'Q2',    // F
-            'Q3',    // G
-            'Q4',    // H
-            'Total',           // I
-            'Justification',   // J
-        ];
+        return $items->map(fn($item) => [
+            $item->id,
+            $item->accountCode->category->name,
+            $item->accountCode->code,
+            $item->accountCode->name,
+            $item->q1_amount,
+            $item->q2_amount,
+            $item->q3_amount,
+            $item->q4_amount,
+            $item->total_amount,
+            $item->justification,
+        ]);
     }
 
     public function styles(Worksheet $sheet): void
     {
-        $lastRow = $sheet->getHighestRow();
+        $isMonthly = $this->mode === 'monthly';
+        $lastRow   = $sheet->getHighestRow();
 
-        // Header row styling
-        $sheet->getStyle('A1:J1')->applyFromArray([
-            'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
-            'fill' => ['fillType' => Fill::FILL_SOLID,
-                       'startColor' => ['argb' => 'FF1B2A4A']],
+        // Quarterly: A=id B=cat C=code D=name E-H=Q1-Q4   I=Total J=Justification
+        // Monthly:   A=id B=cat C=code D=name E-P=Jan-Dec Q=Total R=Justification
+        $editEnd  = $isMonthly ? 'P' : 'H';
+        $totalCol = $isMonthly ? 'Q' : 'I';
+        $lastCol  = $isMonthly ? 'R' : 'J';
+
+        $sheet->getStyle("A1:{$lastCol}1")->applyFromArray([
+            'font'      => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF1B2A4A']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
         ]);
 
-        // Lock column A (IDs) — gray it out
-        $sheet->getStyle('A2:A'.$lastRow)->applyFromArray([
-            'fill' => ['fillType' => Fill::FILL_SOLID,
-                       'startColor' => ['argb' => 'FFE2E8F0']],
+        $sheet->getStyle("A2:A{$lastRow}")->applyFromArray([
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFE2E8F0']],
             'font' => ['color' => ['argb' => 'FF94A3B8']],
         ]);
 
-        // Lock columns B, C, D (read-only info) — light gray
-        $sheet->getStyle('B2:D'.$lastRow)->applyFromArray([
-            'fill' => ['fillType' => Fill::FILL_SOLID,
-                       'startColor' => ['argb' => 'FFF8FAFC']],
+        $sheet->getStyle("B2:D{$lastRow}")->applyFromArray([
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFF8FAFC']],
             'font' => ['color' => ['argb' => 'FF475569']],
         ]);
 
-        // Editable Q columns — white with light border
-        $sheet->getStyle('E2:H'.$lastRow)->applyFromArray([
-            'fill' => ['fillType' => Fill::FILL_SOLID,
-                       'startColor' => ['argb' => 'FFFFFFFF']],
-            'borders' => [
-                'allBorders' => ['borderStyle' => Border::BORDER_THIN,
-                                 'color' => ['argb' => 'FFE2E8F0']],
-            ],
+        $sheet->getStyle("E2:{$editEnd}{$lastRow}")->applyFromArray([
+            'fill'    => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFFFFFF']],
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN,
+                                           'color'       => ['argb' => 'FFE2E8F0']]],
         ]);
 
-        // Total column — formula color
-        $sheet->getStyle('I2:I'.$lastRow)->applyFromArray([
-            'fill' => ['fillType' => Fill::FILL_SOLID,
-                       'startColor' => ['argb' => 'FFF0FDF4']],
+        $sheet->getStyle("{$totalCol}2:{$totalCol}{$lastRow}")->applyFromArray([
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFF0FDF4']],
             'font' => ['color' => ['argb' => 'FF065F46'], 'bold' => true],
         ]);
 
-        // Set total column formulas
+        $totalFormula = $isMonthly
+            ? fn(int $r) => "=E{$r}+F{$r}+G{$r}+H{$r}+I{$r}+J{$r}+K{$r}+L{$r}+M{$r}+N{$r}+O{$r}+P{$r}"
+            : fn(int $r) => "=E{$r}+F{$r}+G{$r}+H{$r}";
         for ($row = 2; $row <= $lastRow; $row++) {
-            $sheet->setCellValue("I{$row}", "=E{$row}+F{$row}+G{$row}+H{$row}");
+            $sheet->setCellValue("{$totalCol}{$row}", $totalFormula($row));
         }
 
-        // Hide column A
         $sheet->getColumnDimension('A')->setVisible(false);
 
-        // Instruction row above header
         $sheet->insertNewRowBefore(1, 1);
-        $sheet->setCellValue('A1',
-            'GOIL BUDGET TOOL — Fill in Q1–Q4 columns only. Do not edit grey columns. Upload this file when done.'
-        );
-        $sheet->mergeCells('A1:J1');
+        $instrText = $isMonthly
+            ? 'GOIL BUDGET TOOL — Fill in Jan–Dec columns only. Do not edit grey columns. Upload this file when done.'
+            : 'GOIL BUDGET TOOL — Fill in Q1–Q4 columns only. Do not edit grey columns. Upload this file when done.';
+        $sheet->setCellValue('A1', $instrText);
+        $sheet->mergeCells("A1:{$lastCol}1");
         $sheet->getStyle('A1')->applyFromArray([
-            'font' => ['bold' => true, 'color' => ['argb' => 'FF92400E']],
-            'fill' => ['fillType' => Fill::FILL_SOLID,
-                       'startColor' => ['argb' => 'FFFEF3C7']],
+            'font'      => ['bold' => true, 'color' => ['argb' => 'FF92400E']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFEF3C7']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
         ]);
 
-        // Number format for Q columns
-        $sheet->getStyle('E3:I'.$lastRow)
-              ->getNumberFormat()
-              ->setFormatCode('#,##0.00');
+        $newLastRow = $sheet->getHighestRow();
+        $sheet->getStyle("E3:{$totalCol}{$newLastRow}")
+              ->getNumberFormat()->setFormatCode('#,##0.00');
 
-        // Freeze panes — lock header
         $sheet->freezePane('E3');
     }
 }
 
 class BudgetInstructionsSheet implements WithTitle
 {
+    public function __construct(protected string $mode = 'quarterly') {}
+
     public function title(): string { return 'Instructions'; }
 
     public function __invoke(Worksheet $sheet): void
     {
+        $colLabel = $this->mode === 'monthly' ? 'Jan, Feb, ..., Dec' : 'Q1, Q2, Q3, Q4';
+
         $instructions = [
             ['GOIL Budget Tool — Upload Instructions', ''],
             ['', ''],
             ['Step', 'Instruction'],
             ['1', 'Go to the "Budget Entry" sheet'],
-            ['2', 'Fill in Q1, Q2, Q3, Q4 amounts for each account code'],
+            ['2', "Fill in {$colLabel} amounts for each account code"],
             ['3', 'The Total column calculates automatically — do not edit it'],
             ['4', 'Add justification notes in the last column (optional)'],
             ['5', 'Do NOT edit the grey columns (Category, Code, Name)'],

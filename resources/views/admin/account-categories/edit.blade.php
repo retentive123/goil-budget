@@ -123,6 +123,11 @@
                                     Capital Expenditure — long-term investment
                                 </option>
                             </optgroup>
+                            <optgroup label="Pricing">
+                                <option value="ex_pump_item" {{ $bt === 'ex_pump_item' ? 'selected' : '' }}>
+                                    Ex-pump Item — ex-pump price forecasting
+                                </option>
+                            </optgroup>
                         </select>
                         <div style="font-size: 12px; color: #64748B; margin-top: 4px;">
                             <i class="fas fa-info-circle"></i> Determines how line items in this category are treated.

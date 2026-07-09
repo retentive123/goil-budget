@@ -38,7 +38,7 @@ class AccountCategoryController extends Controller
             'name'                    => ['required', 'string', 'max:255', 'unique:account_categories,name'],
             'code'                    => ['required', 'string', 'max:20',  'unique:account_categories,code'],
             'description'             => ['nullable', 'string'],
-            'budget_type'             => ['required','in:revenue,expense,both,capital_expenditure,assets,liabilities'],
+            'budget_type'             => ['required','in:revenue,expense,both,capital_expenditure,assets,liabilities,ex_pump_item'],
             'account_sub_category_id' => ['nullable', 'exists:account_sub_categories,id'],
         ]);
 
@@ -74,7 +74,7 @@ class AccountCategoryController extends Controller
                                           'unique:account_categories,code,' . $accountCategory->id],
             'description'             => ['nullable', 'string'],
             'is_active'               => ['boolean'],
-            'budget_type'             => ['required','in:revenue,expense,both,capital_expenditure,assets,liabilities'],
+            'budget_type'             => ['required','in:revenue,expense,both,capital_expenditure,assets,liabilities,ex_pump_item'],
             'account_sub_category_id' => ['nullable', 'exists:account_sub_categories,id'],
         ]);
 

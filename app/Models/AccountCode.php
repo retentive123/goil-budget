@@ -11,10 +11,14 @@ class AccountCode extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'account_category_id', 'code', 'name', 'description', 'is_active'
+        'account_category_id', 'code', 'name', 'description',
+        'unit', 'calc_type', 'calc_config', 'sort_order', 'is_active',
     ];
 
-    protected $casts = ['is_active' => 'boolean'];
+    protected $casts = [
+        'is_active'   => 'boolean',
+        'calc_config' => 'array',
+    ];
 
     public function category()
     {

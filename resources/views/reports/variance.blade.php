@@ -464,7 +464,7 @@ function updatePills() {
             background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;
             border-radius:12px;font-size:11px;font-weight:600;padding:2px 8px;
             cursor:pointer;white-space:nowrap`;
-        pill.innerHTML = `${label} <span style="opacity:.7">×</span>`;
+        pill.innerHTML = `${esc(label)} <span style="opacity:.7">×</span>`;
         pill.onclick   = () => {
             document.querySelector(`.type-cb[value="${t}"]`).checked = false;
             handleTypeCb();
@@ -478,7 +478,7 @@ function updatePills() {
             background:#F0FDF4;color:#15803D;border:1px solid #BBF7D0;
             border-radius:12px;font-size:11px;font-weight:600;padding:2px 8px;
             cursor:pointer;white-space:nowrap`;
-        pill.innerHTML = `${c} <span style="opacity:.7">×</span>`;
+        pill.innerHTML = `${esc(c)} <span style="opacity:.7">×</span>`;
         pill.onclick   = () => {
             document.querySelector(`.cat-cb[value="${CSS.escape(c)}"]`).checked = false;
             handleCatCb();

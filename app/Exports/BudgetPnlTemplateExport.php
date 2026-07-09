@@ -22,27 +22,43 @@ class BudgetPnlTemplateExport implements WithMultipleSheets
 
     public function sheets(): array
     {
+        $mode = $this->version->period->entry_mode ?? 'quarterly';
         return [
             new BudgetPnlDataSheet($this->version),
-            new BudgetPnlInstructionsSheet(),
+            new BudgetPnlInstructionsSheet($mode),
         ];
     }
 }
 
 class BudgetPnlDataSheet implements FromCollection, WithHeadings, WithTitle, WithStyles, ShouldAutoSize
 {
-    private array $rowTypes = [];
+    private array  $rowTypes = [];
+    private string $mode;
+    private string $lastCol;
+    private string $totalCol;
 
-    public function __construct(protected BudgetVersion $version) {}
+    public function __construct(protected BudgetVersion $version)
+    {
+        $this->mode     = $version->period->entry_mode ?? 'quarterly';
+        // Quarterly: A=id B=type C=cat D=code E=name F-I=Q1-Q4 J=Total K=Justification (11 cols)
+        // Monthly:   A=id B=type C=cat D=code E=name F-Q=Jan-Dec R=Total S=Justification (19 cols)
+        $this->totalCol = $this->mode === 'monthly' ? 'R' : 'J';
+        $this->lastCol  = $this->mode === 'monthly' ? 'S' : 'K';
+    }
 
     public function title(): string { return 'Budget Entry (P&L)'; }
 
     public function headings(): array
     {
-        return [
-            'line_item_id', 'Type', 'Category', 'Account Code', 'Account Name',
-            'Q1', 'Q2', 'Q3', 'Q4', 'Total', 'Justification',
-        ];
+        $periodCols = $this->mode === 'monthly'
+            ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            : ['Q1 (Jan-Mar)', 'Q2 (Apr-Jun)', 'Q3 (Jul-Sep)', 'Q4 (Oct-Dec)'];
+
+        return array_merge(
+            ['line_item_id', 'Type', 'Category', 'Account Code', 'Account Name'],
+            $periodCols,
+            ['Total', 'Justification']
+        );
     }
 
     public function collection(): Collection
@@ -51,8 +67,12 @@ class BudgetPnlDataSheet implements FromCollection, WithHeadings, WithTitle, Wit
             ->with('accountCode.category')
             ->get();
 
-        $sections = ['revenue' => [], 'expense' => []];
-        $capexSections  = [];
+        $isMonthly   = $this->mode === 'monthly';
+        $totalCols   = $isMonthly ? 19 : 11;
+        $emptyPeriod = array_fill(0, $isMonthly ? 12 : 4, '');
+
+        $sections        = ['revenue' => [], 'expense' => []];
+        $capexSections   = [];
         $balanceSections = [];
 
         foreach ($items as $item) {
@@ -75,236 +95,257 @@ class BudgetPnlDataSheet implements FromCollection, WithHeadings, WithTitle, Wit
 
         // ── Revenue & Expense ──
         foreach (['revenue' => 'REVENUE', 'expense' => 'EXPENSE'] as $type => $label) {
-            $rows->push([null, "=== {$label} ===", '', '', '', '', '', '', '', '', '']);
+            $rows->push(array_pad([null, "=== {$label} ==="], $totalCols, ''));
             $this->rowTypes[] = "section_{$type}";
 
             foreach ($sections[$type] as $catName => $catItems) {
-                $rows->push([null, '', $catName, '', '', '', '', '', '', '', '']);
+                $rows->push(array_pad([null, '', $catName], $totalCols, ''));
                 $this->rowTypes[] = 'category';
 
-                $catQ1 = $catQ2 = $catQ3 = $catQ4 = 0;
+                $catPeriod = array_fill(0, $isMonthly ? 12 : 4, 0.0);
                 foreach ($catItems as $item) {
-                    $rows->push([
-                        $item->id, ucfirst($type),
-                        $item->accountCode->category->name,
-                        $item->accountCode->code, $item->accountCode->name,
-                        $item->q1_amount, $item->q2_amount, $item->q3_amount, $item->q4_amount,
-                        $item->total_amount, $item->justification,
-                    ]);
+                    $itemPeriod = $this->itemPeriodCols($item, $isMonthly);
+                    $rows->push(array_merge(
+                        [$item->id, ucfirst($type), $item->accountCode->category->name,
+                         $item->accountCode->code, $item->accountCode->name],
+                        $itemPeriod,
+                        [$item->total_amount, $item->justification]
+                    ));
                     $this->rowTypes[] = 'item';
-                    $catQ1 += $item->q1_amount; $catQ2 += $item->q2_amount;
-                    $catQ3 += $item->q3_amount; $catQ4 += $item->q4_amount;
+                    foreach ($itemPeriod as $k => $v) { $catPeriod[$k] += $v; }
                 }
-                $rows->push([null, '', $catName . ' SUBTOTAL', '', '', $catQ1, $catQ2, $catQ3, $catQ4, $catQ1+$catQ2+$catQ3+$catQ4, '']);
+                $rows->push(array_merge(
+                    [null, '', $catName . ' SUBTOTAL', '', ''],
+                    $catPeriod,
+                    [array_sum($catPeriod), '']
+                ));
                 $this->rowTypes[] = 'subtotal';
             }
 
-            $secItems = collect(array_merge(...(array_values($sections[$type]) ?: [[]])));
-            $rows->push([null, "{$label} TOTAL", '', '', '',
-                $secItems->sum('q1_amount'), $secItems->sum('q2_amount'),
-                $secItems->sum('q3_amount'), $secItems->sum('q4_amount'),
-                $secItems->sum('total_amount'), '']);
+            $secItems  = collect(array_merge(...(array_values($sections[$type]) ?: [[]])));
+            $secPeriod = $this->sumPeriodCols($secItems, $isMonthly);
+            $rows->push(array_merge(
+                [null, "{$label} TOTAL", '', '', ''],
+                $secPeriod,
+                [$secItems->sum('total_amount'), '']
+            ));
             $this->rowTypes[] = 'section_total';
 
-            $rows->push([null, '', '', '', '', '', '', '', '', '', '']);
+            $rows->push(array_pad([], $totalCols, ''));
             $this->rowTypes[] = 'spacer';
         }
 
         // ── Capital Expenditure ──
         if (!empty($capexSections)) {
-            $rows->push([null, '=== CAPITAL EXPENDITURE ===', '', '', '', '', '', '', '', '', '']);
+            $rows->push(array_pad([null, '=== CAPITAL EXPENDITURE ==='], $totalCols, ''));
             $this->rowTypes[] = 'section_capex';
 
             foreach ($capexSections as $catName => $catItems) {
-                $rows->push([null, '', $catName, '', '', '', '', '', '', '', '']);
+                $rows->push(array_pad([null, '', $catName], $totalCols, ''));
                 $this->rowTypes[] = 'category';
 
-                $catQ1 = $catQ2 = $catQ3 = $catQ4 = 0;
+                $catPeriod = array_fill(0, $isMonthly ? 12 : 4, 0.0);
                 foreach ($catItems as $item) {
-                    $rows->push([
-                        $item->id, 'CapEx',
-                        $item->accountCode->category->name,
-                        $item->accountCode->code, $item->accountCode->name,
-                        $item->q1_amount, $item->q2_amount, $item->q3_amount, $item->q4_amount,
-                        $item->total_amount, $item->justification,
-                    ]);
+                    $itemPeriod = $this->itemPeriodCols($item, $isMonthly);
+                    $rows->push(array_merge(
+                        [$item->id, 'CapEx', $item->accountCode->category->name,
+                         $item->accountCode->code, $item->accountCode->name],
+                        $itemPeriod,
+                        [$item->total_amount, $item->justification]
+                    ));
                     $this->rowTypes[] = 'item';
-                    $catQ1 += $item->q1_amount; $catQ2 += $item->q2_amount;
-                    $catQ3 += $item->q3_amount; $catQ4 += $item->q4_amount;
+                    foreach ($itemPeriod as $k => $v) { $catPeriod[$k] += $v; }
                 }
-                $rows->push([null, '', $catName . ' SUBTOTAL', '', '', $catQ1, $catQ2, $catQ3, $catQ4, $catQ1+$catQ2+$catQ3+$catQ4, '']);
+                $rows->push(array_merge(
+                    [null, '', $catName . ' SUBTOTAL', '', ''],
+                    $catPeriod,
+                    [array_sum($catPeriod), '']
+                ));
                 $this->rowTypes[] = 'subtotal';
             }
 
-            $cxAll = collect(array_merge(...array_values($capexSections)));
-            $rows->push([null, 'CAPITAL EXPENDITURE TOTAL', '', '', '',
-                $cxAll->sum('q1_amount'), $cxAll->sum('q2_amount'),
-                $cxAll->sum('q3_amount'), $cxAll->sum('q4_amount'),
-                $cxAll->sum('total_amount'), '']);
+            $cxAll    = collect(array_merge(...array_values($capexSections)));
+            $cxPeriod = $this->sumPeriodCols($cxAll, $isMonthly);
+            $rows->push(array_merge(
+                [null, 'CAPITAL EXPENDITURE TOTAL', '', '', ''],
+                $cxPeriod,
+                [$cxAll->sum('total_amount'), '']
+            ));
             $this->rowTypes[] = 'section_total';
 
-            $rows->push([null, '', '', '', '', '', '', '', '', '', '']);
+            $rows->push(array_pad([], $totalCols, ''));
             $this->rowTypes[] = 'spacer';
         }
 
         // ── Assets & Liabilities ──
         if (!empty($balanceSections)) {
-            $rows->push([null, '=== ASSETS & LIABILITIES ===', '', '', '', '', '', '', '', '', '']);
+            $rows->push(array_pad([null, '=== ASSETS & LIABILITIES ==='], $totalCols, ''));
             $this->rowTypes[] = 'section_balance';
 
             foreach ($balanceSections as $catName => $catItems) {
-                $rows->push([null, '', $catName, '', '', '', '', '', '', '', '']);
+                $rows->push(array_pad([null, '', $catName], $totalCols, ''));
                 $this->rowTypes[] = 'category';
 
-                $catQ1 = $catQ2 = $catQ3 = $catQ4 = 0;
+                $catPeriod = array_fill(0, $isMonthly ? 12 : 4, 0.0);
                 foreach ($catItems as $item) {
-                    $rows->push([
-                        $item->id, ucfirst($item->accountCode->category->budget_type),
-                        $item->accountCode->category->name,
-                        $item->accountCode->code, $item->accountCode->name,
-                        $item->q1_amount, $item->q2_amount, $item->q3_amount, $item->q4_amount,
-                        $item->total_amount, $item->justification,
-                    ]);
+                    $itemPeriod = $this->itemPeriodCols($item, $isMonthly);
+                    $rows->push(array_merge(
+                        [$item->id, ucfirst($item->accountCode->category->budget_type),
+                         $item->accountCode->category->name,
+                         $item->accountCode->code, $item->accountCode->name],
+                        $itemPeriod,
+                        [$item->total_amount, $item->justification]
+                    ));
                     $this->rowTypes[] = 'item';
-                    $catQ1 += $item->q1_amount; $catQ2 += $item->q2_amount;
-                    $catQ3 += $item->q3_amount; $catQ4 += $item->q4_amount;
+                    foreach ($itemPeriod as $k => $v) { $catPeriod[$k] += $v; }
                 }
-                $rows->push([null, '', $catName . ' SUBTOTAL', '', '', $catQ1, $catQ2, $catQ3, $catQ4, $catQ1+$catQ2+$catQ3+$catQ4, '']);
+                $rows->push(array_merge(
+                    [null, '', $catName . ' SUBTOTAL', '', ''],
+                    $catPeriod,
+                    [array_sum($catPeriod), '']
+                ));
                 $this->rowTypes[] = 'subtotal';
             }
 
-            $blAll = collect(array_merge(...array_values($balanceSections)));
-            $rows->push([null, 'ASSETS & LIABILITIES TOTAL', '', '', '',
-                $blAll->sum('q1_amount'), $blAll->sum('q2_amount'),
-                $blAll->sum('q3_amount'), $blAll->sum('q4_amount'),
-                $blAll->sum('total_amount'), '']);
+            $blAll    = collect(array_merge(...array_values($balanceSections)));
+            $blPeriod = $this->sumPeriodCols($blAll, $isMonthly);
+            $rows->push(array_merge(
+                [null, 'ASSETS & LIABILITIES TOTAL', '', '', ''],
+                $blPeriod,
+                [$blAll->sum('total_amount'), '']
+            ));
             $this->rowTypes[] = 'section_total';
         }
 
         return $rows;
     }
 
+    private function itemPeriodCols($item, bool $isMonthly): array
+    {
+        if ($isMonthly) {
+            return array_map(fn($m) => (float) $item->{"m{$m}_amount"}, range(1, 12));
+        }
+        return [(float) $item->q1_amount, (float) $item->q2_amount,
+                (float) $item->q3_amount, (float) $item->q4_amount];
+    }
+
+    private function sumPeriodCols($cc, bool $isMonthly): array
+    {
+        if ($isMonthly) {
+            return array_map(fn($m) => (float) $cc->sum("m{$m}_amount"), range(1, 12));
+        }
+        return [(float) $cc->sum('q1_amount'), (float) $cc->sum('q2_amount'),
+                (float) $cc->sum('q3_amount'), (float) $cc->sum('q4_amount')];
+    }
+
     public function styles(Worksheet $sheet): void
     {
-        $lastRow = $sheet->getHighestRow();
+        $isMonthly = $this->mode === 'monthly';
+        $lc        = $this->lastCol;
+        $tc        = $this->totalCol;
+        $editEnd   = $isMonthly ? 'Q' : 'I';
+        $lastRow   = $sheet->getHighestRow();
 
-        // Heading row styling
-        $sheet->getStyle('A1:K1')->applyFromArray([
-            'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF1B2A4A']],
+        $sheet->getStyle("A1:{$lc}1")->applyFromArray([
+            'font'      => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF1B2A4A']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
         ]);
 
-        // Insert instruction row above heading
         $sheet->insertNewRowBefore(1, 1);
-        $sheet->setCellValue('A1',
-            'GOIL BUDGET TOOL (P&L FORMAT) — Fill in Q1–Q4 columns only. Do not edit grey columns. Upload this file when done.'
-        );
-        $sheet->mergeCells('A1:K1');
+        $instrText = $isMonthly
+            ? 'GOIL BUDGET TOOL (P&L FORMAT) — Fill in Jan–Dec columns only. Do not edit grey columns. Upload this file when done.'
+            : 'GOIL BUDGET TOOL (P&L FORMAT) — Fill in Q1–Q4 columns only. Do not edit grey columns. Upload this file when done.';
+        $sheet->setCellValue('A1', $instrText);
+        $sheet->mergeCells("A1:{$lc}1");
         $sheet->getStyle('A1')->applyFromArray([
-            'font' => ['bold' => true, 'color' => ['argb' => 'FF92400E']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFEF3C7']],
+            'font'      => ['bold' => true, 'color' => ['argb' => 'FF92400E']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFEF3C7']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
         ]);
 
-        // data rows start at row 3 (row 1=instruction, row 2=heading)
+        $sectionFills = [
+            'section_revenue' => 'FF1B2A4A',
+            'section_expense' => 'FF7C2D12',
+            'section_capex'   => 'FF78350F',
+            'section_balance' => 'FF4C1D95',
+        ];
+
         $dataStart = 3;
-
         foreach ($this->rowTypes as $i => $rowType) {
-            $rowNum = $dataStart + $i;
+            $r = $dataStart + $i;
 
-            if ($rowType === 'section_revenue') {
-                $sheet->getStyle("A{$rowNum}:K{$rowNum}")->applyFromArray([
-                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF1B2A4A']],
+            if (isset($sectionFills[$rowType])) {
+                $sheet->getStyle("A{$r}:{$lc}{$r}")->applyFromArray([
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => $sectionFills[$rowType]]],
                     'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF'], 'size' => 11],
                 ]);
-                $sheet->mergeCells("A{$rowNum}:K{$rowNum}");
-
-            } elseif ($rowType === 'section_expense') {
-                $sheet->getStyle("A{$rowNum}:K{$rowNum}")->applyFromArray([
-                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF7C2D12']],
-                    'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF'], 'size' => 11],
-                ]);
-                $sheet->mergeCells("A{$rowNum}:K{$rowNum}");
-
-            } elseif ($rowType === 'section_capex') {
-                $sheet->getStyle("A{$rowNum}:K{$rowNum}")->applyFromArray([
-                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF78350F']],
-                    'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF'], 'size' => 11],
-                ]);
-                $sheet->mergeCells("A{$rowNum}:K{$rowNum}");
-
-            } elseif ($rowType === 'section_balance') {
-                $sheet->getStyle("A{$rowNum}:K{$rowNum}")->applyFromArray([
-                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF4C1D95']],
-                    'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF'], 'size' => 11],
-                ]);
-                $sheet->mergeCells("A{$rowNum}:K{$rowNum}");
+                $sheet->mergeCells("A{$r}:{$lc}{$r}");
 
             } elseif ($rowType === 'category') {
-                $sheet->getStyle("A{$rowNum}:K{$rowNum}")->applyFromArray([
+                $sheet->getStyle("A{$r}:{$lc}{$r}")->applyFromArray([
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFE8F0FE']],
                     'font' => ['bold' => true, 'color' => ['argb' => 'FF1E3A5F']],
                 ]);
 
             } elseif ($rowType === 'item') {
-                // Lock ID, Type, Category, Code, Name
-                $sheet->getStyle("A{$rowNum}:E{$rowNum}")->applyFromArray([
+                $sheet->getStyle("A{$r}:E{$r}")->applyFromArray([
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFF8FAFC']],
                     'font' => ['color' => ['argb' => 'FF475569']],
                 ]);
-                // Editable Q columns
-                $sheet->getStyle("F{$rowNum}:I{$rowNum}")->applyFromArray([
-                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFFFFFF']],
+                $sheet->getStyle("F{$r}:{$editEnd}{$r}")->applyFromArray([
+                    'fill'    => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFFFFFF']],
                     'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['argb' => 'FFE2E8F0']]],
                 ]);
-                // Total formula
-                $sheet->setCellValue("J{$rowNum}", "=F{$rowNum}+G{$rowNum}+H{$rowNum}+I{$rowNum}");
-                $sheet->getStyle("J{$rowNum}")->applyFromArray([
+                $totalFormula = $isMonthly
+                    ? "=F{$r}+G{$r}+H{$r}+I{$r}+J{$r}+K{$r}+L{$r}+M{$r}+N{$r}+O{$r}+P{$r}+Q{$r}"
+                    : "=F{$r}+G{$r}+H{$r}+I{$r}";
+                $sheet->setCellValue("{$tc}{$r}", $totalFormula);
+                $sheet->getStyle("{$tc}{$r}")->applyFromArray([
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFF0FDF4']],
                     'font' => ['color' => ['argb' => 'FF065F46'], 'bold' => true],
                 ]);
 
             } elseif ($rowType === 'subtotal') {
-                $sheet->getStyle("A{$rowNum}:K{$rowNum}")->applyFromArray([
+                $sheet->getStyle("A{$r}:{$lc}{$r}")->applyFromArray([
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFD1FAE5']],
                     'font' => ['bold' => true, 'color' => ['argb' => 'FF065F46']],
                 ]);
 
             } elseif ($rowType === 'section_total') {
-                $sheet->getStyle("A{$rowNum}:K{$rowNum}")->applyFromArray([
-                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF0F172A']],
-                    'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
+                $sheet->getStyle("A{$r}:{$lc}{$r}")->applyFromArray([
+                    'fill'    => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF0F172A']],
+                    'font'    => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
                     'borders' => ['top' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['argb' => 'FFFFFFFF']]],
                 ]);
             }
         }
 
-        // Number format for Q, Total columns
         $newLastRow = $sheet->getHighestRow();
-        $sheet->getStyle("F3:J{$newLastRow}")
+        $sheet->getStyle("F3:{$tc}{$newLastRow}")
             ->getNumberFormat()->setFormatCode('#,##0.00');
 
-        // Hide column A (line_item_id)
         $sheet->getColumnDimension('A')->setVisible(false);
-
-        // Freeze pane
         $sheet->freezePane('F3');
     }
 }
 
 class BudgetPnlInstructionsSheet implements WithTitle
 {
+    public function __construct(protected string $mode = 'quarterly') {}
+
     public function title(): string { return 'Instructions'; }
 
     public function __invoke(Worksheet $sheet): void
     {
+        $colLabel = $this->mode === 'monthly' ? 'Jan–Dec' : 'Q1–Q4';
+
         $instructions = [
             ['GOIL Budget Tool (P&L Format) — Upload Instructions', ''],
             ['', ''],
             ['Step', 'Instruction'],
             ['1', 'Go to the "Budget Entry (P&L)" sheet'],
-            ['2', 'Fill in Q1–Q4 amounts for each account code row (white cells)'],
+            ["2", "Fill in {$colLabel} amounts for each account code row (white cells)"],
             ['3', 'Section headers and subtotal rows are read-only — do not edit them'],
             ['4', 'The Total column calculates automatically'],
             ['5', 'Add notes in the Justification column (optional)'],

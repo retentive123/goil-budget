@@ -53,8 +53,9 @@ class AccountCodeController extends Controller
 
     public function create()
     {
-        $categories = AccountCategory::where('is_active', true)->orderBy('name')->get();
-        return view('admin.account-codes.create', compact('categories'));
+        $categories  = AccountCategory::where('is_active', true)->orderBy('name')->get();
+        $expumpCodes = $this->expumpCodeOptions();
+        return view('admin.account-codes.create', compact('categories', 'expumpCodes'));
     }
 
     public function store(Request $request)
@@ -64,9 +65,17 @@ class AccountCodeController extends Controller
             'code'                => ['required', 'string', 'max:50', 'unique:account_codes,code'],
             'name'                => ['required', 'string', 'max:255'],
             'description'         => ['nullable', 'string'],
+            'unit'                => ['nullable', 'string', 'max:50'],
+            'calc_type'           => ['nullable', 'string', 'in:values,calculation'],
+            'sort_order'          => ['nullable', 'integer'],
         ]);
 
-        AccountCode::create([...$validated, 'is_active' => true]);
+        $calcConfig = null;
+        if (($validated['calc_type'] ?? 'values') === 'calculation' && $request->filled('calc_config')) {
+            $calcConfig = json_decode($request->input('calc_config'), true) ?: null;
+        }
+
+        AccountCode::create([...$validated, 'calc_config' => $calcConfig, 'is_active' => true]);
 
         return redirect()->route('admin.account-codes.index')
             ->with('success', 'Account code created successfully.');
@@ -80,8 +89,9 @@ class AccountCodeController extends Controller
 
     public function edit(AccountCode $accountCode)
     {
-        $categories = AccountCategory::where('is_active', true)->orderBy('name')->get();
-        return view('admin.account-codes.edit', compact('accountCode', 'categories'));
+        $categories  = AccountCategory::where('is_active', true)->orderBy('name')->get();
+        $expumpCodes = $this->expumpCodeOptions($accountCode->id);
+        return view('admin.account-codes.edit', compact('accountCode', 'categories', 'expumpCodes'));
     }
 
     public function update(Request $request, AccountCode $accountCode)
@@ -92,12 +102,31 @@ class AccountCodeController extends Controller
             'name'                => ['required', 'string', 'max:255'],
             'description'         => ['nullable', 'string'],
             'is_active'           => ['boolean'],
+            'unit'                => ['nullable', 'string', 'max:50'],
+            'calc_type'           => ['nullable', 'string', 'in:values,calculation'],
+            'sort_order'          => ['nullable', 'integer'],
         ]);
+
+        $calcConfig = null;
+        if (($validated['calc_type'] ?? $accountCode->calc_type) === 'calculation' && $request->filled('calc_config')) {
+            $calcConfig = json_decode($request->input('calc_config'), true) ?: null;
+        }
+        $validated['calc_config'] = $calcConfig;
 
         $accountCode->update($validated);
 
         return redirect()->route('admin.account-codes.index')
             ->with('success', 'Account code updated successfully.');
+    }
+
+    private function expumpCodeOptions(?int $excludeId = null)
+    {
+        $catIds = AccountCategory::where('budget_type', 'ex_pump_item')->pluck('id');
+        return AccountCode::whereIn('account_category_id', $catIds)
+            ->where('is_active', true)
+            ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
+            ->orderBy('sort_order')->orderBy('name')
+            ->get(['id', 'code', 'name', 'calc_type']);
     }
 
     public function destroy(AccountCode $accountCode)

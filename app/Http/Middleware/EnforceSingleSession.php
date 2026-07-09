@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class EnforceSingleSession
 {
@@ -25,20 +26,10 @@ class EnforceSingleSession
         $stored    = Cache::get($cacheKey);
         $current   = $request->session()->getId();
 
-        // ✅ If this is a different session, log out the user
+        // A different session exists — destroy the OLD one, keep the current one
         if ($stored && $stored !== $current) {
-            // Clear the stored session
-            Cache::forget($cacheKey);
-
-            // Logout the user from this session
-            Auth::logout();
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
-
-            return redirect()->route('login')->withErrors([
-                'email' => 'Your account was signed in on another device. ' .
-                           'You have been logged out of this session.',
-            ]);
+            // Delete the old session from the database session store
+            DB::table('sessions')->where('id', $stored)->delete();
         }
 
         // ✅ Refresh the session record

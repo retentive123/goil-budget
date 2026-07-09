@@ -847,6 +847,15 @@
                 <i class="fas fa-user-tag nav-icon"></i>
                 <span class="link-text">Roles</span>
             </a>
+        </div>
+
+        {{-- My Organization Dropdown --}}
+        <button class="sidebar-link" onclick="toggleSubmenu('orgSubmenu')">
+            <i class="fas fa-sitemap nav-icon"></i>
+            <span class="link-text">My Organization</span>
+            <i class="fas fa-chevron-down chevron-icon" id="orgChevron"></i>
+        </button>
+        <div class="sidebar-submenu" id="orgSubmenu">
             <a href="{{ route('admin.departments.index') }}"
                class="sidebar-link {{ request()->routeIs('admin.departments.*') ? 'active' : '' }}">
                 <i class="fas fa-building nav-icon"></i>
@@ -880,6 +889,11 @@
                class="sidebar-link {{ request()->routeIs('admin.capex-configs.*') ? 'active' : '' }}">
                 <i class="fas fa-hard-hat nav-icon"></i>
                 <span class="link-text">CapEx Layout</span>
+            </a>
+            <a href="{{ route('admin.expump-templates.index') }}"
+               class="sidebar-link {{ request()->routeIs('admin.expump-templates.*') ? 'active' : '' }}">
+                <i class="fas fa-gas-pump nav-icon"></i>
+                <span class="link-text">Ex-pump</span>
             </a>
             <a href="{{ route('admin.account-categories.index') }}"
                class="sidebar-link {{ request()->routeIs('admin.account-categories.*') ? 'active' : '' }}">

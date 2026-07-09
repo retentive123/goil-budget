@@ -40,7 +40,7 @@ class DepartmentController extends Controller
 
     public function show(Department $department)
     {
-        $department->load('users', 'accountCodes.category');
+        $department->load('users.roles', 'accountCodes.category');
         return view('admin.departments.show', compact('department'));
     }
 
