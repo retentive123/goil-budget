@@ -6,8 +6,11 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h5 class="fw-bold mb-0">
-            {{ $budgetVersion->department->name }} —
-            {{ $budgetVersion->period->name }}
+            {{ $budgetVersion->department->name }}
+            @if($budgetVersion->department->isServiceStation())
+                <span class="badge ms-1" style="background:#EFF6FF;color:#1D4ED8;font-size:10px;font-weight:600;">Station</span>
+            @endif
+            — {{ $budgetVersion->period->name }}
             <span class="badge bg-goil-orange ms-1">v{{ $budgetVersion->version_number }}</span>
         </h5>
         <p class="text-muted small mb-0">

@@ -46,8 +46,8 @@ class UserController extends Controller
 
         $users = $query->orderBy('name')->paginate(20);
 
-        // Get departments for filter dropdown
-        $departments = Department::where('is_active', true)->orderBy('name')->get();
+        // Get all budget entities (departments + service stations) for filter dropdown
+        $departments = Department::where('is_active', true)->orderBy('entity_type')->orderBy('name')->get();
 
         // Get roles for filter dropdown
         $roles = Role::orderBy('name')->get();
@@ -60,8 +60,12 @@ class UserController extends Controller
 
     public function create()
     {
-        $departments = Department::where('is_active', true)->orderBy('name')->get();
-        $roles       = Role::orderBy('name')->get();
+        $departments = Department::where('is_active', true)
+            ->with('zone')
+            ->orderBy('entity_type')
+            ->orderBy('name')
+            ->get();
+        $roles = Role::orderBy('name')->get();
 
         return view('admin.users.create', compact('departments', 'roles'));
     }
@@ -106,8 +110,12 @@ class UserController extends Controller
 
     public function edit(User $user)
     {
-        $departments = Department::where('is_active', true)->orderBy('name')->get();
-        $roles       = Role::orderBy('name')->get();
+        $departments = Department::where('is_active', true)
+            ->with('zone')
+            ->orderBy('entity_type')
+            ->orderBy('name')
+            ->get();
+        $roles = Role::orderBy('name')->get();
 
         return view('admin.users.edit', compact('user', 'departments', 'roles'));
     }

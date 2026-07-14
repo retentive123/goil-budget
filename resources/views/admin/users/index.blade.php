@@ -75,14 +75,19 @@
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small fw-semibold mb-1" style="color: #1B2A4A;">
-                            <i class="fas fa-building" style="color: #E65C00;"></i> Department
+                            <i class="fas fa-building" style="color: #E65C00;"></i> Dept / Station
                         </label>
                         <select name="department_id" class="form-select form-select-sm" style="border-radius: 8px; border-color: #E2E8F0;">
-                            <option value="">All Departments</option>
-                            @foreach($departments as $dept)
-                            <option value="{{ $dept->id }}" {{ request('department_id') == $dept->id ? 'selected' : '' }}>
-                                {{ $dept->name }}
-                            </option>
+                            <option value="">All</option>
+                            @php $grouped = $departments->groupBy(fn($d) => $d->isServiceStation() ? 'Service Stations' : 'Departments'); @endphp
+                            @foreach($grouped as $groupLabel => $items)
+                            <optgroup label="{{ $groupLabel }}">
+                                @foreach($items as $dept)
+                                <option value="{{ $dept->id }}" {{ request('department_id') == $dept->id ? 'selected' : '' }}>
+                                    {{ $dept->name }}
+                                </option>
+                                @endforeach
+                            </optgroup>
                             @endforeach
                         </select>
                     </div>
@@ -134,7 +139,7 @@
                             <tr>
                                 <th style="color: #1B2A4A; font-weight: 600; padding: 12px 16px;">User</th>
                                 <th style="color: #1B2A4A; font-weight: 600; padding: 12px 16px;">Employee ID</th>
-                                <th style="color: #1B2A4A; font-weight: 600; padding: 12px 16px;">Department</th>
+                                <th style="color: #1B2A4A; font-weight: 600; padding: 12px 16px;">Dept / Station</th>
                                 <th style="color: #1B2A4A; font-weight: 600; padding: 12px 16px;">Role</th>
                                 <th style="color: #1B2A4A; font-weight: 600; padding: 12px 16px;">Status</th>
                                 <th style="color: #1B2A4A; font-weight: 600; padding: 12px 16px;">Last Login</th>
@@ -165,6 +170,9 @@
                                     <span style="padding: 2px 10px; border-radius: 6px; font-size: 12px; background: #F1F5F9; color: #1B2A4A;">
                                         {{ $user->department?->name ?? '—' }}
                                     </span>
+                                    @if($user->department?->isServiceStation())
+                                        <span style="font-size:10px;color:#2563EB;">station</span>
+                                    @endif
                                 </td>
                                 <td style="padding: 10px 16px;">
                                     @foreach($user->roles as $role)

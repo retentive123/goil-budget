@@ -115,19 +115,12 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label fw-semibold" style="color:var(--navy);font-size:13px">
-                                <i class="fas fa-building" style="color:var(--orange)"></i> Department
+                                <i class="fas fa-building" style="color:var(--orange)"></i> Dept / Station
                             </label>
-                            <select name="department_id"
-                                    class="form-select @error('department_id') is-invalid @enderror">
-                                <option value="">— None —</option>
-                                @foreach($departments as $dept)
-                                    <option value="{{ $dept->id }}"
-                                        {{ old('department_id') == $dept->id ? 'selected' : '' }}>
-                                        {{ $dept->name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            @error('department_id')<div class="text-danger mt-1" style="font-size:12px">{{ $message }}</div>@enderror
+                            @include('admin.users._dept_select', [
+                                'selectedId' => old('department_id'),
+                                'inputName'  => 'department_id',
+                            ])
                         </div>
 
                         <div class="col-md-6">

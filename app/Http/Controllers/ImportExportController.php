@@ -13,10 +13,13 @@ use App\Exports\BudgetPnlReadOnlyExport;
 use App\Exports\ActualsTemplateExport;
 use App\Exports\AccountCategoryExport;
 use App\Exports\AccountCodeExport;
+use App\Exports\DepartmentExport;
+use App\Exports\ServiceStationExport;
 use App\Imports\BudgetImport;
 use App\Imports\ActualsImport;
 use App\Imports\AccountCategoryImport;
 use App\Imports\AccountCodeImport;
+use App\Imports\ServiceStationImport;
 use App\Services\BudgetCalculationService;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Http\Request;
@@ -244,6 +247,7 @@ class ImportExportController extends Controller
         }
 
         $msg = "Imported {$import->imported} new, updated {$import->updated} existing categories.";
+        if ($import->skipped) $msg .= " {$import->skipped} blank rows skipped.";
 
         if (!empty($import->errors)) {
             return back()->with('warning', $msg)->with('import_errors', $import->errors);
@@ -273,12 +277,47 @@ class ImportExportController extends Controller
         }
 
         $msg = "Imported {$import->imported} new, updated {$import->updated} existing codes.";
+        if ($import->skipped) $msg .= " {$import->skipped} blank rows skipped.";
 
         if (!empty($import->errors)) {
             return back()->with('warning', $msg)->with('import_errors', $import->errors);
         }
 
         return redirect()->route('admin.account-codes.index')->with('success', $msg);
+    }
+
+    public function downloadDepartmentTemplate()
+    {
+        return Excel::download(new DepartmentExport(), 'departments-template.xlsx');
+    }
+
+    public function downloadServiceStationTemplate()
+    {
+        return Excel::download(new ServiceStationExport(), 'service-stations-template.xlsx');
+    }
+
+    public function uploadServiceStations(Request $request)
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:5120'],
+        ]);
+
+        $import = new ServiceStationImport();
+
+        try {
+            Excel::import($import, $request->file('file'));
+        } catch (\Exception $e) {
+            return back()->with('error', 'File error: ' . $e->getMessage());
+        }
+
+        $msg = "Imported {$import->imported} new, updated {$import->updated} existing service stations.";
+        if ($import->skipped) $msg .= " {$import->skipped} blank rows skipped.";
+
+        if (!empty($import->errors)) {
+            return back()->with('warning', $msg)->with('import_errors', $import->errors);
+        }
+
+        return redirect()->route('admin.service-stations.index')->with('success', $msg);
     }
 
     private function authorizeBudgetAccess(BudgetVersion $version): void

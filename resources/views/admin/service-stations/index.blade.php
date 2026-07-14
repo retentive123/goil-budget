@@ -1,0 +1,442 @@
+@extends('layouts.app')
+@section('title', 'Service Stations')
+@section('content')
+
+<div class="px-3 px-lg-4">
+
+    {{-- Header --}}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h5 class="fw-bold mb-0" style="color: #1B2A4A;">
+                <i class="fas fa-gas-pump" style="color: #E65C00;"></i> Service Stations
+            </h5>
+            <p class="text-muted small mb-0">
+                Manage service stations, their zone assignments, and account code mappings
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ route('ie.service-stations.download') }}"
+               class="btn btn-sm btn-outline-success" style="border-radius: 8px;">
+                <i class="fas fa-file-download"></i> Download Template
+            </a>
+            <button type="button"
+                    onclick="document.getElementById('ssUpload').classList.toggle('d-none')"
+                    class="btn btn-sm btn-outline-primary" style="border-radius: 8px;">
+                <i class="fas fa-file-upload"></i> Import Excel
+            </button>
+            <a href="{{ route('admin.service-stations.mass-assign') }}" class="btn btn-sm btn-outline-secondary" style="border-radius: 8px;">
+                <i class="fas fa-layer-group"></i> Mass Assign Codes
+            </a>
+            <a href="{{ route('admin.service-stations.create') }}" class="btn btn-sm" style="background: #E65C00; color: #fff; border-radius: 8px; border: none;">
+                <i class="fas fa-plus-circle"></i> New Service Station
+            </a>
+        </div>
+    </div>
+
+    {{-- Import Panel --}}
+    <div id="ssUpload" class="{{ session('import_errors') ? '' : 'd-none' }} chart-card mb-4" style="border-left: 3px solid #E65C00;">
+        <div class="fw-semibold mb-2" style="font-size: 13px; color: #1B2A4A;">
+            <i class="fas fa-file-upload" style="color: #E65C00;"></i> Import Service Stations from Excel
+        </div>
+        <form method="POST" action="{{ route('ie.service-stations.upload') }}"
+              enctype="multipart/form-data">
+            @csrf
+            <div class="d-flex gap-2 align-items-end">
+                <div class="flex-grow-1">
+                    <input type="file" name="file" accept=".xlsx,.xls,.csv"
+                           class="form-control form-control-sm" style="border-radius: 8px;">
+                </div>
+                <button type="submit" class="btn btn-sm"
+                        style="background: #1B2A4A; color: #fff; border-radius: 8px; border: none; white-space: nowrap;">
+                    <i class="fas fa-upload"></i> Upload
+                </button>
+            </div>
+            <div class="form-text mt-1">
+                Existing stations with the same code will be updated.
+                Download the template first to see the correct column format.
+            </div>
+        </form>
+    </div>
+
+    @if(session('warning'))
+    <div class="alert alert-warning alert-dismissible fade show" role="alert" style="border-radius: 10px; font-size: 13px;">
+        <i class="fas fa-exclamation-triangle"></i> {{ session('warning') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    @endif
+
+    @if(session('import_errors'))
+    <div class="card border-0 mb-4" style="border-radius: 10px; background: #FEF2F2; border: 1px solid #FECACA !important;">
+        <div class="card-body py-3 px-4">
+            <div class="fw-semibold mb-2" style="font-size: 13px; color: #991B1B;">
+                <i class="fas fa-exclamation-triangle"></i> The following rows were skipped:
+            </div>
+            @foreach(session('import_errors') as $err)
+            <div style="font-size: 12px; color: #7F1D1D; line-height: 1.6;">{{ $err }}</div>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
+    {{-- Stats Row --}}
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3 col-6">
+            <div class="stat-card text-center">
+                <div class="stat-accent" style="background: #1B2A4A;"></div>
+                <div class="stat-label">Total Stations</div>
+                <div class="stat-value">{{ $stations->total() }}</div>
+                <div class="stat-sub">All service stations</div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="stat-card text-center">
+                <div class="stat-accent" style="background: #10B981;"></div>
+                <div class="stat-label">Active</div>
+                <div class="stat-value" style="color: #10B981;">{{ $stats['active'] }}</div>
+                <div class="stat-sub">Active stations</div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="stat-card text-center">
+                <div class="stat-accent" style="background: #6366F1;"></div>
+                <div class="stat-label">Total Users</div>
+                <div class="stat-value" style="color: #6366F1;">{{ $stats['users'] }}</div>
+                <div class="stat-sub">Across all stations</div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="stat-card text-center">
+                <div class="stat-accent" style="background: #F59E0B;"></div>
+                <div class="stat-label">Account Codes</div>
+                <div class="stat-value" style="color: #F59E0B;">{{ $stats['codes'] }}</div>
+                <div class="stat-sub">Total linked codes</div>
+            </div>
+        </div>
+    </div>
+
+    {{-- Flash Messages --}}
+    @if(session('success'))
+        <div class="alert alert-success alert-dismissible fade show small" role="alert">
+            <i class="fas fa-check-circle me-1"></i> {{ session('success') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
+
+    {{-- Filters --}}
+    <div class="chart-card mb-4">
+        <form method="GET" action="{{ route('admin.service-stations.index') }}" id="filterForm">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold mb-1" style="color: #1B2A4A;">
+                        <i class="fas fa-search" style="color: #E65C00;"></i> Search
+                    </label>
+                    <input type="text" name="search" value="{{ request('search') }}"
+                           class="form-control form-control-sm"
+                           style="border-radius: 8px; border-color: #E2E8F0;"
+                           placeholder="Station name or code…">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold mb-1" style="color: #1B2A4A;">
+                        <i class="fas fa-map-marked-alt" style="color: #E65C00;"></i> Zone
+                    </label>
+                    <select name="zone_id" class="form-select form-select-sm" style="border-radius: 8px; border-color: #E2E8F0;">
+                        <option value="">All Zones</option>
+                        @foreach($zones as $zone)
+                            <option value="{{ $zone->id }}" {{ request('zone_id') == $zone->id ? 'selected' : '' }}>
+                                {{ $zone->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold mb-1" style="color: #1B2A4A;">
+                        <i class="fas fa-circle" style="color: #E65C00;"></i> Status
+                    </label>
+                    <select name="status" class="form-select form-select-sm" style="border-radius: 8px; border-color: #E2E8F0;">
+                        <option value="">All</option>
+                        <option value="active"   {{ request('status') == 'active'   ? 'selected' : '' }}>Active</option>
+                        <option value="inactive" {{ request('status') == 'inactive' ? 'selected' : '' }}>Inactive</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold mb-1" style="color: #1B2A4A;">
+                        <i class="fas fa-sort" style="color: #E65C00;"></i> Sort By
+                    </label>
+                    <select name="sort" class="form-select form-select-sm" style="border-radius: 8px; border-color: #E2E8F0;">
+                        <option value="name"       {{ request('sort') == 'name' || !request('sort') ? 'selected' : '' }}>Name</option>
+                        <option value="code"       {{ request('sort') == 'code'       ? 'selected' : '' }}>Code</option>
+                        <option value="users_count" {{ request('sort') == 'users_count' ? 'selected' : '' }}>Users</option>
+                        <option value="created_at" {{ request('sort') == 'created_at' ? 'selected' : '' }}>Created Date</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-sm w-100" style="background: #E65C00; color: #fff; border-radius: 8px; border: none;">
+                        <i class="fas fa-filter"></i> Filter
+                    </button>
+                </div>
+            </div>
+            @if(request()->hasAny(['search', 'status', 'sort', 'zone_id']))
+            <div class="mt-2">
+                <a href="{{ route('admin.service-stations.index') }}" class="small text-muted text-decoration-none">
+                    <i class="fas fa-times"></i> Clear filters
+                </a>
+            </div>
+            @endif
+        </form>
+    </div>
+
+    {{-- Table --}}
+    <div class="card border-0 shadow-sm" style="border-radius: 12px; overflow: hidden;">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" style="font-size: 13px;">
+                    <thead style="background: #F8FAFC; border-bottom: 2px solid #E65C00;">
+                        <tr>
+                            <th style="color: #1B2A4A; font-weight: 600; padding: 12px 16px;">
+                                <i class="fas fa-gas-pump" style="color: #E65C00;"></i> Station
+                            </th>
+                            <th style="color: #1B2A4A; font-weight: 600; padding: 12px 16px;">
+                                <i class="fas fa-tag" style="color: #E65C00;"></i> Code
+                            </th>
+                            <th style="color: #1B2A4A; font-weight: 600; padding: 12px 16px;">
+                                <i class="fas fa-map-marked-alt" style="color: #E65C00;"></i> Zone
+                            </th>
+                            <th style="color: #1B2A4A; font-weight: 600; padding: 12px 16px; text-align: center;">
+                                <i class="fas fa-users" style="color: #E65C00;"></i> Users
+                            </th>
+                            <th style="color: #1B2A4A; font-weight: 600; padding: 12px 16px; text-align: center;">
+                                <i class="fas fa-hashtag" style="color: #E65C00;"></i> Account Codes
+                            </th>
+                            <th style="color: #1B2A4A; font-weight: 600; padding: 12px 16px;">
+                                <i class="fas fa-circle" style="color: #E65C00;"></i> Status
+                            </th>
+                            <th style="color: #1B2A4A; font-weight: 600; padding: 12px 16px; text-align: center;">
+                                <i class="fas fa-tools" style="color: #E65C00;"></i> Actions
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($stations as $station)
+                        <tr style="transition: background 0.2s;">
+                            <td style="padding: 10px 16px;">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="d-flex align-items-center justify-content-center rounded-circle"
+                                         style="width: 36px; height: 36px; background: {{ $station->is_active ? '#E65C00' : '#94A3B8' }}; color: #fff; font-size: 14px; font-weight: 700;">
+                                        {{ strtoupper(substr($station->name, 0, 2)) }}
+                                    </div>
+                                    <div>
+                                        <div style="font-weight: 600; color: #1B2A4A;">{{ $station->name }}</div>
+                                        <div style="font-size: 11px; color: #94A3B8;">
+                                            <i class="fas fa-clock"></i>
+                                            Created {{ $station->created_at->diffForHumans() }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td style="padding: 10px 16px;">
+                                <code class="px-2 py-1 rounded" style="background: #F1F5F9; color: #1B2A4A; font-size: 12px;">
+                                    {{ $station->code }}
+                                </code>
+                            </td>
+                            <td style="padding: 10px 16px;">
+                                @if($station->zone)
+                                    <a href="{{ route('admin.zones.show', $station->zone) }}"
+                                       class="text-decoration-none small"
+                                       style="color:#1B2A4A;">
+                                        <i class="fas fa-map-marked-alt me-1" style="color:#E65C00;font-size:10px;"></i>
+                                        {{ $station->zone->name }}
+                                    </a>
+                                @else
+                                    <span class="text-muted small">—</span>
+                                @endif
+                            </td>
+                            <td style="padding: 10px 16px; text-align: center;">
+                                <span class="badge px-3 py-1" style="background: {{ $station->users_count > 0 ? '#DBEAFE' : '#F1F5F9' }}; color: {{ $station->users_count > 0 ? '#1E40AF' : '#94A3B8' }}; font-weight: 500; font-size: 12px; border-radius: 6px;">
+                                    <i class="fas fa-users" style="font-size: 10px;"></i>
+                                    {{ $station->users_count }}
+                                </span>
+                            </td>
+                            <td style="padding: 10px 16px; text-align: center;">
+                                <span class="badge px-3 py-1" style="background: {{ $station->account_codes_count > 0 ? '#FEF3C7' : '#F1F5F9' }}; color: {{ $station->account_codes_count > 0 ? '#92400E' : '#94A3B8' }}; font-weight: 500; font-size: 12px; border-radius: 6px;">
+                                    <i class="fas fa-hashtag" style="font-size: 10px;"></i>
+                                    {{ $station->account_codes_count }}
+                                </span>
+                            </td>
+                            <td style="padding: 10px 16px;">
+                                <span class="badge px-3 py-1" style="border-radius: 20px; font-size: 11px; font-weight: 600; background: {{ $station->is_active ? '#D1FAE5' : '#FEE2E2' }}; color: {{ $station->is_active ? '#065F46' : '#991B1B' }};">
+                                    <i class="fas fa-circle" style="font-size: 8px; margin-right: 4px; color: {{ $station->is_active ? '#10B981' : '#F43F5E' }};"></i>
+                                    {{ $station->is_active ? 'Active' : 'Inactive' }}
+                                </span>
+                            </td>
+                            <td style="padding: 10px 16px; text-align: center;">
+                                <div class="d-flex gap-1 justify-content-center">
+                                    <a href="{{ route('admin.service-stations.show', $station) }}"
+                                       class="btn btn-sm btn-outline-secondary"
+                                       style="border-radius: 6px; font-size: 11px; padding: 2px 8px;"
+                                       title="View Station">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ route('admin.service-stations.edit', $station) }}"
+                                       class="btn btn-sm btn-outline-primary"
+                                       style="border-radius: 6px; font-size: 11px; padding: 2px 8px;"
+                                       title="Edit Station">
+                                        <i class="fas fa-pencil-alt"></i>
+                                    </a>
+                                    <a href="{{ route('admin.service-stations.account-codes', $station) }}"
+                                       class="btn btn-sm btn-outline-warning"
+                                       style="border-radius: 6px; font-size: 11px; padding: 2px 8px;"
+                                       title="Manage Account Codes">
+                                        <i class="fas fa-hashtag"></i>
+                                    </a>
+                                    @if($station->users_count == 0)
+                                    <form method="POST"
+                                          action="{{ route('admin.service-stations.destroy', $station) }}"
+                                          id="deleteStationForm-{{ $station->id }}"
+                                          class="d-inline">
+                                        @csrf @method('DELETE')
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-danger"
+                                                style="border-radius: 6px; font-size: 11px; padding: 2px 8px;"
+                                                title="Delete Station"
+                                                onclick="confirmDeleteStation({{ $station->id }}, '{{ addslashes($station->name) }}')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                    @else
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            style="border-radius: 6px; font-size: 11px; padding: 2px 8px; opacity: 0.5;"
+                                            title="Cannot delete — has users assigned"
+                                            disabled>
+                                        <i class="fas fa-lock"></i>
+                                    </button>
+                                    @endif
+                                </div>
+                            </td>
+                        </tr>
+                        @empty
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-5">
+                                <div style="font-size: 48px; margin-bottom: 12px; color: #94A3B8;">
+                                    <i class="fas fa-gas-pump"></i>
+                                </div>
+                                <div style="font-weight: 600; color: #1B2A4A; font-size: 16px;">No service stations found</div>
+                                <div style="font-size: 13px; color: #64748B;">
+                                    @if(request()->hasAny(['search', 'status', 'zone_id']))
+                                        Try adjusting your filters or <a href="{{ route('admin.service-stations.index') }}" class="text-decoration-none" style="color: #E65C00;">clear them</a>
+                                    @else
+                                        Click <strong>"New Service Station"</strong> to create your first station.
+                                    @endif
+                                </div>
+                            </td>
+                        </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {{-- Pagination --}}
+        <div class="card-footer bg-white border-top d-flex justify-content-between align-items-center flex-wrap gap-2 py-3 px-4">
+            <div class="d-flex align-items-center gap-3">
+                <div class="text-muted small">
+                    <i class="fas fa-info-circle"></i>
+                    Showing {{ $stations->firstItem() ?? 0 }} to {{ $stations->lastItem() ?? 0 }}
+                    of {{ $stations->total() }} stations
+                </div>
+                <form method="GET" action="{{ route('admin.service-stations.index') }}"
+                      class="d-flex align-items-center gap-2">
+                    @foreach(request()->except(['page', 'per_page']) as $k => $v)
+                        <input type="hidden" name="{{ $k }}" value="{{ $v }}">
+                    @endforeach
+                    <label class="text-muted small mb-0" style="white-space: nowrap;">Show</label>
+                    <select name="per_page" class="form-select form-select-sm"
+                            style="width: auto; font-size: 12px; border-radius: 6px;"
+                            onchange="this.form.submit()">
+                        @foreach([10, 25, 50, 100] as $n)
+                            <option value="{{ $n }}" {{ (int)request('per_page', 10) === $n ? 'selected' : '' }}>{{ $n }}</option>
+                        @endforeach
+                    </select>
+                    <label class="text-muted small mb-0">per page</label>
+                </form>
+            </div>
+            <div>
+                {{ $stations->appends(request()->query())->links('pagination::bootstrap-5') }}
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@push('scripts')
+<script>
+function confirmDeleteStation(id, name) {
+    Swal.fire({
+        title: 'Delete station?',
+        html: `<strong>${name}</strong> will be permanently deleted. This cannot be undone.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#DC2626',
+        cancelButtonColor: '#6B7280',
+        confirmButtonText: 'Yes, delete',
+        cancelButtonText: 'Cancel',
+        reverseButtons: true,
+    }).then(result => {
+        if (result.isConfirmed) document.getElementById(`deleteStationForm-${id}`).submit();
+    });
+}
+</script>
+@endpush
+
+<style>
+    .stat-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 16px 12px;
+        border: 1px solid #E2E8F0;
+        transition: all 0.2s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    .stat-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+        transform: translateY(-1px);
+    }
+    .stat-card .stat-accent {
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        border-radius: 0 0 4px 4px;
+    }
+    .stat-card .stat-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: #94A3B8;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+    }
+    .stat-card .stat-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: #1B2A4A;
+    }
+    .stat-card .stat-sub {
+        font-size: 11px;
+        color: #94A3B8;
+        margin-top: 2px;
+    }
+    .table tbody tr:hover { background: #F8FAFC; }
+    .form-control:focus, .form-select:focus {
+        border-color: #E65C00;
+        box-shadow: 0 0 0 0.2rem rgba(230,92,0,0.15);
+    }
+    .btn-outline-primary:hover  { background: #E65C00; border-color: #E65C00; color: #fff; }
+    .btn-outline-danger:hover   { background: #F43F5E; border-color: #F43F5E; color: #fff; }
+    .btn-outline-warning:hover  { background: #F59E0B; border-color: #F59E0B; color: #fff; }
+    .pagination .page-item.active .page-link { background-color: #E65C00; border-color: #E65C00; color: #fff; }
+    .pagination .page-link { color: #1B2A4A; }
+    .pagination .page-link:hover { color: #E65C00; }
+</style>
+
+@endsection

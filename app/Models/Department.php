@@ -10,9 +10,34 @@ class Department extends Model
 {
     use HasFactory, SoftDeletes;
 
-    protected $fillable = ['name', 'code', 'description', 'is_active', 'budget_type'];
+    protected $fillable = ['name', 'code', 'description', 'is_active', 'budget_type', 'zone_id', 'entity_type'];
 
     protected $casts = ['is_active' => 'boolean'];
+
+    public function zone()
+    {
+        return $this->belongsTo(Zone::class);
+    }
+
+    public function isServiceStation(): bool
+    {
+        return $this->entity_type === 'service_station';
+    }
+
+    public function entityLabel(): string
+    {
+        return $this->entity_type === 'service_station' ? 'Service Station' : 'Department';
+    }
+
+    public function scopeDepartments($query)
+    {
+        return $query->where('entity_type', 'department');
+    }
+
+    public function scopeServiceStations($query)
+    {
+        return $query->where('entity_type', 'service_station');
+    }
 
     public function isRevenueGenerating(): bool {
         return in_array($this->budget_type, ['revenue','both']);

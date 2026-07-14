@@ -74,10 +74,9 @@
             <div style="font-size: 28px;">
                 <i class="bi bi-building"></i>
             </div>
-            <div class="chart-title mt-2">Department Drill-down</div>
+            <div class="chart-title mt-2">Dept / Station Drill-down</div>
             <p class="small text-muted">
-                Select any department. View by category, account code,
-                quarter. Year-over-year trend for that department.
+                Select any department or service station. View by category, account code, quarter.
             </p>
             <a href="{{ route('reports.department') }}"
                class="btn btn-sm"
@@ -128,10 +127,9 @@
             <div style="font-size:28px">
                 <i class="bi bi-hourglass-split"></i>
             </div>
-            <div class="chart-title mt-2">Department Comparison</div>
+            <div class="chart-title mt-2">Dept / Station Comparison</div>
             <p class="small text-muted">
-                Compare up to 5 departments side by side — total budget,
-                quarterly split, category breakdown.
+                Compare up to 5 departments or service stations side by side.
             </p>
             <a href="{{ route('reports.dept-comparison') }}"
                class="btn btn-sm"

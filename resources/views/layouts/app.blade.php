@@ -856,10 +856,20 @@
             <i class="fas fa-chevron-down chevron-icon" id="orgChevron"></i>
         </button>
         <div class="sidebar-submenu" id="orgSubmenu">
+            <a href="{{ route('admin.zones.index') }}"
+               class="sidebar-link {{ request()->routeIs('admin.zones.*') ? 'active' : '' }}">
+                <i class="fas fa-map-marker-alt nav-icon"></i>
+                <span class="link-text">Zones</span>
+            </a>
             <a href="{{ route('admin.departments.index') }}"
                class="sidebar-link {{ request()->routeIs('admin.departments.*') ? 'active' : '' }}">
                 <i class="fas fa-building nav-icon"></i>
                 <span class="link-text">Departments</span>
+            </a>
+            <a href="{{ route('admin.service-stations.index') }}"
+               class="sidebar-link {{ request()->routeIs('admin.service-stations.*') ? 'active' : '' }}">
+                <i class="fas fa-gas-pump nav-icon"></i>
+                <span class="link-text">Service Stations</span>
             </a>
         </div>
 

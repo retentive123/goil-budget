@@ -78,6 +78,10 @@ $usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
 
         {{-- Right: export + import --}}
         <div class="d-flex gap-2">
+            <a href="{{ route('ie.categories.download') }}"
+               class="btn btn-sm btn-outline-success" style="font-size:12px">
+                <i class="fas fa-file-download me-1"></i>Export / Template
+            </a>
             <div class="dropdown">
                 <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
                         data-bs-toggle="dropdown" style="font-size:12px">
@@ -103,12 +107,6 @@ $usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
                             <i class="fas fa-copy me-2 text-muted"></i>Copy (TSV)
                         </a>
                     </li>
-                    <li><hr class="dropdown-divider my-1"></li>
-                    <li>
-                        <a class="dropdown-item" href="{{ route('ie.categories.download') }}">
-                            <i class="fas fa-file-excel me-2" style="color:#10B981"></i>Download Template
-                        </a>
-                    </li>
                 </ul>
             </div>
 
@@ -122,7 +120,7 @@ $usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
 </div>
 
 {{-- Import panel --}}
-<div id="catUpload" class="d-none chart-card mb-3"
+<div id="catUpload" class="{{ session('import_errors') ? '' : 'd-none' }} chart-card mb-3"
      style="border-left:4px solid var(--navy)">
     <div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:8px">
         Import Categories from Excel
@@ -144,14 +142,20 @@ $usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
             Existing categories with the same code will be updated. Download the template first.
         </div>
     </form>
-    @if(session('import_errors'))
-    <div class="mt-2">
+</div>
+
+@if(session('import_errors'))
+<div class="card border-0 mb-3" style="border-radius:10px;background:#FEF2F2;border:1px solid #FECACA !important;">
+    <div class="card-body py-3 px-4">
+        <div class="fw-semibold mb-2" style="font-size:13px;color:#991B1B;">
+            <i class="fas fa-exclamation-triangle"></i> The following rows were skipped:
+        </div>
         @foreach(session('import_errors') as $err)
-        <div style="font-size:11px;color:#991B1B">⚠ {{ $err }}</div>
+        <div style="font-size:12px;color:#7F1D1D;line-height:1.6;">{{ $err }}</div>
         @endforeach
     </div>
-    @endif
 </div>
+@endif
 
 {{-- Bulk-delete form (hidden, submitted by JS) --}}
 <form id="bulkDeleteForm" method="POST"

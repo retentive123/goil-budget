@@ -15,7 +15,13 @@
             </p>
         </div>
         <div class="d-flex gap-2">
-            
+            <a href="{{ route('ie.departments.download') }}"
+               class="btn btn-sm btn-outline-success" style="border-radius: 8px;">
+                <i class="fas fa-file-download"></i> Export / Template
+            </a>
+            <a href="{{ route('admin.departments.mass-assign') }}" class="btn btn-sm btn-outline-primary" style="border-radius: 8px;">
+                <i class="fas fa-layer-group"></i> Mass Assign Codes
+            </a>
             <a href="{{ route('admin.departments.create') }}" class="btn btn-sm" style="background: #E65C00; color: #fff; border-radius: 8px; border: none;">
                 <i class="fas fa-plus-circle"></i> Add Department
             </a>
@@ -23,20 +29,12 @@
     </div>
 
     {{-- Stats Row --}}
-    @php
-        $totalDepts = $departments->total();
-        $activeDepts = $departments->where('is_active', true)->count();
-        $inactiveDepts = $departments->where('is_active', false)->count();
-        $totalUsers = $departments->sum('users_count');
-        $totalCodes = $departments->sum('account_codes_count');
-    @endphp
-
     <div class="row g-3 mb-4">
         <div class="col-md-3 col-6">
             <div class="stat-card text-center">
                 <div class="stat-accent" style="background: #1B2A4A;"></div>
                 <div class="stat-label">Total Departments</div>
-                <div class="stat-value">{{ $totalDepts }}</div>
+                <div class="stat-value">{{ $departments->total() }}</div>
                 <div class="stat-sub">All departments</div>
             </div>
         </div>
@@ -44,7 +42,7 @@
             <div class="stat-card text-center">
                 <div class="stat-accent" style="background: #10B981;"></div>
                 <div class="stat-label">Active</div>
-                <div class="stat-value" style="color: #10B981;">{{ $activeDepts }}</div>
+                <div class="stat-value" style="color: #10B981;">{{ $stats['active'] }}</div>
                 <div class="stat-sub">Active departments</div>
             </div>
         </div>
@@ -52,7 +50,7 @@
             <div class="stat-card text-center">
                 <div class="stat-accent" style="background: #F43F5E;"></div>
                 <div class="stat-label">Inactive</div>
-                <div class="stat-value" style="color: #F43F5E;">{{ $inactiveDepts }}</div>
+                <div class="stat-value" style="color: #F43F5E;">{{ $stats['inactive'] }}</div>
                 <div class="stat-sub">Inactive departments</div>
             </div>
         </div>
@@ -60,7 +58,7 @@
             <div class="stat-card text-center">
                 <div class="stat-accent" style="background: #6366F1;"></div>
                 <div class="stat-label">Total Users</div>
-                <div class="stat-value" style="color: #6366F1;">{{ $totalUsers }}</div>
+                <div class="stat-value" style="color: #6366F1;">{{ $stats['users'] }}</div>
                 <div class="stat-sub">Across all departments</div>
             </div>
         </div>
@@ -245,10 +243,27 @@
 
         {{-- Pagination --}}
         <div class="card-footer bg-white border-top d-flex justify-content-between align-items-center flex-wrap gap-2 py-3 px-4">
-            <div class="text-muted small">
-                <i class="fas fa-info-circle"></i>
-                Showing {{ $departments->firstItem() ?? 0 }} to {{ $departments->lastItem() ?? 0 }}
-                of {{ $departments->total() }} departments
+            <div class="d-flex align-items-center gap-3">
+                <div class="text-muted small">
+                    <i class="fas fa-info-circle"></i>
+                    Showing {{ $departments->firstItem() ?? 0 }} to {{ $departments->lastItem() ?? 0 }}
+                    of {{ $departments->total() }} departments
+                </div>
+                <form method="GET" action="{{ route('admin.departments.index') }}"
+                      class="d-flex align-items-center gap-2">
+                    @foreach(request()->except(['page', 'per_page']) as $k => $v)
+                        <input type="hidden" name="{{ $k }}" value="{{ $v }}">
+                    @endforeach
+                    <label class="text-muted small mb-0" style="white-space: nowrap;">Show</label>
+                    <select name="per_page" class="form-select form-select-sm"
+                            style="width: auto; font-size: 12px; border-radius: 6px;"
+                            onchange="this.form.submit()">
+                        @foreach([10, 25, 50, 100] as $n)
+                            <option value="{{ $n }}" {{ (int)request('per_page', 10) === $n ? 'selected' : '' }}>{{ $n }}</option>
+                        @endforeach
+                    </select>
+                    <label class="text-muted small mb-0">per page</label>
+                </form>
             </div>
             <div>
                 {{ $departments->appends(request()->query())->links('pagination::bootstrap-5') }}

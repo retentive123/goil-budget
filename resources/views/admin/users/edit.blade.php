@@ -127,20 +127,12 @@
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold" style="color: #1B2A4A; font-size: 13px;">
-                                    <i class="fas fa-building" style="color: #E65C00;"></i> Department
+                                    <i class="fas fa-building" style="color: #E65C00;"></i> Dept / Station
                                 </label>
-                                <select name="department_id"
-                                        class="form-select @error('department_id') is-invalid @enderror"
-                                        style="border-radius: 10px; border-color: #E2E8F0; padding: 10px 14px;">
-                                    <option value="">— None —</option>
-                                    @foreach($departments as $dept)
-                                        <option value="{{ $dept->id }}"
-                                            {{ old('department_id', $user->department_id) == $dept->id ? 'selected' : '' }}>
-                                            {{ $dept->name }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('department_id')<div class="invalid-feedback d-block mt-1">{{ $message }}</div>@enderror
+                                @include('admin.users._dept_select', [
+                                    'selectedId' => old('department_id', $user->department_id),
+                                    'inputName'  => 'department_id',
+                                ])
                             </div>
 
                             <div class="col-md-6">

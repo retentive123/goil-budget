@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Route;
 use App\Observers\UniversalAuditObserver;
+use App\Models\Zone;
 
 use App\Models\BudgetVersion;
 use App\Models\BudgetLineItem;
@@ -42,5 +44,8 @@ class AppServiceProvider extends ServiceProvider
         foreach ($models as $model) {
             $model::observe(UniversalAuditObserver::class);
         }
+
+        // Bind 'serviceStation' route parameter to the Department model
+        Route::bind('serviceStation', fn($value) => Department::serviceStations()->findOrFail($value));
     }
 }

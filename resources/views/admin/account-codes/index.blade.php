@@ -27,7 +27,7 @@
     </button>
 </div>
 
-<div id="catUpload" class="d-none chart-card mb-4">
+<div id="catUpload" class="{{ session('import_errors') ? '' : 'd-none' }} chart-card mb-4">
     <div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:8px">
         Import Codes from Excel
     </div>
@@ -42,19 +42,24 @@
             <button type="submit" class="btn btn-sm btn-primary">Upload</button>
         </div>
         <div class="form-text">
-            Existing categories with the same code will be updated.
+            Existing codes with the same code will be updated.
             Download the template first to see the correct format.
         </div>
     </form>
+</div>
 
-    @if(session('import_errors'))
-    <div class="mt-2">
+@if(session('import_errors'))
+<div class="card border-0 mb-3" style="border-radius:10px;background:#FEF2F2;border:1px solid #FECACA !important;">
+    <div class="card-body py-3 px-4">
+        <div class="fw-semibold mb-2" style="font-size:13px;color:#991B1B;">
+            <i class="fas fa-exclamation-triangle"></i> The following rows were skipped:
+        </div>
         @foreach(session('import_errors') as $err)
-        <div style="font-size:11px;color:#991B1B">⚠ {{ $err }}</div>
+        <div style="font-size:12px;color:#7F1D1D;line-height:1.6;">{{ $err }}</div>
         @endforeach
     </div>
-    @endif
 </div>
+@endif
 
 {{-- Filters --}}
 <form method="GET" class="mb-3" id="filterForm">

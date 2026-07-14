@@ -6,6 +6,8 @@ use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\DepartmentController;
+use App\Http\Controllers\Admin\ZoneController;
+use App\Http\Controllers\Admin\ServiceStationController;
 use App\Http\Controllers\Admin\AccountCodeController;
 use App\Http\Controllers\Admin\AccountCategoryController;
 use App\Http\Controllers\Admin\AccountSubCategoryController;
@@ -68,10 +70,23 @@ Route::middleware('auth')->group(function () {
         Route::patch('users/{user}/toggle-active', [UserController::class, 'toggleActive'])->name('users.toggle-active');
         Route::post('users/{user}/assign-role',    [UserController::class, 'assignRole'])->name('users.assign-role');
 
-        // Departments
+        // Departments — mass-assign before resource so literal segment isn't swallowed by {department}
+        Route::get('departments/mass-assign',  [DepartmentController::class, 'massAssignForm'])->name('departments.mass-assign');
+        Route::post('departments/mass-assign', [DepartmentController::class, 'massAssign'])->name('departments.mass-assign.store');
         Route::resource('departments', DepartmentController::class);
         Route::get('departments/{department}/account-codes',  [DepartmentController::class, 'accountCodes'])->name('departments.account-codes');
         Route::post('departments/{department}/account-codes', [DepartmentController::class, 'syncAccountCodes'])->name('departments.sync-account-codes');
+
+        // Zones
+        Route::resource('zones', ZoneController::class);
+
+        // Service Stations — mass-assign before resource for same reason
+        Route::get('service-stations/mass-assign',  [ServiceStationController::class, 'massAssignForm'])->name('service-stations.mass-assign');
+        Route::post('service-stations/mass-assign', [ServiceStationController::class, 'massAssign'])->name('service-stations.mass-assign.store');
+        Route::resource('service-stations', ServiceStationController::class)
+            ->parameters(['service-stations' => 'serviceStation']);
+        Route::get('service-stations/{serviceStation}/account-codes',  [ServiceStationController::class, 'accountCodes'])->name('service-stations.account-codes');
+        Route::post('service-stations/{serviceStation}/account-codes', [ServiceStationController::class, 'syncAccountCodes'])->name('service-stations.sync-account-codes');
 
         // P&L layout configuration
         Route::resource('income-statement-configs', IncomeStatementConfigController::class)->except('show');
@@ -319,6 +334,10 @@ Route::prefix('import-export')->name('ie.')->group(function () {
         [ImportExportController::class, 'downloadCategoryTemplate'])->name('categories.download');
     Route::get('codes/download',
         [ImportExportController::class, 'downloadCodeTemplate'])->name('codes.download');
+    Route::get('departments/download',
+        [ImportExportController::class, 'downloadDepartmentTemplate'])->name('departments.download');
+    Route::get('service-stations/download',
+        [ImportExportController::class, 'downloadServiceStationTemplate'])->name('service-stations.download');
 
     // Budget & actuals uploads require budget creation permission
     Route::middleware('permission:create budget|approve budget')->group(function () {
@@ -334,6 +353,8 @@ Route::prefix('import-export')->name('ie.')->group(function () {
             [ImportExportController::class, 'uploadCategories'])->name('categories.upload');
         Route::post('codes/upload',
             [ImportExportController::class, 'uploadCodes'])->name('codes.upload');
+        Route::post('service-stations/upload',
+            [ImportExportController::class, 'uploadServiceStations'])->name('service-stations.upload');
     });
 });
 
