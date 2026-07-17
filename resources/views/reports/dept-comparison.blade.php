@@ -25,17 +25,16 @@
         </div>
         <div class="col-md-6">
             <label class="form-label small fw-semibold mb-1">
-                Departments (select up to 5)
+                Dept / Station (select up to 5)
             </label>
-            <select name="dept_ids[]" class="form-select form-select-sm"
-                    multiple style="height:80px">
-                @foreach($departments as $d)
-                <option value="{{ $d->id }}"
-                    {{ in_array($d->id, $selectedDeptIds) ? 'selected':'' }}>
-                    {{ $d->name }}
-                </option>
-                @endforeach
-            </select>
+            @include('reports._dept_filter', [
+                'filterName' => 'dept_ids',
+                'selectedId' => $selectedDeptIds,
+                'multiple'   => true,
+                'maxItems'   => 5,
+                'emptyLabel' => 'Search departments & stations…',
+                'selectId'   => 'rptCompDeptSel',
+            ])
         </div>
         <div class="col-md-2">
             <button type="submit" class="btn btn-sm w-100"

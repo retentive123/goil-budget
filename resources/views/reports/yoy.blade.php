@@ -39,16 +39,11 @@
             </select>
         </div>
         <div class="col-md-3">
-            <label class="form-label small fw-semibold mb-1">Department</label>
-            <select name="department_id" class="form-select form-select-sm">
-                <option value="">All Departments</option>
-                @foreach($departments as $d)
-                <option value="{{ $d->id }}"
-                    {{ request('department_id') == $d->id ? 'selected' : '' }}>
-                    {{ $d->name }}
-                </option>
-                @endforeach
-            </select>
+            <label class="form-label small fw-semibold mb-1">Dept / Station</label>
+            @include('reports._dept_filter', [
+                'selectedId' => request('department_id'),
+                'selectId'   => 'rptYoyDeptSel',
+            ])
         </div>
         <div class="col-md-2">
             <button type="submit" class="btn btn-sm w-100"
@@ -193,52 +188,6 @@
         </div>
     </div>
 
-</div>
-
-{{-- ── Charts row ── --}}
-<div class="row g-3 mb-4">
-
-    {{-- Grouped bar: Budget A vs Budget B vs Actual A vs Actual B (top 12) --}}
-    <div class="col-md-8">
-        <div class="chart-card h-100">
-            <div class="chart-title">
-                Budget & Actual Comparison — Top 12 Codes by Change
-            </div>
-            <canvas id="yoyGrouped" height="200"></canvas>
-        </div>
-    </div>
-
-    {{-- Quarterly comparison donut pair --}}
-    <div class="col-md-4">
-        <div class="chart-card h-100">
-            <div class="chart-title">Overall Budget vs Actual</div>
-
-            {{-- Period A mini bar --}}
-            <div style="font-size:11px;font-weight:600;color:var(--slate);
-                        margin-bottom:6px">
-                {{ $periodA->name }}
-            </div>
-            <canvas id="periodABar" height="80"></canvas>
-
-            <div style="border-top:1px solid var(--border);margin:14px 0"></div>
-
-            <div style="font-size:11px;font-weight:600;color:var(--slate);
-                        margin-bottom:6px">
-                {{ $periodB->name }}
-            </div>
-            <canvas id="periodBBar" height="80"></canvas>
-        </div>
-    </div>
-
-</div>
-
-{{-- ── Quarterly side-by-side ── --}}
-<div class="chart-card mb-4">
-    <div class="chart-title">
-        Quarterly Budget vs Actual —
-        {{ $periodA->name }} vs {{ $periodB->name }}
-    </div>
-    <canvas id="quarterlyCompare" height="130"></canvas>
 </div>
 
 {{-- ── Full code table ── --}}
@@ -487,186 +436,7 @@
     </div>
 </div>
 
-{{-- ── Charts JS ── --}}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-const NAVY    = '#1B2A4A';
-const SLATE   = '#64748B';
-const EMERALD = '#10B981';
-const GOLD    = '#C9A84C';
-const ROSE    = '#F43F5E';
-const EMERALD_LIGHT = 'rgba(16,185,129,.5)';
-const NAVY_LIGHT    = 'rgba(27,42,74,.5)';
-
-function fmt(v) {
-    return v >= 1000000 ? (v/1000000).toFixed(1)+'M'
-         : v >= 1000    ? (v/1000).toFixed(0)+'K'
-         : v;
-}
-
-const yScale = {
-    beginAtZero: true,
-    grid: { color: '#F1F5F9' },
-    ticks: { font:{ size:10 }, callback: fmt }
-};
-
-// ── Top 12 grouped bar ──
-@php
-    $top12 = array_slice($comparison['rows'], 0, 12);
-@endphp
-new Chart(document.getElementById('yoyGrouped'), {
-    type: 'bar',
-    data: {
-        labels: {!! json_encode(array_column($top12, 'code')) !!},
-        datasets: [
-            {
-                label: '{{ $periodA->name }} Budget',
-                data:  {!! json_encode(array_column($top12, 'budget_a')) !!},
-                backgroundColor: SLATE,
-                borderRadius: 3, borderSkipped: false,
-            },
-            {
-                label: '{{ $periodA->name }} Actual',
-                data:  {!! json_encode(array_column($top12, 'actual_a')) !!},
-                backgroundColor: EMERALD_LIGHT,
-                borderRadius: 3, borderSkipped: false,
-            },
-            {
-                label: '{{ $periodB->name }} Budget',
-                data:  {!! json_encode(array_column($top12, 'budget_b')) !!},
-                backgroundColor: NAVY,
-                borderRadius: 3, borderSkipped: false,
-            },
-            {
-                label: '{{ $periodB->name }} Actual',
-                data:  {!! json_encode(array_column($top12, 'actual_b')) !!},
-                backgroundColor: EMERALD,
-                borderRadius: 3, borderSkipped: false,
-            },
-        ]
-    },
-    options: {
-        responsive: true,
-        plugins: {
-            legend: { position:'top', labels:{ font:{size:11}, boxWidth:12 } }
-        },
-        scales: {
-            y: yScale,
-            x: { grid:{ display:false }, ticks:{ font:{size:10} } }
-        }
-    }
-});
-
-// ── Period A mini bar ──
-new Chart(document.getElementById('periodABar'), {
-    type: 'bar',
-    data: {
-        labels: ['Budget','Actual'],
-        datasets: [{
-            data: [
-                {{ $comparison['budget_total_a'] }},
-                {{ $comparison['actual_total_a'] }},
-            ],
-            backgroundColor: [SLATE, EMERALD],
-            borderRadius: 6, borderSkipped: false,
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: { legend:{ display:false } },
-        scales: {
-            y: { ...yScale, display:false },
-            x: { grid:{ display:false }, ticks:{ font:{size:11} } }
-        }
-    }
-});
-
-// ── Period B mini bar ──
-new Chart(document.getElementById('periodBBar'), {
-    type: 'bar',
-    data: {
-        labels: ['Budget','Actual'],
-        datasets: [{
-            data: [
-                {{ $comparison['budget_total_b'] }},
-                {{ $comparison['actual_total_b'] }},
-            ],
-            backgroundColor: [NAVY, EMERALD],
-            borderRadius: 6, borderSkipped: false,
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: { legend:{ display:false } },
-        scales: {
-            y: { ...yScale, display:false },
-            x: { grid:{ display:false }, ticks:{ font:{size:11} } }
-        }
-    }
-});
-
-// ── Quarterly comparison ──
-@php
-    $qLabels = ['Q1 (Jan-Mar)','Q2 (Apr-Jun)','Q3 (Jul-Sep)','Q4 (Oct-Dec)'];
-    $qKeys   = ['q1','q2','q3','q4'];
-
-    $bAQ_totals = ['q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0];
-    $bBQ_totals = ['q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0];
-    $aAQ_totals = ['q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0];
-    $aBQ_totals = ['q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0];
-
-    foreach($comparison['rows'] as $row) {
-        foreach($qKeys as $q) {
-            $bAQ_totals[$q] += $row['budget_a_q'][$q] ?? 0;
-            $bBQ_totals[$q] += $row['budget_b_q'][$q] ?? 0;
-            $aAQ_totals[$q] += $row['actual_a_q'][$q] ?? 0;
-            $aBQ_totals[$q] += $row['actual_b_q'][$q] ?? 0;
-        }
-    }
-@endphp
-new Chart(document.getElementById('quarterlyCompare'), {
-    type: 'bar',
-    data: {
-        labels: {!! json_encode($qLabels) !!},
-        datasets: [
-            {
-                label: '{{ $periodA->name }} Budget',
-                data:  {!! json_encode(array_values($bAQ_totals)) !!},
-                backgroundColor: SLATE,
-                borderRadius: 4, borderSkipped: false,
-            },
-            {
-                label: '{{ $periodA->name }} Actual',
-                data:  {!! json_encode(array_values($aAQ_totals)) !!},
-                backgroundColor: EMERALD_LIGHT,
-                borderRadius: 4, borderSkipped: false,
-            },
-            {
-                label: '{{ $periodB->name }} Budget',
-                data:  {!! json_encode(array_values($bBQ_totals)) !!},
-                backgroundColor: NAVY,
-                borderRadius: 4, borderSkipped: false,
-            },
-            {
-                label: '{{ $periodB->name }} Actual',
-                data:  {!! json_encode(array_values($aBQ_totals)) !!},
-                backgroundColor: EMERALD,
-                borderRadius: 4, borderSkipped: false,
-            },
-        ]
-    },
-    options: {
-        responsive: true,
-        plugins: {
-            legend: { position:'top', labels:{ font:{size:11}, boxWidth:12 } }
-        },
-        scales: {
-            y: yScale,
-            x: { grid:{ display:false }, ticks:{ font:{size:11} } }
-        }
-    }
-});
-
 // ── Client-side paginated table renderer ──
 const YOY_ROWS      = @json($tableRows);
 const PERIOD_A_NAME = @json($periodA->name);

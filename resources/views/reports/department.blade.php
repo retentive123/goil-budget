@@ -31,15 +31,13 @@
             </select>
         </div>
         <div class="col-md-3">
-            <label class="form-label small fw-semibold mb-1">Department</label>
-            <select name="department_id" class="form-select form-select-sm" onchange="this.form.submit()">
-                @foreach($departments as $d)
-                <option value="{{ $d->id }}"
-                    {{ request('department_id', $department?->id) == $d->id ? 'selected' : '' }}>
-                    {{ $d->name }}
-                </option>
-                @endforeach
-            </select>
+            <label class="form-label small fw-semibold mb-1">Dept / Station</label>
+            @include('reports._dept_filter', [
+                'selectedId' => request('department_id', $department?->id),
+                'allowEmpty' => false,
+                'autoSubmit' => true,
+                'selectId'   => 'rptDeptDrillSel',
+            ])
         </div>
         <div class="col-md-3">
             <label class="form-label small fw-semibold mb-1">Category</label>
@@ -213,6 +211,16 @@
                    style="width:340px">
             <span class="small text-muted" id="deptSearchInfo" style="white-space:nowrap"></span>
         </div>
+        <div class="d-flex align-items-center gap-2">
+            <label class="text-muted small mb-0" style="white-space:nowrap">Rows:</label>
+            <select class="form-select form-select-sm" style="width:auto;font-size:12px"
+                    onchange="changePageSize(this.value === 'all' ? 0 : parseInt(this.value))">
+                @foreach([10, 20, 30, 50] as $n)
+                <option value="{{ $n }}" {{ $n === 10 ? 'selected' : '' }}>{{ $n }}</option>
+                @endforeach
+                <option value="all">All</option>
+            </select>
+        </div>
         <div class="dropdown">
             <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
                     data-bs-toggle="dropdown" style="font-size:12px">
@@ -271,9 +279,23 @@
     {{-- Tab nav --}}
     <div style="overflow-x:auto;border-bottom:1px solid #E2E8F0">
         <ul class="nav nav-tabs border-0 flex-nowrap px-3 pt-2" id="catTabs" style="white-space:nowrap">
+            @php $allItemCount = array_sum(array_map(fn($c) => count($c['items']), $typesData)); @endphp
+            <li class="nav-item">
+                <button class="nav-link active px-3 py-2"
+                        style="font-size:12px;font-weight:600;white-space:nowrap;
+                               border-radius:6px 6px 0 0"
+                        data-bs-toggle="tab"
+                        data-bs-target="#catPane_all"
+                        onclick="initAllTab()">
+                    All
+                    <span class="ms-1" style="font-size:10px;color:var(--slate);font-weight:400">
+                        ({{ $allItemCount }})
+                    </span>
+                </button>
+            </li>
             @foreach($typesData as $catIndex => $catInfo)
             <li class="nav-item">
-                <button class="nav-link {{ $catIndex === 0 ? 'active' : '' }} px-3 py-2"
+                <button class="nav-link px-3 py-2"
                         style="font-size:12px;font-weight:600;white-space:nowrap;
                                border-radius:6px 6px 0 0"
                         data-bs-toggle="tab"
@@ -291,9 +313,62 @@
 
     {{-- Tab panes --}}
     <div class="tab-content">
+
+        {{-- "All" pane --}}
+        <div class="tab-pane fade show active" id="catPane_all">
+            <div class="d-flex justify-content-between align-items-center px-4 py-3"
+                 style="background:#FAFAFA;border-bottom:1px solid #F1F5F9">
+                <div style="font-size:13px;font-weight:600;color:var(--navy)">
+                    {{ currency() }} {{ number_format($grandTotal,2) }}
+                </div>
+                <div style="font-size:11px;color:var(--slate)">
+                    All types &nbsp;·&nbsp; {{ $allItemCount }} items
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead style="font-size:11px;text-transform:uppercase;
+                                  letter-spacing:.5px;color:var(--slate);background:#F8FAFC">
+                        <tr>
+                            <th class="ps-4">Code</th>
+                            <th>Account Name</th>
+                            <th>Category</th>
+                            <th class="text-end">Q1</th>
+                            <th class="text-end">Q2</th>
+                            <th class="text-end">Q3</th>
+                            <th class="text-end">Q4</th>
+                            <th class="text-end">Supplementary</th>
+                            <th class="text-end">Total</th>
+                            <th>Split</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody_cat_all"></tbody>
+                </table>
+            </div>
+            <div class="d-flex align-items-center justify-content-between px-4 py-2"
+                 style="border-top:1px solid #F1F5F9">
+                <span style="font-size:11px;color:var(--slate)" id="cat_info_all"></span>
+                <div class="d-flex align-items-center gap-2" id="cat_pager_all">
+                    <button class="btn btn-sm btn-outline-secondary"
+                            style="font-size:11px;padding:2px 10px"
+                            id="cat_prev_all"
+                            onclick="catPrevAll()" disabled>
+                        ← Prev
+                    </button>
+                    <span style="font-size:11px;color:var(--slate)" id="cat_page_all"></span>
+                    <button class="btn btn-sm btn-outline-secondary"
+                            style="font-size:11px;padding:2px 10px"
+                            id="cat_next_all"
+                            onclick="catNextAll()">
+                        Next →
+                    </button>
+                </div>
+            </div>
+        </div>
+
         @foreach($typesData as $catIndex => $catInfo)
         @php $catSupp = $catInfo['supp']; @endphp
-        <div class="tab-pane fade {{ $catIndex === 0 ? 'show active' : '' }}"
+        <div class="tab-pane fade"
              id="catPane_{{ $catIndex }}">
 
             {{-- Pane header --}}
@@ -383,11 +458,16 @@
 const DEPT_CATS         = @json($typesData);
 const CODE_EXPLORER_URL = @json($codeExplorerUrl);
 const DEPT_PERIOD_ID    = {{ $period->id }};
-const PAGE_SIZE         = 15;
+let   pageSize          = 10;
+
+// Flattened "All" items
+const ALL_ITEMS = [].concat(...DEPT_CATS.map(c => c.items));
 
 // Per-tab current page
 const catPages    = new Array(DEPT_CATS.length).fill(0);
 const catInited   = new Array(DEPT_CATS.length).fill(false);
+let   allTabPage  = 0;
+let   allTabInited = false;
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 function numFmt(n) {
@@ -428,13 +508,14 @@ function buildRow(item, showCat) {
 
 // ── Tab pagination ────────────────────────────────────────────────────────
 function renderCatPage(idx) {
-    const cat        = DEPT_CATS[idx];
-    const items      = cat.items;
-    const total      = items.length;
-    const page       = catPages[idx];
-    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-    const start      = page * PAGE_SIZE;
-    const end        = Math.min(start + PAGE_SIZE, total);
+    const cat    = DEPT_CATS[idx];
+    const items  = cat.items;
+    const total  = items.length;
+    const page   = catPages[idx];
+    const ps     = pageSize === 0 ? total : pageSize;
+    const totalPages = Math.max(1, Math.ceil(total / ps));
+    const start  = page * ps;
+    const end    = Math.min(start + ps, total);
 
     document.getElementById(`tbody_cat_${idx}`).innerHTML =
         items.length
@@ -450,10 +531,10 @@ function renderCatPage(idx) {
     if (infoEl) infoEl.textContent =
         total > 0 ? `Showing ${start + 1}–${end} of ${total} items` : '';
 
-    if (pagerEl) pagerEl.style.display = totalPages <= 1 ? 'none' : '';
+    if (pagerEl) pagerEl.style.display = (totalPages <= 1 || pageSize === 0) ? 'none' : '';
     if (prevEl)  prevEl.disabled  = page === 0;
     if (nextEl)  nextEl.disabled  = page >= totalPages - 1;
-    if (pageEl)  pageEl.textContent = `Page ${page + 1} of ${totalPages}`;
+    if (pageEl)  pageEl.textContent = pageSize === 0 ? '' : `Page ${page + 1} of ${totalPages}`;
 
     catInited[idx] = true;
 }
@@ -462,7 +543,8 @@ function catPrev(idx) {
     if (catPages[idx] > 0) { catPages[idx]--; renderCatPage(idx); }
 }
 function catNext(idx) {
-    const totalPages = Math.ceil(DEPT_CATS[idx].items.length / PAGE_SIZE);
+    const ps = pageSize === 0 ? DEPT_CATS[idx].items.length : pageSize;
+    const totalPages = Math.ceil(DEPT_CATS[idx].items.length / ps);
     if (catPages[idx] < totalPages - 1) { catPages[idx]++; renderCatPage(idx); }
 }
 
@@ -470,8 +552,60 @@ function initCatTab(idx) {
     if (!catInited[idx]) renderCatPage(idx);
 }
 
-// Render first tab on load
-renderCatPage(0);
+// ── "All" tab functions ───────────────────────────────────────────────────
+function renderAllPage() {
+    const items = ALL_ITEMS;
+    const total = items.length;
+    const ps    = pageSize === 0 ? total : pageSize;
+    const totalPages = Math.max(1, Math.ceil(total / ps));
+    const start = allTabPage * ps;
+    const end   = Math.min(start + ps, total);
+
+    document.getElementById('tbody_cat_all').innerHTML =
+        items.length
+            ? items.slice(start, end).map(r => buildRow(r)).join('')
+            : '<tr><td colspan="10" class="text-muted text-center py-3">No items.</td></tr>';
+
+    const infoEl  = document.getElementById('cat_info_all');
+    const pagerEl = document.getElementById('cat_pager_all');
+    const prevEl  = document.getElementById('cat_prev_all');
+    const nextEl  = document.getElementById('cat_next_all');
+    const pageEl  = document.getElementById('cat_page_all');
+
+    if (infoEl)  infoEl.textContent = total > 0 ? `Showing ${start + 1}–${end} of ${total} items` : '';
+    if (pagerEl) pagerEl.style.display = (totalPages <= 1 || pageSize === 0) ? 'none' : '';
+    if (prevEl)  prevEl.disabled = allTabPage === 0;
+    if (nextEl)  nextEl.disabled = allTabPage >= totalPages - 1;
+    if (pageEl)  pageEl.textContent = pageSize === 0 ? '' : `Page ${allTabPage + 1} of ${totalPages}`;
+
+    allTabInited = true;
+}
+
+function catPrevAll() {
+    if (allTabPage > 0) { allTabPage--; renderAllPage(); }
+}
+function catNextAll() {
+    const ps = pageSize === 0 ? ALL_ITEMS.length : pageSize;
+    const totalPages = Math.ceil(ALL_ITEMS.length / ps);
+    if (allTabPage < totalPages - 1) { allTabPage++; renderAllPage(); }
+}
+function initAllTab() {
+    if (!allTabInited) renderAllPage();
+}
+
+// ── Page-size control ────────────────────────────────────────────────────
+function changePageSize(n) {
+    pageSize = n;
+    catPages.fill(0);
+    catInited.fill(false);
+    allTabPage   = 0;
+    allTabInited = false;
+    const activeBtn = document.querySelector('#catTabs .nav-link.active');
+    if (activeBtn) activeBtn.click();
+}
+
+// Render "All" tab on load (it is the default active tab)
+renderAllPage();
 
 // ── Global search ──────────────────────────────────────────────────────────
 document.getElementById('deptSearch').addEventListener('input', function () {

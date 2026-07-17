@@ -30,16 +30,12 @@
             </select>
         </div>
         <div class="col-md-2">
-            <label class="form-label small fw-semibold mb-1">Department</label>
-            <select name="department_id" class="form-select form-select-sm">
-                <option value="">All</option>
-                @foreach($departments as $d)
-                <option value="{{ $d->id }}"
-                    {{ request('department_id')==$d->id?'selected':'' }}>
-                    {{ $d->name }}
-                </option>
-                @endforeach
-            </select>
+            <label class="form-label small fw-semibold mb-1">Dept / Station</label>
+            @include('reports._dept_filter', [
+                'selectedId' => request('department_id'),
+                'emptyLabel' => 'All',
+                'selectId'   => 'rptVarianceDeptSel',
+            ])
         </div>
         <div class="col-md-2">
             <label class="form-label small fw-semibold mb-1">Show</label>
@@ -113,22 +109,6 @@
         <div class="chart-card h-100">
             <div class="chart-title">Variance Status</div>
             <canvas id="statusDonut" height="160"></canvas>
-        </div>
-    </div>
-</div>
-
-{{-- Charts row 2: Category + Department --}}
-<div class="row g-3 mb-4">
-    <div class="col-md-6">
-        <div class="chart-card h-100">
-            <div class="chart-title">Variance by Category</div>
-            <canvas id="catBar" height="200"></canvas>
-        </div>
-    </div>
-    <div class="col-md-6">
-        <div class="chart-card h-100">
-            <div class="chart-title">Variance by Department</div>
-            <canvas id="deptBar" height="200"></canvas>
         </div>
     </div>
 </div>
@@ -727,77 +707,6 @@ new Chart(document.getElementById('statusDonut'), {
     }
 });
 
-// ── 3. Variance by Category (horizontal bar) ──────────────────────────────
-@php
-    $catNames     = array_keys($catSummary);
-    $catVariances = array_column($catSummary, 'variance');
-    $catBgColors  = array_map(fn($v) => $v < 0 ? '#FCA5A5' : '#6EE7B7', $catSummary);
-@endphp
-new Chart(document.getElementById('catBar'), {
-    type: 'bar',
-    indexAxis: 'y',
-    data: {
-        labels: {!! json_encode($catNames) !!},
-        datasets: [{
-            label: 'Variance',
-            data:  {!! json_encode($catVariances) !!},
-            backgroundColor: {!! json_encode(array_values($catBgColors)) !!},
-            borderRadius: 4,
-            borderSkipped: false,
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: {
-            legend: { display: false },
-            tooltip: {
-                callbacks: {
-                    label: ctx => {
-                        const v = ctx.parsed.x;
-                        return ` ${v >= 0 ? 'Underspend' : 'Overspend'}: {{ currency() }} ${Math.abs(v).toLocaleString()}`;
-                    }
-                }
-            }
-        },
-        scales: { y: scaleYH, x: scaleXH }
-    }
-});
-
-// ── 4. Variance by Department (horizontal bar) ────────────────────────────
-@php
-    $deptNames     = array_keys($deptSummary);
-    $deptVariances = array_column($deptSummary, 'variance');
-    $deptBgColors  = array_map(fn($v) => $v < 0 ? '#FCA5A5' : '#6EE7B7', $deptSummary);
-@endphp
-new Chart(document.getElementById('deptBar'), {
-    type: 'bar',
-    indexAxis: 'y',
-    data: {
-        labels: {!! json_encode($deptNames) !!},
-        datasets: [{
-            label: 'Variance',
-            data:  {!! json_encode($deptVariances) !!},
-            backgroundColor: {!! json_encode(array_values($deptBgColors)) !!},
-            borderRadius: 4,
-            borderSkipped: false,
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: {
-            legend: { display: false },
-            tooltip: {
-                callbacks: {
-                    label: ctx => {
-                        const v = ctx.parsed.x;
-                        return ` ${v >= 0 ? 'Underspend' : 'Overspend'}: {{ currency() }} ${Math.abs(v).toLocaleString()}`;
-                    }
-                }
-            }
-        },
-        scales: { y: scaleYH, x: scaleXH }
-    }
-});
 </script>
 @endif
 @endsection

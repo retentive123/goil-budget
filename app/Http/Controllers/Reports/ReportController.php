@@ -24,11 +24,11 @@ use App\Services\AuditLogger;
 
 class ReportController extends Controller
 {
-    // ── Landing ──────────────────────────────────────────────
+    // â”€â”€ Landing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public function index()
     {
         $periods     = BudgetPeriod::orderByDesc('year')->get();
-        $departments = Department::where('is_active', true)->orderBy('name')->get();
+        $departments = $this->reportDepartments();
         $categories  = AccountCategory::where('is_active', true)->orderBy('name')->get();
 
         // Quick KPIs for landing cards
@@ -42,12 +42,12 @@ class ReportController extends Controller
         ));
     }
 
-  // ── Executive Summary ─────────────────────────────────────
+  // â”€â”€ Executive Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 public function executive(Request $request)
 {
     $period      = $this->resolvePeriod($request);
     $periods     = BudgetPeriod::orderByDesc('year')->get();
-    $departments = Department::where('is_active', true)->orderBy('name')->get();
+    $departments = $this->reportDepartments();
 
     if (!$period) {
         return redirect()->route('reports.index')
@@ -75,11 +75,11 @@ public function executive(Request $request)
             'q4'           => $v->lineItems->sum('q4_amount'),
             'original'     => $original,
             'supplementary'=> $supplementary,
-            'total'        => $effective, // ✅ Effective total
+            'total'        => $effective, // âœ… Effective total
         ];
     })->sortByDesc('total')->values();
 
-    // ✅ Calculate total supplementary for grand total
+    // âœ… Calculate total supplementary for grand total
     $totalSupplementary = $deptTotals->sum('supplementary');
 
     // Budget type breakdown (revenue, expense, capital_expenditure, assets, liabilities, both)
@@ -121,7 +121,7 @@ public function executive(Request $request)
         'total'        => $totalDepts,
     ];
 
-    // ✅ Use effectiveTotal() for grand total
+    // âœ… Use effectiveTotal() for grand total
     $grandTotal = $versions->sum(fn($v) => $v->effectiveTotal());
 
     return view('reports.executive', compact(
@@ -132,12 +132,12 @@ public function executive(Request $request)
     ));
 }
 
-    // ── Department Drill-down ─────────────────────────────────
+    // â”€â”€ Department Drill-down â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 public function department(Request $request)
 {
     $period      = $this->resolvePeriod($request);
     $periods     = BudgetPeriod::orderByDesc('year')->get();
-    $departments = Department::where('is_active', true)->orderBy('name')->get();
+    $departments = $this->reportDepartments();
     $categories  = AccountCategory::where('is_active', true)->orderBy('name')->get();
 
     $department  = $request->department_id
@@ -193,7 +193,7 @@ if ($version) {
         $byCategory[$cat]['q1'] += $item->q1_amount;
         $byCategory[$cat]['q2'] += $item->q2_amount;
         $byCategory[$cat]['q3'] += $item->q3_amount;
-        $byCategory[$cat]['q4'] += $item->q4_amount; // ✅ No longer adding supp to Q4
+        $byCategory[$cat]['q4'] += $item->q4_amount; // âœ… No longer adding supp to Q4
         $byCategory[$cat]['total'] += $effectiveBudget;
         $byCategory[$cat]['supplementary'] += $supplementary;
         $byCategory[$cat]['original'] += $item->total_amount;
@@ -201,7 +201,7 @@ if ($version) {
         $quarterSums['q1'] += $item->q1_amount;
         $quarterSums['q2'] += $item->q2_amount;
         $quarterSums['q3'] += $item->q3_amount;
-        $quarterSums['q4'] += $item->q4_amount; // ✅ No longer adding supp to Q4
+        $quarterSums['q4'] += $item->q4_amount; // âœ… No longer adding supp to Q4
         $quarterSums['total'] += $effectiveBudget;
         $quarterSums['supplementary'] += $supplementary;
         $quarterSums['original'] += $item->total_amount;
@@ -234,7 +234,7 @@ if ($version) {
 }
 
 
-        // ── Code Explorer ─────────────────────────────────
+        // â”€â”€ Code Explorer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
    public function codeExplorer(Request $request)
@@ -268,7 +268,8 @@ if ($version) {
         ? AccountCode::with('category')->find($request->account_code_id)
         : null;
 
-    $period = $this->resolvePeriod($request);
+    // null when no period_id is given → "All Periods" query across all periods
+    $period = $request->filled('period_id') ? BudgetPeriod::find($request->period_id) : null;
 
     $canViewAll = $user->hasAnyRole([
         'finance_reviewer','gceo','board','bdu_admin','super_admin'
@@ -279,10 +280,10 @@ if ($version) {
         : $user->department_id;
 
     $departments = $canViewAll
-        ? Department::where('is_active', true)->orderBy('name')->get()
+        ? $this->reportDepartments()
         : collect([$user->department]);
 
-    // ✅ Use the shared method
+    // âœ… Use the shared method
     $reportData = $this->buildCodeExplorerData($request);
 
     $reportTitle    = '';
@@ -290,9 +291,9 @@ if ($version) {
 
     if ($selectedCategory) {
         $reportTitle    = $selectedCategory->name;
-        $reportSubtitle = $selectedCategory->code . ' — ' . count($reportData) . ' codes';
+        $reportSubtitle = $selectedCategory->code . ' â€” ' . count($reportData) . ' codes';
     } elseif ($selectedCode) {
-        $reportTitle    = $selectedCode->code . ' — ' . $selectedCode->name;
+        $reportTitle    = $selectedCode->code . ' â€” ' . $selectedCode->name;
         $reportSubtitle = $selectedCode->category->name;
     }
 
@@ -306,11 +307,11 @@ if ($version) {
 }
 
 
-    // ── Year-over-Year ────────────────────────────────────────
+    // â”€â”€ Year-over-Year â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public function yoy(Request $request)
     {
         $periods     = BudgetPeriod::orderByDesc('year')->get();
-        $departments = Department::where('is_active', true)->orderBy('name')->get();
+        $departments = $this->reportDepartments();
 
         $periodAId = $request->period_a ?? $periods->first()?->id;
         $periodBId = $request->period_b ?? $periods->skip(1)->first()?->id;
@@ -335,12 +336,12 @@ if ($version) {
         ));
     }
 
-   // ── Department Comparison ─────────────────────────────────
+   // â”€â”€ Department Comparison â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 public function deptComparison(Request $request)
 {
     $period      = $this->resolvePeriod($request);
     $periods     = BudgetPeriod::orderByDesc('year')->get();
-    $departments = Department::where('is_active', true)->orderBy('name')->get();
+    $departments = $this->reportDepartments();
 
     $selectedDeptIds = $request->dept_ids
         ? (is_array($request->dept_ids) ? $request->dept_ids : explode(',', $request->dept_ids))
@@ -371,7 +372,7 @@ public function deptComparison(Request $request)
                 'q4'    => $version?->lineItems->sum('q4_amount') ?? 0,
                 'original' => $original,
                 'supplementary' => $supplementary,
-                'total' => $effective, // ✅ Effective total
+                'total' => $effective, // âœ… Effective total
                 'categories' => $version
                     ? $version->lineItems->groupBy('accountCode.category.name')
                         ->map(fn($items) => $items->sum(fn($item) => $item->effectiveBudget()))
@@ -391,7 +392,7 @@ public function deptComparison(Request $request)
 {
     $period      = $this->resolvePeriod($request);
     $periods     = BudgetPeriod::orderByDesc('year')->get();
-    $departments = Department::where('is_active', true)->orderBy('name')->get();
+    $departments = $this->reportDepartments();
 
     $department = $request->department_id
         ? Department::find($request->department_id)
@@ -406,12 +407,12 @@ public function deptComparison(Request $request)
         ->when($department, fn($q) => $q->where('department_id', $department->id))
         ->get();
 
-    // ✅ Build variance data once
+    // âœ… Build variance data once
     $varianceData = $this->buildVarianceData(
         $versions, $minVariancePct, $varianceFilter
     );
 
-    // ── Summary totals + status counts ──────────────────────────────────
+    // â”€â”€ Summary totals + status counts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     $totalBudget = 0;
     $totalActual = 0;
     $onBudget    = 0;
@@ -463,7 +464,7 @@ public function deptComparison(Request $request)
     // Sort categories by absolute variance descending
     uasort($catSummary, fn($a, $b) => abs($b['variance']) <=> abs($a['variance']));
 
-    // ── Department summary: budget from versions, actuals from DB ────────
+    // â”€â”€ Department summary: budget from versions, actuals from DB â”€â”€â”€â”€â”€â”€â”€â”€
     $versionIds  = $versions->pluck('id');
     $deptBudgets = [];
     foreach ($versions as $v) {
@@ -514,12 +515,12 @@ public function deptComparison(Request $request)
 }
 
 
-    // ── Utilisation ───────────────────────────────────────────
+    // â”€â”€ Utilisation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public function utilisation(Request $request)
     {
         $period      = $this->resolvePeriod($request);
         $periods     = BudgetPeriod::orderByDesc('year')->get();
-        $departments = Department::where('is_active', true)->orderBy('name')->get();
+        $departments = $this->reportDepartments();
 
         $versions = BudgetVersion::with('department','lineItems')
             ->where('budget_period_id', $period?->id)
@@ -553,12 +554,12 @@ public function deptComparison(Request $request)
         ));
     }
 
-    // ── Virement Report ───────────────────────────────────────
+    // â”€â”€ Virement Report â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public function virement(Request $request)
     {
         $period      = $this->resolvePeriod($request);
         $periods     = BudgetPeriod::orderByDesc('year')->get();
-        $departments = Department::where('is_active', true)->orderBy('name')->get();
+        $departments = $this->reportDepartments();
 
         $virements = Virement::with(
                 'department',
@@ -586,12 +587,12 @@ public function deptComparison(Request $request)
         ));
     }
 
-    // ── Flexed Budget ─────────────────────────────────────────
+    // â”€â”€ Flexed Budget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public function flexed(Request $request)
     {
         $period      = $this->resolvePeriod($request);
         $periods     = BudgetPeriod::orderByDesc('year')->get();
-        $departments = Department::where('is_active', true)->orderBy('name')->get();
+        $departments = $this->reportDepartments();
 
         $activityLevel = (float) $request->get('activity_level', 100);
         $department    = $request->department_id
@@ -612,12 +613,12 @@ public function deptComparison(Request $request)
         ));
     }
 
-    // ── Approved Budget ───────────────────────────────────────
+    // â”€â”€ Approved Budget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public function approved(Request $request)
     {
         $period      = $this->resolvePeriod($request);
         $periods     = BudgetPeriod::orderByDesc('year')->get();
-        $departments = Department::where('is_active', true)->orderBy('name')->get();
+        $departments = $this->reportDepartments();
 
         $department = $request->department_id
             ? Department::find($request->department_id)
@@ -636,12 +637,12 @@ public function deptComparison(Request $request)
         ));
     }
 
-    // ── Financial Statement (P&L / Cash Flow / Balance Sheet) ──
+    // â”€â”€ Financial Statement (P&L / Cash Flow / Balance Sheet) â”€â”€
     public function financialStatement(Request $request)
     {
         $period      = $this->resolvePeriod($request);
         $periods     = BudgetPeriod::orderByDesc('year')->orderByDesc('id')->get();
-        $departments = Department::where('is_active', true)->orderBy('name')->get();
+        $departments = $this->reportDepartments();
         $deptId      = $request->integer('department_id') ?: null;
 
         if (!$period) {
@@ -696,7 +697,7 @@ public function deptComparison(Request $request)
         ]);
     }
 
-    // ── Exports ───────────────────────────────────────────────
+    // â”€â”€ Exports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public function exportApproved(Request $request)
     {
         $period   = $this->resolvePeriod($request);
@@ -709,7 +710,7 @@ public function deptComparison(Request $request)
 
 public function codeExplorerExport(Request $request)
 {
-    // ✅ Use the shared method instead of duplicating logic
+    // âœ… Use the shared method instead of duplicating logic
     $reportData = $this->buildCodeExplorerData($request);
 
     if (empty($reportData)) {
@@ -777,7 +778,16 @@ public function codeExplorerExport(Request $request)
         return $pdf->download("goil-{$type}-{$period?->year}.pdf");
     }
 
-    // ── Private helpers ───────────────────────────────────────
+    // â”€â”€ Private helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+    private function reportDepartments(): \Illuminate\Database\Eloquent\Collection
+    {
+        return Department::where('is_active', true)
+            ->with('zone')
+            ->orderBy('entity_type')
+            ->orderBy('name')
+            ->get();
+    }
 
     private function resolvePeriod(Request $request): ?BudgetPeriod
     {
@@ -819,7 +829,7 @@ public function codeExplorerExport(Request $request)
         $result[] = [
             'year'  => $p->year,
             'name'  => $p->name,
-            // ✅ Use effectiveTotal() to include supplementary
+            // âœ… Use effectiveTotal() to include supplementary
             'total' => $version?->effectiveTotal() ?? 0,
         ];
     }
@@ -946,8 +956,8 @@ private function buildYoYComparison(
             'category'          => $code?->category?->name,
             'line_type'         => $typeLabels[$rawType] ?? ucfirst($rawType),
 
-            'original_a'        => $oA,                 // ← NEW
-            'supplementary_a'   => $sA,                  // ← NEW
+            'original_a'        => $oA,                 // â† NEW
+            'supplementary_a'   => $sA,                  // â† NEW
             'budget_a'          => $bA,                  // effective
             'actual_a'          => $aA,
             'variance_a'        => $aA - $bA,
@@ -955,8 +965,8 @@ private function buildYoYComparison(
             'budget_a_q'        => $bAQ,
             'actual_a_q'        => $aAQ,
 
-            'original_b'        => $oB,                  // ← NEW
-            'supplementary_b'   => $sB,                  // ← NEW
+            'original_b'        => $oB,                  // â† NEW
+            'supplementary_b'   => $sB,                  // â† NEW
             'budget_b'          => $bB,                  // effective
             'actual_b'          => $aB,
             'variance_b'        => $aB - $bB,
@@ -979,7 +989,7 @@ private function buildYoYComparison(
     return [
         'rows' => $rows,
 
-        // KPI cards — now correctly include supplementary
+        // KPI cards â€” now correctly include supplementary
         'original_total_a'      => $itemsA->sum('total_amount'),
         'supplementary_total_a' => $itemsA->sum(fn($i) => $i->approvedSupplementaryTotal()),
         'budget_total_a'        => $itemsA->sum('total_amount') + $itemsA->sum(fn($i) => $i->approvedSupplementaryTotal()),
@@ -1062,8 +1072,8 @@ private function buildVarianceData($versions, float $minPct = 0, string $filter 
             $isRevenue = in_array($vals['budget_type'] ?? 'expense', ['revenue', 'both']);
 
             // Both formulas produce: positive = favorable (green), negative = unfavorable (red)
-            // Revenue: actual − budget  (over-achievement is positive = good)
-            // Expense: budget − actual  (under-budget is positive = good)
+            // Revenue: actual âˆ’ budget  (over-achievement is positive = good)
+            // Expense: budget âˆ’ actual  (under-budget is positive = good)
             $variance = $isRevenue
                 ? $actual - $vals['total']
                 : $vals['total'] - $actual;
@@ -1127,7 +1137,8 @@ private function buildVarianceData($versions, float $minPct = 0, string $filter 
  */
 private function buildCodeExplorerData(Request $request): array
 {
-    $period = $this->resolvePeriod($request);
+    // null when no period_id is given → query across all periods
+    $period = $request->filled('period_id') ? BudgetPeriod::find($request->period_id) : null;
 
     $user       = auth()->user();
     $canViewAll = $user->hasAnyRole(['finance_reviewer','gceo','board','bdu_admin','super_admin']);
@@ -1185,7 +1196,7 @@ private function buildCodeExplorerData(Request $request): array
             $budgetSupplementary = $items->sum(fn($i) => $i->approvedSupplementaryTotal());
             $budgetTotal         = $budgetOriginal + $budgetSupplementary; // effective
 
-            // Per-department breakdown — NOW INCLUDES SUPPLEMENTARY
+            // Per-department breakdown â€” NOW INCLUDES SUPPLEMENTARY
             $deptBreakdown = [];
             foreach ($items as $item) {
                 $dept = $item->budgetVersion->department;
@@ -1290,7 +1301,7 @@ private function buildCodeExplorerData(Request $request): array
     return [];
 }
 
-// ── P&L builder ───────────────────────────────────────────────────────────
+// â”€â”€ P&L builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 private function buildPnlData($versions, $period, ?int $deptId, ?BudgetPeriod $prevPeriod = null): array
 {
     // Current-year confirmed actuals by account code
@@ -1342,7 +1353,7 @@ private function buildPnlData($versions, $period, ?int $deptId, ?BudgetPeriod $p
         ->get();
 
     $raw          = ['revenue' => [], 'expense' => []];
-    $catSubCatId  = []; // category name → account_sub_category_id
+    $catSubCatId  = []; // category name â†’ account_sub_category_id
     foreach ($activePnlCodes as $ac) {
         $cat  = $ac->category;
         $type = in_array($cat->budget_type, ['revenue', 'both']) ? 'revenue' : 'expense';
@@ -1467,7 +1478,7 @@ private function buildPnlData($versions, $period, ?int $deptId, ?BudgetPeriod $p
             : null;
     }
 
-    // Second pass — common size: each code as % of its section's effective total
+    // Second pass â€” common size: each code as % of its section's effective total
     foreach (['revenue', 'expense'] as $type) {
         $sectionEff = $grandTotals[$type]['effective'];
         foreach ($sections[$type] as &$cat) {
@@ -1502,7 +1513,7 @@ private function buildPnlData($versions, $period, ?int $deptId, ?BudgetPeriod $p
     ];
 }
 
-// ── Configured P&L statement builder ──────────────────────────────────────
+// â”€â”€ Configured P&L statement builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 private function buildConfiguredStatement(
     IncomeStatementConfig $config,
     $versions,
@@ -1586,7 +1597,7 @@ private function buildConfiguredStatement(
     }
 
     // Per-line CS base lookup for JS inline expansion (sub_category lines only)
-    $csBases = []; // sub_cat_id → ['bud' => ..., 'prev' => ...]
+    $csBases = []; // sub_cat_id â†’ ['bud' => ..., 'prev' => ...]
     $hasCs   = false;
 
     // Walk config lines, accumulate running totals
@@ -1610,8 +1621,8 @@ private function buildConfiguredStatement(
             $runPrevBudget += $sign * $prevBud;
             $runPrevActual += $sign * $prevAct;
 
-            // Revenue (add): over-achievement is favourable → actual − budget
-            // Expense (subtract): under-spend is favourable → budget − actual
+            // Revenue (add): over-achievement is favourable â†’ actual âˆ’ budget
+            // Expense (subtract): under-spend is favourable â†’ budget âˆ’ actual
             $isExpense = $line->operator === 'subtract';
             $variance  = $isExpense ? $budget - $actual : $actual - $budget;
             $pct       = $budget != 0 ? round(($variance / abs($budget)) * 100, 1) : 0;
@@ -1721,7 +1732,7 @@ private function buildConfiguredStatement(
     ];
 }
 
-// ── Configured Balance Sheet builder ──────────────────────────────────────
+// â”€â”€ Configured Balance Sheet builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 private function buildConfiguredBalanceSheet(
     BalanceSheetConfig $config,
     $versions,
@@ -1853,7 +1864,7 @@ private function buildConfiguredBalanceSheet(
     ];
 }
 
-// ── Cash-flow builder ─────────────────────────────────────────────────────
+// â”€â”€ Cash-flow builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 private function buildCashFlowData($versions, $period, ?int $deptId): array
 {
     // Quarterly budget by type (revenue / expense)
@@ -1882,7 +1893,7 @@ private function buildCashFlowData($versions, $period, ?int $deptId): array
         ->groupBy('budget_actuals.month', 'account_categories.budget_type')
         ->get();
 
-    // Build month table: budget interpolated as quarter ÷ 3
+    // Build month table: budget interpolated as quarter Ã· 3
     $months = [];
     for ($m = 1; $m <= 12; $m++) {
         $q = (int) ceil($m / 3);
@@ -1943,7 +1954,7 @@ private function buildCashFlowData($versions, $period, ?int $deptId): array
     ];
 }
 
-// ── Balance Sheet data builder ────────────────────────────────────────────
+// â”€â”€ Balance Sheet data builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 private function buildBalanceSheetData($versions, $period, ?int $deptId, ?BudgetPeriod $prevPeriod = null): array
 {
     $actualsByCode     = [];
@@ -1990,7 +2001,7 @@ private function buildBalanceSheetData($versions, $period, ?int $deptId, ?Budget
         ->orderBy('code')
         ->get();
 
-    $catSubCatId = []; // category name → account_sub_category_id
+    $catSubCatId = []; // category name â†’ account_sub_category_id
     foreach ($activeBalanceCodes as $ac) {
         $catSubCatId[$ac->category->name] = $ac->category->account_sub_category_id;
     }
@@ -2116,7 +2127,7 @@ private function buildBalanceSheetData($versions, $period, ?int $deptId, ?Budget
     ];
 }
 
-// ── CapEx data builder ────────────────────────────────────────────────────
+// â”€â”€ CapEx data builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 private function buildCapexData($versions, $period, ?int $deptId, ?BudgetPeriod $prevPeriod = null): array
 {
     $actualsByCode     = [];
@@ -2240,12 +2251,12 @@ private function buildCapexData($versions, $period, ?int $deptId, ?BudgetPeriod 
     return ['sections' => $sections, 'totals' => $grandTotals];
 }
 
-// ── Public actions for new reports ────────────────────────────────────────
+// â”€â”€ Public actions for new reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 public function capex(Request $request)
 {
     $period      = $this->resolvePeriod($request);
     $periods     = BudgetPeriod::orderByDesc('year')->orderByDesc('id')->get();
-    $departments = Department::where('is_active', true)->orderBy('name')->get();
+    $departments = $this->reportDepartments();
     $deptId      = $request->integer('department_id') ?: null;
 
     if (!$period) {
@@ -2282,7 +2293,7 @@ public function capex(Request $request)
     ]);
 }
 
-// ── Configured CapEx builder ──────────────────────────────────────────────
+// â”€â”€ Configured CapEx builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 private function buildConfiguredCapex(
     CapexConfig $config,
     $versions,
@@ -2290,7 +2301,7 @@ private function buildConfiguredCapex(
     ?int $deptId,
     ?BudgetPeriod $prevPeriod = null
 ): array {
-    // ── Actuals by code (for expand detail) ──────────────────
+    // â”€â”€ Actuals by code (for expand detail) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     $actualsByCode = \App\Models\BudgetActual::where('budget_period_id', $period->id)
         ->when($deptId, fn($q) => $q->where('department_id', $deptId))
         ->where('status', 'confirmed')
@@ -2299,7 +2310,7 @@ private function buildConfiguredCapex(
         ->groupBy('account_codes.code')
         ->pluck('total', 'ac')->toArray();
 
-    // ── Actuals by sub_category_id (for layout line totals) ──
+    // â”€â”€ Actuals by sub_category_id (for layout line totals) â”€â”€
     $actualsBySubCat = \App\Models\BudgetActual::where('budget_period_id', $period->id)
         ->when($deptId, fn($q) => $q->where('department_id', $deptId))
         ->where('status', 'confirmed')
@@ -2310,7 +2321,7 @@ private function buildConfiguredCapex(
         ->groupBy('account_categories.account_sub_category_id')
         ->pluck('total', 'sc')->toArray();
 
-    // ── Prev period data ──────────────────────────────────────
+    // â”€â”€ Prev period data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     $prevActualsByCode   = [];
     $prevBudgetByCode    = [];
     $prevBudgetBySubCat  = [];
@@ -2354,7 +2365,7 @@ private function buildConfiguredCapex(
         }
     }
 
-    // ── Budget by sub_cat + expand raw data ──────────────────
+    // â”€â”€ Budget by sub_cat + expand raw data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     $budgetBySubCat = [];
     $expandRaw      = []; // sub_cat_id => cat_name => ['codes' => [], 'effective' => 0]
 
@@ -2385,7 +2396,7 @@ private function buildConfiguredCapex(
         }
     }
 
-    // ── Build capex_expand array for JS ──────────────────────
+    // â”€â”€ Build capex_expand array for JS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     $capexExpand = [];
     foreach ($expandRaw as $scId => $cats) {
         foreach ($cats as $catName => $catData) {
@@ -2418,7 +2429,7 @@ private function buildConfiguredCapex(
         }
     }
 
-    // ── Walk config lines ─────────────────────────────────────
+    // â”€â”€ Walk config lines â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     $lines         = [];
     $runBudget     = 0.0;
     $runActual     = 0.0;
@@ -2495,3 +2506,4 @@ private function buildConfiguredCapex(
 }
 
 }
+

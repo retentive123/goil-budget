@@ -193,6 +193,8 @@
     <div class="docs-nav-group">
       <span class="docs-nav-label">Administration</span>
       <a class="docs-nav-link" href="#admin-users">Users</a>
+      <a class="docs-nav-link" href="#admin-zones">Zones <span style="font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;background:#C9A84C;color:#1B2A4A;padding:1px 5px;border-radius:3px;margin-left:4px;">New</span></a>
+      <a class="docs-nav-link" href="#admin-service-stations">Service Stations <span style="font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;background:#C9A84C;color:#1B2A4A;padding:1px 5px;border-radius:3px;margin-left:4px;">New</span></a>
       <a class="docs-nav-link" href="#admin-departments">Departments &amp; Codes</a>
       <a class="docs-nav-link" href="#admin-periods">Budget Periods</a>
       <a class="docs-nav-link" href="#admin-approval-stages">Approval Stages</a>
@@ -236,6 +238,8 @@
           <table class="doc-table">
             <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
             <tbody>
+              <tr><td><strong>Zone</strong></td><td>A geographic or operational grouping that contains departments and/or service stations. Used to organise the entity hierarchy and group filters in reports.</td></tr>
+              <tr><td><strong>Service Station</strong></td><td>A retail or operational site that participates in the budget cycle. Grouped under a zone and follows the same budgeting workflow as a department.</td></tr>
               <tr><td><strong>Budget Period</strong></td><td>A named fiscal year or sub-period (e.g. "FY 2026"). Only one period may be open at a time.</td></tr>
               <tr><td><strong>Budget Version</strong></td><td>A department's submission for a period. Up to 4 versions allowed per department; rejected budgets create a new version.</td></tr>
               <tr><td><strong>Line Item</strong></td><td>A single account code entry with Q1–Q4 amounts.</td></tr>
@@ -268,7 +272,7 @@
               <tr><td><span class="db db-gold">finance_reviewer</span></td><td>Finance staff</td><td>View and approve all departments' budgets and virements. Manage account codes. Full report access.</td></tr>
               <tr><td><span class="db db-purple">gceo</span></td><td>Group CEO</td><td>View and approve all budgets and virements. Full read-only report access.</td></tr>
               <tr><td><span class="db db-purple">board</span></td><td>Board members</td><td>View and approve all budgets. Full report and export access.</td></tr>
-              <tr><td><span class="db db-navy">bdu_admin</span></td><td>Budget &amp; Data Unit</td><td>Manage departments, account codes, users, and virements. Access audit log. Can disable 2FA for users.</td></tr>
+              <tr><td><span class="db db-navy">bdu_admin</span></td><td>Budget &amp; Data Unit</td><td>Manage departments, service stations, zones, account codes, users, and virements. Access audit log. Can disable 2FA for users. Full report access.</td></tr>
               <tr><td><span class="db db-rose">super_admin</span></td><td>System administrator</td><td>All permissions. Manages system settings, backups, maintenance mode, and every module.</td></tr>
             </tbody>
           </table>
@@ -302,6 +306,7 @@
               <tr><td>View reports</td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="pc">✓</span></td></tr>
               <tr><td>Export reports</td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="pc">✓</span></td></tr>
               <tr><td>Manage users</td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="pc">✓</span></td></tr>
+              <tr><td>Manage zones &amp; stations</td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="pc">✓</span></td></tr>
               <tr><td>Manage system settings</td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="pc">✓</span></td></tr>
               <tr><td>View audit log</td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="pc">✓</span></td></tr>
               <tr><td>Grant deadline override</td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="px">–</span></td><td style="text-align:center"><span class="pc">✓</span></td><td style="text-align:center"><span class="pc">✓</span></td></tr>
@@ -523,10 +528,10 @@
           <thead><tr><th>Report</th><th>What it shows</th><th>Export</th></tr></thead>
           <tbody>
             <tr><td><strong>Executive Summary</strong></td><td>Organisation-wide KPIs: total approved budget, actuals, utilisation %, top departments, category breakdown, quarterly trend.</td><td>–</td></tr>
-            <tr><td><strong>Department Drill-down</strong></td><td>One department's approved line items grouped by type. Tabs for Revenue / Expense / CapEx analysis.</td><td>Excel</td></tr>
-            <tr><td><strong>Code Explorer</strong></td><td>Account-code level analysis: budget vs. actuals by quarter, department breakdown, year-on-year trend per code.</td><td>Excel</td></tr>
-            <tr><td><strong>Year-over-Year</strong></td><td>Compare any two periods side by side. Budget view, Actual view, and Combined view. Filter by type.</td><td>CSV / JSON / TSV</td></tr>
-            <tr><td><strong>Department Comparison</strong></td><td>Side-by-side comparison of selected departments within a period.</td><td>–</td></tr>
+            <tr><td><strong>Department Drill-down</strong></td><td>One entity's approved line items grouped by type. An <strong>All</strong> tab shows every item across all types. Configurable rows per page (10 / 20 / 30 / 50 / All). Includes quarterly split and supplementary amounts.</td><td>Excel</td></tr>
+            <tr><td><strong>Code Explorer</strong></td><td>Account-code level analysis: budget vs. actuals by quarter, department breakdown, year-on-year trend per code. <strong>All Periods</strong> view aggregates data across every budget period.</td><td>Excel</td></tr>
+            <tr><td><strong>Year-over-Year</strong></td><td>Compare any two periods side by side. Budget, Actual, and Combined views. Filter by type. Searchable, sortable, paginated table.</td><td>CSV / JSON / TSV</td></tr>
+            <tr><td><strong>Department Comparison</strong></td><td>Side-by-side comparison of up to 5 departments and/or service stations within a period.</td><td>–</td></tr>
             <tr><td><strong>Variance</strong></td><td>Budget vs. actuals per code, showing favorable/unfavorable variance. Filterable by threshold.</td><td>Excel</td></tr>
             <tr><td><strong>Utilisation</strong></td><td>Budget utilisation % per department with traffic-light status: critical (&gt;90%), warning (&gt;70%), healthy.</td><td>Excel</td></tr>
             <tr><td><strong>Virements</strong></td><td>All virement activity for the selected period.</td><td>Excel</td></tr>
@@ -536,6 +541,33 @@
           </tbody>
         </table>
       </div>
+      <div class="doc-sub">
+        <div class="doc-sub-title">Department / Station filter</div>
+        <p style="background:#FFF7ED;border-left:3px solid #C9A84C;padding:11px 14px;border-radius:0 6px 6px 0;font-size:13.5px;color:#78350F;margin:14px 0;max-width:none"><strong>Updated July 2026:</strong> All report filters now use a searchable grouped dropdown (Tom Select). Departments appear under a "Departments" heading; service stations follow, grouped by zone. Start typing any part of a name to filter instantly.</p>
+        <p>Finance and admin roles see the full entity list. Department users and station staff see only their own entity. The Department Comparison report uses a multi-select version of the same control.</p>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Report-specific improvements (July 2026)</div>
+        <p><strong>Department Drill-down</strong></p>
+        <ul>
+          <li><strong>All tab</strong> — the default active tab now shows every line item across all types in one paginated table. Switch to a type-specific tab to narrow the view.</li>
+          <li><strong>Rows per page</strong> — a "Rows" selector in the toolbar sets the page size to 10, 20, 30, 50, or All. The setting applies to all tabs simultaneously and hides pagination controls when "All" is selected.</li>
+        </ul>
+        <p><strong>Code Explorer</strong></p>
+        <ul>
+          <li><strong>All Periods</strong> — selecting "All Periods" now correctly aggregates data from every budget period. Previously, an empty period selection silently fell back to the current period only.</li>
+        </ul>
+        <p><strong>Variance</strong></p>
+        <ul>
+          <li>The "Variance by Category" and "Variance by Department" bar charts have been removed. The Variance Status donut chart and the full code-level data table remain.</li>
+        </ul>
+        <p><strong>Year-over-Year</strong></p>
+        <ul>
+          <li>All charts have been removed. The full code-level comparison table with client-side search, sort, and pagination is the primary view.</li>
+        </ul>
+      </div>
+
     </div>
     <hr class="docs-divider">
 
@@ -574,7 +606,13 @@
 
       <div class="doc-sub">
         <div class="doc-sub-title">Creating a user</div>
-        <p>Go to <strong>Admin → Users → Add User</strong>. Required fields: name, email, department, role, and initial password. The 2FA toggle can be pre-enabled — the user will be directed to the setup page on their first login.</p>
+        <p>Go to <strong>Admin → Users → Add User</strong>. Required fields: name, email, department or service station, role, and initial password. The 2FA toggle can be pre-enabled — the user will be directed to the setup page on their first login.</p>
+        <p style="background:#FFF7ED;border-left:3px solid #C9A84C;padding:11px 14px;border-radius:0 6px 6px 0;font-size:13.5px;color:#78350F;margin:14px 0"><strong>Searchable entity selector (July 2026):</strong> The Department / Station field uses a searchable grouped dropdown. Departments are listed first; service stations follow, grouped by zone. Start typing to filter. A user assigned to a service station has their budget scope and report access limited to that station.</p>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Editing a user</div>
+        <p>Click <em>Edit</em> on any user. The same searchable grouped dropdown is used for the entity field. You may change the name, email, entity, role, active status, and 2FA state. You cannot deactivate your own account from the edit form.</p>
       </div>
 
       <div class="doc-sub">
@@ -589,9 +627,84 @@
     </div>
     <hr class="docs-divider">
 
+    {{-- Zones ────────────────────────────────────────────── --}}
+    <div class="doc-section" id="admin-zones">
+      <div class="doc-eyebrow">Admin Guide</div>
+      <div class="doc-title">Zones</div>
+      <div class="doc-lead">Zones are geographic or operational groupings that organise service stations into named clusters. They drive the grouped layout in report filters and the user entity selector.</div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Entity hierarchy</div>
+        <div style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:18px 22px;margin:14px 0 20px;font-size:13px;line-height:1.8">
+          <div><strong style="color:#1B2A4A">Organisation</strong></div>
+          <div style="padding-left:24px"><span style="color:#94A3B8;font-size:12px">├─</span> <strong style="color:#1B2A4A">Department</strong> <span style="font-size:12px;color:#64748B">— headquarters departments (no zone required)</span></div>
+          <div style="padding-left:24px"><span style="color:#94A3B8;font-size:12px">└─</span> <strong style="color:#1B2A4A">Zone</strong> <span style="font-size:12px;color:#64748B">— e.g. Greater Accra Zone</span></div>
+          <div style="padding-left:52px"><span style="color:#94A3B8;font-size:12px">├─</span> <strong style="color:#1B2A4A">Service Station</strong> <span style="font-size:12px;color:#64748B">— site under this zone</span></div>
+          <div style="padding-left:52px"><span style="color:#94A3B8;font-size:12px">└─</span> <strong style="color:#1B2A4A">Service Station</strong> <span style="font-size:12px;color:#64748B">— another site</span></div>
+        </div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Managing zones</div>
+        <p>Go to <strong>Admin → Zones</strong>. Each zone has a <strong>Name</strong>, a short <strong>Code</strong> (used in exports), an optional <strong>Description</strong>, and an <strong>Active</strong> toggle. Inactive zones are hidden from filters but their stations retain all historical data.</p>
+        <p>The zone list shows a station count per zone and supports search and status filtering. An <em>Export / Template</em> button downloads an Excel file with existing zones and a blank template sheet for bulk import.</p>
+      </div>
+    </div>
+    <hr class="docs-divider">
+
+    {{-- Service Stations ─────────────────────────────────── --}}
+    <div class="doc-section" id="admin-service-stations">
+      <div class="doc-eyebrow">Admin Guide</div>
+      <div class="doc-title">Service Stations</div>
+      <div class="doc-lead">Service stations are retail or operational sites that participate in the budget cycle on equal footing with departments. Each station belongs to a zone and has its own assigned account codes, budget versions, and actuals.</div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Managing service stations</div>
+        <p>Go to <strong>My Organisation → Service Stations</strong>. Available controls:</p>
+        <ul>
+          <li><strong>Search</strong> — filter by name or code.</li>
+          <li><strong>Status filter</strong> — active or inactive stations.</li>
+          <li><strong>Per-page selector</strong> — choose 10, 25, 50, or 100 rows per page.</li>
+          <li><strong>Export / Template</strong> button — downloads a three-sheet Excel workbook: import template, all current stations with their zone, and a zone reference tab.</li>
+        </ul>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Creating a service station</div>
+        <p>Click <em>Add Service Station</em>. Required fields: <strong>Zone</strong>, <strong>Code</strong> (e.g. <code>SS-ACC-01</code>), <strong>Name</strong>, and <strong>Budget Type</strong> (Revenue / Expense / Both / CapEx). Once created, assign account codes from the <em>Account Codes</em> tab on the station detail page.</p>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">How service stations appear across the system</div>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>Surface</th><th>Behaviour</th></tr></thead>
+            <tbody>
+              <tr><td>Report filters</td><td>Service stations appear below departments, grouped by zone. Each zone is an optgroup heading in the searchable dropdown.</td></tr>
+              <tr><td>User entity selector</td><td>Same grouped layout — departments first, then stations by zone. Fully searchable.</td></tr>
+              <tr><td>Department Comparison</td><td>Stations can be selected alongside departments for side-by-side comparison.</td></tr>
+              <tr><td>Budget entry &amp; approval</td><td>Station users experience the same form, P&amp;L view, and submit / approval workflow as department users.</td></tr>
+              <tr><td>Excel exports</td><td>Station exports include a Zone column and a zone reference sheet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <hr class="docs-divider">
+
     <div class="doc-section" id="admin-departments">
       <div class="doc-eyebrow">Admin Guide</div>
       <div class="doc-title">Departments, Categories &amp; Account Codes</div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Departments list</div>
+        <p>Go to <strong>Admin → Departments</strong>. The list shows all headquarters departments with user and code counts.</p>
+        <ul>
+          <li><strong>Per-page selector</strong> — choose 10, 25, 50, or 100 departments per page. Pagination links carry your selection automatically.</li>
+          <li><strong>Export / Template</strong> button — downloads an Excel workbook with existing departments and a blank import template for bulk additions or edits.</li>
+        </ul>
+        <div class="doc-tip">The KPI strip at the top of the page (active count, inactive count, total users, total codes) reflects the full dataset and is not affected by the current page or search filter.</div>
+      </div>
 
       <div class="doc-sub">
         <div class="doc-sub-title">Account categories</div>
@@ -607,7 +720,7 @@
             </tbody>
           </table>
         </div>
-        <p>Categories can be imported from Excel via <strong>Admin → Account Categories</strong>.</p>
+        <p>The Account Categories list at <strong>Admin → Account Categories</strong> is searchable and filterable by type. An <em>Export / Template</em> button downloads a combined Excel file — one sheet with all existing categories, another as a blank import template.</p>
       </div>
 
       <div class="doc-sub">
@@ -885,8 +998,10 @@
             <tr><td>Budget (standard)</td><td>Budget entry screen</td><td>Maps by account code; overwrites Q1–Q4 for matched items</td></tr>
             <tr><td>Budget (P&amp;L view)</td><td>Budget entry screen</td><td>Same mapping, P&amp;L layout</td></tr>
             <tr><td>Actuals</td><td>Actuals → Entry</td><td>Maps by code + month + year; creates draft entries</td></tr>
-            <tr><td>Account Categories</td><td>Admin → Account Categories</td><td>Existing categories updated by code; new ones created</td></tr>
+            <tr><td>Account Categories</td><td>Admin → Account Categories (<em>Export / Template</em> button)</td><td>Two-sheet workbook: existing categories + blank template</td></tr>
             <tr><td>Account Codes</td><td>Admin → Account Codes</td><td>Existing codes updated by code; new ones created</td></tr>
+            <tr><td>Departments</td><td>Admin → Departments (<em>Export / Template</em> button)</td><td>Three-sheet workbook: template, existing departments, zone reference</td></tr>
+            <tr><td>Service Stations</td><td>Admin → Service Stations (<em>Export / Template</em> button)</td><td>Three-sheet workbook: template, existing stations with zone, zone reference</td></tr>
           </tbody>
         </table>
       </div>

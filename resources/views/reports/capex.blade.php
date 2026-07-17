@@ -28,16 +28,11 @@
             </select>
         </div>
         <div class="col-md-3">
-            <label class="form-label small fw-semibold mb-1">Department</label>
-            <select name="department_id" class="form-select form-select-sm">
-                <option value="">All Departments</option>
-                @foreach($departments as $d)
-                <option value="{{ $d->id }}"
-                    {{ request('department_id') == $d->id ? 'selected' : '' }}>
-                    {{ $d->name }}
-                </option>
-                @endforeach
-            </select>
+            <label class="form-label small fw-semibold mb-1">Dept / Station</label>
+            @include('reports._dept_filter', [
+                'selectedId' => request('department_id'),
+                'selectId'   => 'rptCapexDeptSel',
+            ])
         </div>
         <div class="col-md-2">
             <button type="submit" class="btn btn-sm w-100"
