@@ -421,7 +421,6 @@
 @endif
 
 {{-- Dashboard Charts JS --}}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 // ✅ FIXED: Correct JavaScript variable declaration
 const NAVY = '#1B2A4A';
@@ -830,7 +829,6 @@ new Chart(document.getElementById('yoyLine'),{
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 const fmt = v => v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000).toFixed(0)+'K':v;
 const yScale = {beginAtZero:true,grid:{color:'#F1F5F9'},ticks:{font:{size:10},callback:fmt}};

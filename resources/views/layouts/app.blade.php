@@ -14,11 +14,15 @@
 
     @vite(['resources/sass/app.scss', 'resources/js/app.js'])
 
-    {{-- Font Awesome CDN --}}
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    {{-- Icon fonts — served locally, no CDN --}}
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    {{-- Bootstrap Icons are bundled in app.scss via Vite --}}
 
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    {{-- JS libraries as synchronous UMD scripts (must load before page inline scripts) --}}
+    <script src="/js/vendor/chart.umd.js"></script>
+    <script src="/js/vendor/tom-select.min.js"></script>
+    <script src="/js/vendor/sweetalert2.min.js"></script>
+    <script src="/js/vendor/sortable.min.js"></script>
 
     <style>
         :root {

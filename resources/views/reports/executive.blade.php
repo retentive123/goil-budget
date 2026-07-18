@@ -212,7 +212,6 @@ $typeColors = [
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 const COLORS = ['#1B2A4A','#C9A84C','#10B981','#6366F1','#F59E0B',
                 '#EC4899','#14B8A6','#8B5CF6','#F97316','#06B6D4'];

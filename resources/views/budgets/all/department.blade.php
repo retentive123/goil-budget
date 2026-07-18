@@ -212,7 +212,6 @@
 </div>
 
 @if($allPeriodSummary->count())
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 new Chart(document.getElementById('yoyChart'), {
     type: 'bar',

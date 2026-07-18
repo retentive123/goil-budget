@@ -36,78 +36,75 @@
 
 <div class="row g-4">
 
-{{-- Left: dept status list --}}
+{{-- Left: entity status list --}}
+@php
+    $_dRows = $departments->filter(fn($r) => !$r['dept']->isServiceStation());
+    $_sRows = $departments->filter(fn($r) =>  $r['dept']->isServiceStation())
+                         ->groupBy(fn($r) => $r['dept']->zone?->name ?? 'No Zone')
+                         ->sortKeys();
+@endphp
 <div class="col-md-7">
     <div class="chart-card">
-        <div class="chart-title">Department Deadline Status</div>
-        @foreach($departments as $row)
-        @php
-            $dept     = $row['dept'];
-            $info     = $row['deadline_info'];
-            $override = $row['override'];
-        @endphp
-        <div style="display:flex;align-items:center;gap:12px;
-                    padding:10px 0;border-bottom:1px solid var(--border)">
-            <div style="width:40px;height:40px;border-radius:8px;
-                        background:var(--surface);border:1px solid var(--border);
-                        display:flex;align-items:center;justify-content:center;
-                        font-size:10px;font-weight:700;color:var(--navy);
-                        flex-shrink:0">
-                {{ $dept->code }}
-            </div>
-            <div class="flex-grow-1">
-                <div style="font-size:13px;font-weight:600;color:var(--navy)">
-                    {{ $dept->name }}
-                </div>
-                <div style="font-size:11px;color:var(--slate)">
-                    @if($info['has_override'] && $override?->isValid())
-                        Extended until:
-                        {{ $info['deadline']?->format('d M Y H:i') ?? 'Indefinite' }}
-                        · Granted by {{ $override->grantedBy->name }}
-                    @elseif($info['passed'])
-                        Deadline passed
-                    @elseif($info['deadline'])
-                        Deadline: {{ $info['deadline']->format('d M Y H:i') }}
-                        ({{ $info['deadline']->diffForHumans() }})
-                    @else
-                        No deadline set
-                    @endif
-                </div>
-            </div>
-            <div class="d-flex align-items-center gap-2">
-                @if($info['has_override'] && $override?->isValid())
-                    <span style="padding:2px 10px;border-radius:20px;font-size:11px;
-                                 font-weight:600;background:#D1FAE5;color:#065F46">
-                        Extended
-                    </span>
-                    <form method="POST"
-                          action="{{ route('admin.deadline-overrides.revoke', $override) }}">
-                        @csrf
-                        <button class="btn btn-sm btn-outline-danger"
-                                style="font-size:11px;padding:2px 8px"
-                                onclick="return confirm('Revoke override for {{ $dept->name }}?')">
-                            Revoke
-                        </button>
-                    </form>
-                @elseif($info['passed'])
-                    <span style="padding:2px 10px;border-radius:20px;font-size:11px;
-                                 font-weight:600;background:#FEE2E2;color:#991B1B">
-                        Overdue
-                    </span>
-                    <button class="btn btn-sm btn-outline-primary"
-                            style="font-size:11px;padding:2px 8px"
-                            onclick="openGrantForm({{ $dept->id }}, '{{ $dept->name }}')">
-                        Grant Extension
-                    </button>
-                @else
-                    <span style="padding:2px 10px;border-radius:20px;font-size:11px;
-                                 font-weight:600;background:#F1F5F9;color:#64748B">
-                        On Time
-                    </span>
-                @endif
-            </div>
+        <div class="d-flex align-items-center justify-content-between mb-2" style="gap:8px">
+            <div class="chart-title mb-0">Deadline Status</div>
+            <span id="dsCount" style="font-size:11px;color:var(--slate)"></span>
         </div>
+
+        {{-- Search + filter toolbar --}}
+        <div class="d-flex gap-2 mb-3">
+            <div style="position:relative;flex:1">
+                <input id="dsSearch" type="text" placeholder="Search by name or code…"
+                       class="form-control form-control-sm"
+                       style="padding-left:28px;font-size:12px">
+                <svg style="position:absolute;left:8px;top:50%;transform:translateY(-50%);
+                            width:13px;height:13px;color:#94A3B8" fill="none"
+                     viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 1116.65 16.65z"/>
+                </svg>
+            </div>
+            <select id="dsFilter" class="form-select form-select-sm" style="width:auto;font-size:12px">
+                <option value="">All</option>
+                <option value="on-time">On Time</option>
+                <option value="overdue">Overdue</option>
+                <option value="extended">Extended</option>
+            </select>
+        </div>
+
+        <div id="dsEmpty" style="display:none;text-align:center;padding:24px;
+                                  font-size:13px;color:var(--slate)">
+            No entities match the filter.
+        </div>
+
+        <div style="max-height:440px;overflow-y:auto;padding-right:4px" id="dsList">
+
+        {{-- Departments --}}
+        @if($_dRows->isNotEmpty())
+        <div data-section-header
+             style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+                    color:#94A3B8;padding:8px 0 4px;margin-top:4px">
+            Departments
+        </div>
+        @foreach($_dRows as $row)
+        @php $dept = $row['dept']; $info = $row['deadline_info']; $override = $row['override']; @endphp
+        @include('admin.deadline-overrides._row', compact('dept','info','override'))
         @endforeach
+        @endif
+
+        {{-- Service Stations grouped by zone --}}
+        @foreach($_sRows as $zoneName => $zoneRows)
+        <div data-section-header
+             style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+                    color:#94A3B8;padding:10px 0 4px;margin-top:4px">
+            {{ $zoneName }}
+        </div>
+        @foreach($zoneRows as $row)
+        @php $dept = $row['dept']; $info = $row['deadline_info']; $override = $row['override']; @endphp
+        @include('admin.deadline-overrides._row', compact('dept','info','override'))
+        @endforeach
+        @endforeach
+
+        </div>{{-- end scrollable --}}
     </div>
 </div>
 
@@ -126,14 +123,29 @@
             <input type="hidden" name="budget_period_id" value="{{ $period?->id }}">
 
             <div class="mb-3">
-                <label class="form-label small fw-semibold">Department</label>
-                <select name="department_id" id="deptSelect"
-                        class="form-select form-select-sm @error('department_id') is-invalid @enderror">
-                    <option value="">— Select department —</option>
-                    @foreach($departments as $row)
-                    <option value="{{ $row['dept']->id }}">
-                        {{ $row['dept']->name }}
-                    </option>
+                <label class="form-label small fw-semibold">Department / Station</label>
+                @php
+                    $_gDepts  = $departments->filter(fn($r) => !$r['dept']->isServiceStation())->sortBy(fn($r) => $r['dept']->name);
+                    $_gByZone = $departments->filter(fn($r) =>  $r['dept']->isServiceStation())
+                                           ->groupBy(fn($r) => $r['dept']->zone?->name ?? 'No Zone')
+                                           ->sortKeys();
+                @endphp
+                <select name="department_id" id="deptSelect" style="width:100%"
+                        class="@error('department_id') is-invalid @enderror">
+                    <option value="">— Select entity —</option>
+                    @if($_gDepts->isNotEmpty())
+                    <optgroup label="── Departments ──">
+                        @foreach($_gDepts as $row)
+                        <option value="{{ $row['dept']->id }}">{{ $row['dept']->name }}</option>
+                        @endforeach
+                    </optgroup>
+                    @endif
+                    @foreach($_gByZone as $_gz => $_gStations)
+                    <optgroup label="{{ $_gz }}">
+                        @foreach($_gStations->sortBy(fn($r) => $r['dept']->name) as $row)
+                        <option value="{{ $row['dept']->id }}">{{ $row['dept']->name }}</option>
+                        @endforeach
+                    </optgroup>
                     @endforeach
                 </select>
                 @error('department_id')
@@ -216,12 +228,83 @@
 
 </div>
 
+<style>
+.ts-wrapper.single .ts-control { border-color:#E2E8F0!important;border-radius:6px!important;box-shadow:none!important;min-height:34px;font-size:13px; }
+.ts-wrapper.focus .ts-control   { border-color:var(--navy)!important;box-shadow:0 0 0 .2rem rgba(27,42,74,.15)!important; }
+.ts-dropdown .optgroup-header    { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94A3B8;padding:6px 10px 2px;pointer-events:none; }
+.ts-dropdown .option             { font-size:13px;padding:5px 12px;color:#1B2A4A; }
+.ts-dropdown .option:hover,.ts-dropdown .option.active { background:rgba(27,42,74,.07);color:#1B2A4A; }
+</style>
 <script>
+(function () {
+    var el = document.getElementById('deptSelect');
+    if (el && !el._tomSelect) {
+        new TomSelect(el, {
+            plugins: ['clear_button'],
+            placeholder: '— Select entity —',
+            allowEmptyOption: true,
+            searchField: ['text'],
+            maxOptions: null,
+            onInitialize: function () { this.control.style.minHeight = '34px'; },
+        });
+    }
+})();
+
 function openGrantForm(deptId, deptName) {
-    const sel = document.getElementById('deptSelect');
-    sel.value = deptId;
+    var el = document.getElementById('deptSelect');
+    if (el && el.tomselect) { el.tomselect.setValue(String(deptId)); }
+    else if (el) { el.value = deptId; }
     document.getElementById('grantFormCard').scrollIntoView({ behavior: 'smooth' });
 }
+
+// ── Deadline Status: search + filter ──
+(function () {
+    var searchEl  = document.getElementById('dsSearch');
+    var filterEl  = document.getElementById('dsFilter');
+    var countEl   = document.getElementById('dsCount');
+    var emptyEl   = document.getElementById('dsEmpty');
+    var listEl    = document.getElementById('dsList');
+
+    function applyFilter() {
+        var q      = searchEl.value.trim().toLowerCase();
+        var status = filterEl.value;
+
+        var rows    = listEl.querySelectorAll('[data-row]');
+        var headers = listEl.querySelectorAll('[data-section-header]');
+        var visible = 0;
+
+        rows.forEach(function (row) {
+            var nameMatch   = !q      || row.dataset.name.includes(q);
+            var statusMatch = !status || row.dataset.status === status;
+            var show        = nameMatch && statusMatch;
+            row.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+
+        // Hide section headers whose rows are all hidden
+        headers.forEach(function (hdr) {
+            var sibling = hdr.nextElementSibling;
+            var anyVisible = false;
+            while (sibling && !sibling.hasAttribute('data-section-header')) {
+                if (sibling.hasAttribute('data-row') && sibling.style.display !== 'none') {
+                    anyVisible = true;
+                    break;
+                }
+                sibling = sibling.nextElementSibling;
+            }
+            hdr.style.display = anyVisible ? '' : 'none';
+        });
+
+        var total = rows.length;
+        countEl.textContent = visible === total ? total + ' entities' : visible + ' of ' + total;
+        emptyEl.style.display = visible === 0 ? '' : 'none';
+        listEl.style.display  = visible === 0 ? 'none' : '';
+    }
+
+    searchEl.addEventListener('input',  applyFilter);
+    filterEl.addEventListener('change', applyFilter);
+    applyFilter(); // init count
+})();
 </script>
 
 @endsection

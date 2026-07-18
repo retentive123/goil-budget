@@ -183,7 +183,6 @@
     </div>
 </template>
 
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 <script>
 const SUB_CATS = @json($subCategories->map(fn($s) => ['id' => $s->id, 'name' => $s->name])->values());
 

@@ -32,8 +32,8 @@ class DeadlineOverrideController extends Controller
             ? $period->opened_at->addDays($deadlineDays)
             : null;
 
-        // Departments without an override that are past deadline
-        $departments = Department::where('is_active', true)->orderBy('name')->get()
+        // All active entities (departments + service stations)
+        $departments = Department::where('is_active', true)->with('zone')->orderBy('entity_type')->orderBy('name')->get()
             ->map(function ($dept) use ($period, $deadline, $overrides) {
                 $override      = $overrides->firstWhere('department_id', $dept->id);
                 $deadlineInfo  = $period

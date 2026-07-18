@@ -23,7 +23,7 @@ class ActualController extends Controller
             ?? BudgetPeriod::orderByDesc('year')->first();
 
         $periods     = BudgetPeriod::orderByDesc('year')->get();
-        $departments = Department::where('is_active', true)->orderBy('name')->get();
+        $departments = Department::where('is_active', true)->with('zone')->orderBy('name')->get();
 
         $period = $request->period_id
             ? BudgetPeriod::find($request->period_id)

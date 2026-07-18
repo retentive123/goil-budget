@@ -15,9 +15,6 @@
     $byZone = $stations->groupBy(fn($s) => $s->zone?->name ?? 'No Zone')->sortKeys();
 @endphp
 
-<link rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">
-
 <select id="deptStationSelect"
         name="{{ $inputName }}"
         class="@error($inputName) is-invalid @enderror"
@@ -52,7 +49,6 @@
 <div class="text-danger mt-1" style="font-size:12px">{{ $message }}</div>
 @enderror
 
-<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script>
 (function () {
     new TomSelect('#deptStationSelect', {

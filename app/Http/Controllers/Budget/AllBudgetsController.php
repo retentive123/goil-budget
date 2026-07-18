@@ -22,7 +22,7 @@ class AllBudgetsController extends Controller
     public function index(Request $request)
     {
         $periods     = BudgetPeriod::orderByDesc('year')->get();
-        $departments = Department::where('is_active', true)->orderBy('name')->get();
+        $departments = Department::where('is_active', true)->with('zone')->orderBy('name')->get();
         $categories  = AccountCategory::orderBy('name')->get();
 
         $period = $request->period_id

@@ -3,8 +3,6 @@
 @php $isExpump = $accountCode->category?->budget_type === 'ex_pump_item'; @endphp
 
 @push('styles')
-<link rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">
 <style>
 .ts-wrapper .ts-control {
     border-color: #E2E8F0;
@@ -142,7 +140,6 @@
 </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script>
 const TYPE_CONFIG = {
     revenue:             { label: 'Revenue',    color: '#065F46', bg: '#D1FAE5' },

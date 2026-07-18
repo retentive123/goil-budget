@@ -676,7 +676,6 @@
 {{-- ══════════════════════
      Charts (Chart.js)
      ══════════════════════ --}}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 const NAVY    = '#1B2A4A';
 const GOLD    = '#C9A84C';

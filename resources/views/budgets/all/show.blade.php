@@ -704,7 +704,6 @@
 
 {{-- Charts JS --}}
 @if(!empty($typeAgg))
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 const fmt = v => v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000).toFixed(0)+'K':v;
 

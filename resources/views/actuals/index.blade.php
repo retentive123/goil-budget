@@ -35,16 +35,15 @@
         </div>
         @can('view all budgets')
         <div class="col-md-3">
-            <label class="form-label small fw-semibold mb-1">Department</label>
-            <select name="department_id" class="form-select form-select-sm"
-                    onchange="this.form.submit()">
-                @foreach($departments as $d)
-                <option value="{{ $d->id }}"
-                    {{ $department?->id == $d->id ? 'selected' : '' }}>
-                    {{ $d->name }}
-                </option>
-                @endforeach
-            </select>
+            <label class="form-label small fw-semibold mb-1">Department / Station</label>
+            @include('reports._dept_filter', [
+                'filterName' => 'department_id',
+                'selectedId' => $department?->id,
+                'allowEmpty' => false,
+                'emptyLabel' => 'Select entity…',
+                'autoSubmit' => true,
+                'selectId'   => 'actualsDeptSel',
+            ])
         </div>
         @endcan
     </div>

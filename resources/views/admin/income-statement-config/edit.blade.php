@@ -241,7 +241,6 @@ $typeLabels = ['revenue' => 'Revenue', 'expense' => 'Expense'];
     </div>
 </template>
 
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 <script>
 const SUB_CATS = @json($subCategories->map(fn($s) => ['id' => $s->id, 'name' => $s->name, 'budget_type' => $s->budget_type])->values());
 

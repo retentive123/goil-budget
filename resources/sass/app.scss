@@ -7,8 +7,15 @@
 // Bootstrap
 @import 'bootstrap/scss/bootstrap';
 
-// Bootstrap Icons
+// Bootstrap Icons — fonts served from /public/fonts/ (copied via npm postinstall)
+$bootstrap-icons-font-dir: '/fonts';
 @import 'bootstrap-icons/font/bootstrap-icons';
+
+// Font Awesome is served as a static vendor file at /vendor/fontawesome/css/all.min.css
+// (no SCSS import needed — the layout <link> handles it)
+
+// Tom Select (Bootstrap 5 skin — local)
+@import 'tom-select/dist/css/tom-select.bootstrap5';
 
 // Your custom styles (optional)
 :root {
