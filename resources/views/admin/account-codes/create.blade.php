@@ -123,12 +123,12 @@
 
 <script>
 const TYPE_CONFIG = {
-    revenue:             { label: 'Revenue',    color: '#065F46', bg: '#D1FAE5' },
-    expense:             { label: 'Expense',    color: '#991B1B', bg: '#FEE2E2' },
-    assets:              { label: 'Assets',     color: '#5B21B6', bg: '#EDE9FE' },
-    liabilities:         { label: 'Liabilities',color: '#7C3AED', bg: '#F3E8FF' },
-    capital_expenditure: { label: 'CapEx',      color: '#92400E', bg: '#FEF3C7' },
-    ex_pump_item:        { label: 'Ex-pump',   color: '#1B2A4A', bg: '#FEF9EC' },
+    revenue:             { label: 'Revenue',     color: '#065F46', bg: '#D1FAE5' },
+    expense:             { label: 'Expense',     color: '#991B1B', bg: '#FEE2E2' },
+    assets:              { label: 'Assets',      color: '#5B21B6', bg: '#EDE9FE' },
+    liabilities:         { label: 'Liabilities', color: '#7C3AED', bg: '#F3E8FF' },
+    capital_expenditure: { label: 'CapEx',       color: '#92400E', bg: '#FEF3C7' },
+    ex_pump_item:        { label: 'Ex-pump',     color: '#1B2A4A', bg: '#FEF9EC' },
 };
 
 function typeBadge(typeKey) {
@@ -139,21 +139,44 @@ function typeBadge(typeKey) {
             </span>`;
 }
 
+// ── Shared helper — read the data-type from the native <select> option ──
+function getTypeFromValue(value) {
+    if (!value) return '';
+    const selectEl = document.getElementById('categorySelect');
+    const opt = selectEl.querySelector('option[value="' + value + '"]');
+    return opt ? (opt.dataset.type || '') : '';
+}
+
+// ── Show/hide ex-pump fields based on type ──
+function applyTypeVisibility(type) {
+    const show = type === 'ex_pump_item';
+    document.getElementById('expumpFields').style.display = show ? '' : 'none';
+
+    if (!show) {
+        const r = document.getElementById('calc_type_values');
+        if (r) { r.checked = true; r.dispatchEvent(new Event('change')); }
+    } else {
+        const cs = document.getElementById('calcTypeSection');
+        if (cs) cs.style.display = '';
+    }
+}
+
 const ts = new TomSelect('#categorySelect', {
-    placeholder: '— Search or select a category —',
+    placeholder:      '— Search or select a category —',
     allowEmptyOption: true,
-    maxOptions: null,
+    maxOptions:       null,
 
     render: {
         option: function(data, escape) {
-            const typeKey = data.element?.dataset?.type || '';
+            // data.$option is the original <option> DOM element
+            const typeKey = data.$option ? (data.$option.dataset.type || '') : '';
             return `<div class="ts-option">
                         <span class="cat-option-name">${escape(data.text)}</span>
                         ${typeKey ? typeBadge(typeKey) : ''}
                     </div>`;
         },
         item: function(data, escape) {
-            const typeKey = data.element?.dataset?.type || '';
+            const typeKey = data.$option ? (data.$option.dataset.type || '') : '';
             return `<div class="ts-selected-item">
                         <span style="font-size:13px;font-weight:600;color:#1B2A4A">
                             ${escape(data.text)}
@@ -164,29 +187,15 @@ const ts = new TomSelect('#categorySelect', {
     },
 
     onChange: function(value) {
-        const opt  = this.options[value];
-        const type = opt?.element?.dataset?.type || '';
-        const show = type === 'ex_pump_item';
-        document.getElementById('expumpFields').style.display = show ? '' : 'none';
-        if (!show) {
-            // reset calc_type back to values when switching away
-            const r = document.getElementById('calc_type_values');
-            if (r) { r.checked = true; r.dispatchEvent(new Event('change')); }
-        } else {
-            // show/hide calcTypeSection inside expumpFields
-            const cs = document.getElementById('calcTypeSection');
-            if (cs) cs.style.display = '';
-        }
+        applyTypeVisibility(getTypeFromValue(value));
+    },
+
+    onInitialize: function() {
+        // Handle pre-selected value on validation error repopulate
+        const val = this.getValue();
+        if (val) applyTypeVisibility(getTypeFromValue(val));
     },
 });
-
-// show calcTypeSection if ex_pump_item is already selected (on validation error repopulate)
-(function() {
-    const cs = document.getElementById('calcTypeSection');
-    if (cs && document.getElementById('expumpFields').style.display !== 'none') {
-        cs.style.display = '';
-    }
-})();
 
 function onCreateSubmit(e) {
     if (typeof fbSerialize === 'function' && !fbSerialize()) {
