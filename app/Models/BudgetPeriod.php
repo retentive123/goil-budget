@@ -26,6 +26,47 @@ class BudgetPeriod extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    // ── Per-period calc settings (snapshot of rate/freq mode for this period) ──
+    public function setting()
+    {
+        return $this->hasOne(BudgetPeriodSetting::class, 'budget_period_id');
+    }
+
+    // ── Per-period rate snapshots for account codes and categories ──
+    public function codeRates()
+    {
+        return $this->hasMany(BudgetPeriodCodeRate::class, 'budget_period_id');
+    }
+
+    public function categoryRates()
+    {
+        return $this->hasMany(BudgetPeriodCategoryRate::class, 'budget_period_id');
+    }
+
+    /**
+     * Calc mode for this period. Falls back to global system setting so existing
+     * periods without a BudgetPeriodSetting row still work correctly.
+     */
+    public function calcMode(): string
+    {
+        return $this->setting?->line_item_calc_mode
+            ?? SystemSetting::get('line_item_calc_mode', 'none');
+    }
+
+    public function adminSetsRate(): bool
+    {
+        return $this->setting !== null
+            ? (bool) $this->setting->admin_sets_rate
+            : (bool) SystemSetting::get('admin_sets_rate', false);
+    }
+
+    public function adminSetsFreq(): bool
+    {
+        return $this->setting !== null
+            ? (bool) $this->setting->admin_sets_freq
+            : (bool) SystemSetting::get('admin_sets_freq', false);
+    }
+
     public function budgetVersions()
     {
         return $this->hasMany(BudgetVersion::class);

@@ -44,11 +44,11 @@ class AccountCodeTemplateSheet implements
     {
         // Set column headers
         $sheet->fromArray([[
-            'category_code', 'code', 'name', 'description',
+            'category_code', 'code', 'name', 'description', 'default_rate', 'default_frequency',
         ]], null, 'A1');
 
         // Style the header row
-        $sheet->getStyle('A1:D1')->applyFromArray([
+        $sheet->getStyle('A1:F1')->applyFromArray([
             'font' => [
                 'bold' => true,
                 'color' => ['argb' => 'FFFFFFFF'],
@@ -65,9 +65,9 @@ class AccountCodeTemplateSheet implements
 
         // Sample rows
         $samples = [
-            ['OPEX', '4001', 'Office Supplies', 'Stationery and office consumables'],
-            ['OPEX', '4002', 'Utilities', 'Electricity, water and internet'],
-            ['CAPEX', '5001', 'Equipment Purchase', 'Machinery and equipment'],
+            ['OPEX', '4001', 'Office Supplies', 'Stationery and office consumables', '', ''],
+            ['OPEX', '4002', 'Utilities', 'Electricity, water and internet', 500.00, 12],
+            ['CAPEX', '5001', 'Equipment Purchase', 'Machinery and equipment', 15000.00, 1],
         ];
 
         foreach ($samples as $idx => $row) {
@@ -75,7 +75,7 @@ class AccountCodeTemplateSheet implements
         }
 
         // Style the sample rows
-        $sheet->getStyle('A2:D4')->applyFromArray([
+        $sheet->getStyle('A2:F4')->applyFromArray([
             'fill' => [
                 'fillType' => Fill::FILL_SOLID,
                 'startColor' => ['argb' => 'FFFFF9C4'], // Light yellow
@@ -86,11 +86,12 @@ class AccountCodeTemplateSheet implements
         ]);
 
         // Add helper text
-        $sheet->setCellValue('F1', 'See "Categories" sheet for valid category codes');
-        $sheet->setCellValue('F2', '← Sample rows. Delete before uploading.');
+        $sheet->setCellValue('H1', 'See "Categories" sheet for valid category codes');
+        $sheet->setCellValue('H2', '← Sample rows. Delete before uploading.');
+        $sheet->setCellValue('H3', 'default_rate / default_frequency: leave blank to inherit from the category.');
 
         // Style helper text
-        $sheet->getStyle('F1:F2')->applyFromArray([
+        $sheet->getStyle('H1:H3')->applyFromArray([
             'font' => [
                 'italic' => true,
                 'color' => ['argb' => 'FF999999'],
@@ -98,12 +99,12 @@ class AccountCodeTemplateSheet implements
         ]);
 
         // Auto-size columns
-        foreach (range('A', 'D') as $col) {
+        foreach (range('A', 'F') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
         // Add borders to data range
-        $sheet->getStyle('A1:D' . ($sheet->getHighestRow()))->applyFromArray([
+        $sheet->getStyle('A1:F' . ($sheet->getHighestRow()))->applyFromArray([
             'borders' => [
                 'allBorders' => [
                     'borderStyle' => Border::BORDER_THIN,
@@ -139,18 +140,20 @@ class AccountCodeDataSheet implements
                 $c->name,
                 $c->description,
                 $c->is_active ? 'Yes' : 'No',
+                $c->default_rate,
+                $c->default_frequency,
             ]);
     }
 
     public function headings(): array
     {
-        return ['Category Code', 'Code', 'Name', 'Description', 'Active'];
+        return ['Category Code', 'Code', 'Name', 'Description', 'Active', 'Default Rate', 'Default Frequency'];
     }
 
     public function styles(Worksheet $sheet)
     {
         // Style the header row
-        $sheet->getStyle('A1:E1')->applyFromArray([
+        $sheet->getStyle('A1:G1')->applyFromArray([
             'font' => [
                 'bold' => true,
                 'color' => ['argb' => 'FFFFFFFF'],
@@ -166,12 +169,12 @@ class AccountCodeDataSheet implements
         ]);
 
         // Auto-size columns
-        foreach (range('A', 'E') as $col) {
+        foreach (range('A', 'G') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
         // Add borders
-        $sheet->getStyle('A1:E' . ($sheet->getHighestRow()))->applyFromArray([
+        $sheet->getStyle('A1:G' . ($sheet->getHighestRow()))->applyFromArray([
             'borders' => [
                 'allBorders' => [
                     'borderStyle' => Border::BORDER_THIN,
@@ -181,7 +184,7 @@ class AccountCodeDataSheet implements
         ]);
 
         // Style data rows
-        $sheet->getStyle('A2:E' . ($sheet->getHighestRow()))->applyFromArray([
+        $sheet->getStyle('A2:G' . ($sheet->getHighestRow()))->applyFromArray([
             'alignment' => [
                 'vertical' => Alignment::VERTICAL_CENTER,
             ],

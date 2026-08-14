@@ -3,6 +3,11 @@
 @section('content')
 
 @php
+$calcMode      = \App\Models\SystemSetting::get('line_item_calc_mode', 'none');
+$adminSetsRate = \App\Models\SystemSetting::get('admin_sets_rate', false);
+$adminSetsFreq = \App\Models\SystemSetting::get('admin_sets_freq', false);
+$showRatCol    = $calcMode !== 'none';
+$showFreqCol   = $calcMode === 'qty_rate_freq';
 $typeConfig = [
     'revenue'             => ['label' => 'Revenue',             'bg' => '#D1FAE5', 'color' => '#065F46'],
     'expense'             => ['label' => 'Expense',             'bg' => '#FEE2E2', 'color' => '#991B1B'],
@@ -259,6 +264,22 @@ $usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
                     <th>Sub-Category</th>
                     <th>Description</th>
                     <th class="text-center">Codes</th>
+                    @if($showRatCol)
+                    <th class="text-end" style="font-size:10px" title="Default Rate — fallback for codes with no rate set">
+                        Def. Rate
+                        @if($adminSetsRate)
+                        <span class="badge" style="background:#EDE9FE;color:#5B21B6;font-size:9px"><i class="bi bi-lock-fill"></i></span>
+                        @endif
+                    </th>
+                    @endif
+                    @if($showFreqCol)
+                    <th class="text-end" style="font-size:10px" title="Default Frequency — fallback for codes with no frequency set">
+                        Def. Freq
+                        @if($adminSetsFreq)
+                        <span class="badge" style="background:#EDE9FE;color:#5B21B6;font-size:9px"><i class="bi bi-lock-fill"></i></span>
+                        @endif
+                    </th>
+                    @endif
                     <th>Status</th>
                     <th></th>
                 </tr>
@@ -310,6 +331,28 @@ $usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
                     <td class="text-center">
                         <span class="badge bg-secondary">{{ $category->account_codes_count }}</span>
                     </td>
+                    @if($showRatCol)
+                    <td class="text-end small">
+                        @if($category->default_rate !== null)
+                            <span style="font-variant-numeric:tabular-nums">
+                                {{ number_format($category->default_rate, 2) }}
+                            </span>
+                        @else
+                            <span class="text-muted">—</span>
+                        @endif
+                    </td>
+                    @endif
+                    @if($showFreqCol)
+                    <td class="text-end small">
+                        @if($category->default_frequency !== null)
+                            <span style="font-variant-numeric:tabular-nums">
+                                {{ number_format($category->default_frequency, 4) + 0 }}×
+                            </span>
+                        @else
+                            <span class="text-muted">—</span>
+                        @endif
+                    </td>
+                    @endif
                     <td>
                         <span class="badge bg-{{ $category->is_active ? 'success' : 'secondary' }}">
                             {{ $category->is_active ? 'Active' : 'Inactive' }}
@@ -339,7 +382,8 @@ $usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
                 </tr>
                 @empty
                 <tr id="emptyRow">
-                    <td colspan="9" class="text-center text-muted py-4">
+                    <td colspan="{{ 9 + ($showRatCol ? 1 : 0) + ($showFreqCol ? 1 : 0) }}"
+                        class="text-center text-muted py-4">
                         No categories yet.
                         <a href="{{ route('admin.account-categories.create') }}">Add one</a>.
                     </td>

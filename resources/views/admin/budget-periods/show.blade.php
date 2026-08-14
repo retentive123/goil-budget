@@ -51,7 +51,20 @@
                 {{ ucfirst($budgetPeriod->status) }}
             </span>
 
+            @if($budgetPeriod->calcMode() !== 'none')
+            <a href="{{ route('admin.budget-periods.rates', $budgetPeriod) }}"
+               class="btn btn-sm"
+               style="background:#F5F3FF;color:#4C1D95;border:1px solid #C4B5FD;border-radius:8px">
+                <i class="bi bi-calculator"></i> Manage Period Rates
+            </a>
+            @endif
+
             @if($budgetPeriod->status === 'draft')
+            <a href="{{ route('admin.budget-periods.edit', $budgetPeriod) }}"
+               class="btn btn-sm btn-outline-secondary"
+               style="border-radius:8px">
+                Edit
+            </a>
             <form method="POST"
                   action="{{ route('admin.budget-periods.open', $budgetPeriod) }}">
                 @csrf @method('PATCH')
@@ -130,6 +143,47 @@
         </div>
     </div>
 </div>
+
+{{-- Calc settings summary --}}
+@php $setting = $budgetPeriod->setting; @endphp
+@if($setting)
+<div class="mb-4 p-3 rounded d-flex align-items-start gap-4 flex-wrap"
+     style="background:#F5F3FF;border:1px solid #C4B5FD;font-size:13px">
+    <div>
+        <div class="text-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px">Calculation Mode</div>
+        <div class="fw-semibold" style="color:#4C1D95">
+            {{ match($setting->line_item_calc_mode) {
+                'qty_rate'      => 'Qty × Rate',
+                'qty_rate_freq' => 'Qty × Rate × Frequency',
+                default         => 'Direct Entry'
+            } }}
+        </div>
+    </div>
+    @if($setting->line_item_calc_mode !== 'none')
+    <div>
+        <div class="text-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px">Admin Controls Rate</div>
+        <div class="fw-semibold" style="color:{{ $setting->admin_sets_rate ? '#065F46' : '#64748B' }}">
+            {!! $setting->admin_sets_rate ? '<i class="bi bi-lock-fill"></i> Yes — rate is read-only for inputters' : '<i class="bi bi-pencil"></i> No — inputters set own rate' !!}
+        </div>
+    </div>
+    @if($setting->line_item_calc_mode === 'qty_rate_freq')
+    <div>
+        <div class="text-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px">Admin Controls Freq</div>
+        <div class="fw-semibold" style="color:{{ $setting->admin_sets_freq ? '#065F46' : '#64748B' }}">
+            {!! $setting->admin_sets_freq ? '<i class="bi bi-lock-fill"></i> Yes — freq is read-only for inputters' : '<i class="bi bi-pencil"></i> No — inputters set own freq' !!}
+        </div>
+    </div>
+    @endif
+    <div>
+        <div class="text-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px">Period Rates</div>
+        <a href="{{ route('admin.budget-periods.rates', $budgetPeriod) }}"
+           class="fw-semibold text-decoration-none" style="color:#4C1D95">
+            <i class="bi bi-calculator"></i> View / Edit period rate table <i class="bi bi-arrow-right"></i>
+        </a>
+    </div>
+    @endif
+</div>
+@endif
 
 {{-- Submissions table --}}
 <div class="chart-card">
@@ -271,7 +325,7 @@ function confirmClose() {
             <div style="background:#FEF3C7;border-radius:8px;padding:12px;
                         text-align:left;font-size:13px;color:#92400E;margin-bottom:12px">
                 @foreach($warnings as $w)
-                <div>⚠ {{ $w }}</div>
+                <div><i class="bi bi-exclamation-triangle-fill"></i> {{ $w }}</div>
                 @endforeach
             </div>
             <p style="color:#64748B;font-size:13px">

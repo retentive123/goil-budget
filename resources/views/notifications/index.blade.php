@@ -19,15 +19,15 @@
             {{-- Icon --}}
             <div class="mt-1">
                 @php
-                    $icon = match(true) {
-                        str_contains($notif->type, 'approved') => '✅',
-                        str_contains($notif->type, 'rejected') => '❌',
-                        str_contains($notif->type, 'pending')  => '⏳',
-                        str_contains($notif->type, 'virement') => '🔄',
-                        default                                 => '📋',
+                    [$iconClass, $iconColor] = match(true) {
+                        str_contains($notif->type, 'approved') => ['bi bi-check-circle-fill', '#10B981'],
+                        str_contains($notif->type, 'rejected') => ['bi bi-x-circle-fill',     '#F43F5E'],
+                        str_contains($notif->type, 'pending')  => ['bi bi-hourglass-split',   '#F59E0B'],
+                        str_contains($notif->type, 'virement') => ['bi bi-arrow-left-right',  '#6366F1'],
+                        default                                 => ['bi bi-clipboard2',        '#64748B'],
                     };
                 @endphp
-                <span style="font-size:20px">{{ $icon }}</span>
+                <i class="{{ $iconClass }}" style="font-size:18px;color:{{ $iconColor }}"></i>
             </div>
 
             {{-- Content --}}
@@ -47,8 +47,8 @@
                               action="{{ route('notifications.destroy', $notif) }}">
                             @csrf @method('DELETE')
                             <button class="btn btn-link btn-sm p-0 text-muted"
-                                    style="font-size:11px">
-                                ✕
+                                    style="font-size:13px;line-height:1">
+                                <i class="bi bi-trash3"></i>
                             </button>
                         </form>
                     </div>
@@ -59,7 +59,7 @@
         </div>
         @empty
         <div class="text-center text-muted py-5">
-            <div style="font-size:40px">🔔</div>
+            <i class="bi bi-bell" style="font-size:38px;color:#CBD5E1;display:block;margin-bottom:12px"></i>
             <div class="mt-2">No notifications yet.</div>
         </div>
         @endforelse

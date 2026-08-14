@@ -49,7 +49,7 @@
 
                     @if($all->isEmpty())
                         <div class="text-center py-5 text-muted">
-                            <div style="font-size: 48px; margin-bottom: 12px;">📋</div>
+                            <i class="bi bi-clipboard2" style="font-size:48px;color:#CBD5E1;display:block;margin-bottom:12px"></i>
                             <p class="fw-semibold">No Account Codes Available</p>
                             <p class="small">Please create account codes first before assigning them to departments.</p>
                             <a href="{{ route('admin.account-codes.create') }}" class="btn btn-primary btn-sm">

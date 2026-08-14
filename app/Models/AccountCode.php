@@ -13,11 +13,14 @@ class AccountCode extends Model
     protected $fillable = [
         'account_category_id', 'code', 'name', 'description',
         'unit', 'calc_type', 'calc_config', 'sort_order', 'is_active',
+        'default_rate', 'default_frequency',
     ];
 
     protected $casts = [
-        'is_active'   => 'boolean',
-        'calc_config' => 'array',
+        'is_active'        => 'boolean',
+        'calc_config'      => 'array',
+        'default_rate'     => 'float',
+        'default_frequency'=> 'float',
     ];
 
     public function category()

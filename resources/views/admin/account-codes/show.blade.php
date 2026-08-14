@@ -218,13 +218,13 @@
                    class="btn btn-sm text-start"
                    style="background:var(--surface);border:1px solid var(--border);
                           border-radius:8px;padding:10px 14px;font-size:13px;color:var(--navy)">
-                    ✏️ &nbsp; Edit Account Code
+                    <i class="bi bi-pencil"></i>&nbsp; Edit Account Code
                 </a>
                 <a href="{{ route('reports.code-explorer', ['account_code_id'=>$accountCode->id]) }}"
                    class="btn btn-sm text-start"
                    style="background:var(--surface);border:1px solid var(--border);
                           border-radius:8px;padding:10px 14px;font-size:13px;color:var(--navy)">
-                    📊 &nbsp; View in Reports
+                    <i class="bi bi-bar-chart-line me-2"></i>View in Reports
                 </a>
                 <a href="{{ route('admin.account-categories.show', $accountCode->account_category_id) }}"
                    class="btn btn-sm text-start"

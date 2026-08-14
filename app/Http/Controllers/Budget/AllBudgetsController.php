@@ -25,15 +25,16 @@ class AllBudgetsController extends Controller
         $departments = Department::where('is_active', true)->with('zone')->orderBy('name')->get();
         $categories  = AccountCategory::orderBy('name')->get();
 
+        // null = "All Periods" — never fall back to the active period
         $period = $request->period_id
             ? BudgetPeriod::find($request->period_id)
-            : (BudgetPeriod::current() ?? $periods->first());
+            : null;
 
         $query = BudgetVersion::with('department', 'period', 'submittedBy', 'lineItems')
-            ->when($period,                    fn($q) => $q->where('budget_period_id', $period->id))
-            ->when($request->department_id,   fn($q) => $q->where('department_id', $request->department_id))
-            ->when($request->status,          fn($q) => $q->where('status', $request->status))
-            ->when($request->version_number,  fn($q) => $q->where('version_number', $request->version_number));
+            ->when($period,                   fn($q) => $q->where('budget_period_id', $period->id))
+            ->when($request->department_id,  fn($q) => $q->where('department_id', $request->department_id))
+            ->when($request->status,         fn($q) => $q->where('status', $request->status))
+            ->when($request->version_number, fn($q) => $q->where('version_number', $request->version_number));
 
         // Search by department name
         if ($request->search) {
@@ -45,8 +46,8 @@ class AllBudgetsController extends Controller
 
         $budgets = $query->orderBy('department_id')->orderByDesc('version_number')->paginate(30)->withQueryString();
 
-        // Summary stats for the selected period
-        $allVersions = BudgetVersion::where('budget_period_id', $period?->id)->get();
+        // Summary stats — scoped to selected period or all periods
+        $allVersions = BudgetVersion::when($period, fn($q) => $q->where('budget_period_id', $period->id))->get();
         $totalDepts  = $departments->count();
 
         $stats = [
@@ -61,8 +62,18 @@ class AllBudgetsController extends Controller
                 ->sum(fn($v) => $v->effectiveTotal()),
         ];
 
+        // Pre-compute actuals per department for the matrix view (one query, no N+1).
+        // When no period is selected ("All Periods"), actuals are not shown (0).
+        $actualsByDept = $period
+            ? \App\Models\BudgetActual::where('budget_period_id', $period->id)
+                ->where('status', 'confirmed')
+                ->selectRaw('department_id, SUM(amount) as total')
+                ->groupBy('department_id')
+                ->pluck('total', 'department_id')
+            : collect();
+
         // Group latest version per department for the matrix view
-        $deptMatrix = $departments->map(function ($dept) use ($period, $allVersions) {
+        $deptMatrix = $departments->map(function ($dept) use ($period, $allVersions, $actualsByDept) {
             $versions = $allVersions->where('department_id', $dept->id)
                                     ->sortByDesc('version_number');
             $latest   = $versions->first();
@@ -73,6 +84,7 @@ class AllBudgetsController extends Controller
                 'latest'   => $latest,
                 // ✅ Use effectiveTotal() here
                 'total'    => $latest ? $latest->effectiveTotal() : 0,
+                'actual'   => (float) ($actualsByDept->get($dept->id) ?? 0),
             ];
         });
 
@@ -191,9 +203,10 @@ class AllBudgetsController extends Controller
     {
         $periods = BudgetPeriod::orderByDesc('year')->get();
 
+        // null = "All Periods" — never fall back to the active period
         $period = $request->period_id
             ? BudgetPeriod::find($request->period_id)
-            : (BudgetPeriod::current() ?? $periods->first());
+            : null;
 
         $versions = BudgetVersion::with('lineItems.accountCode.category', 'submittedBy')
             ->where('department_id', $department->id)

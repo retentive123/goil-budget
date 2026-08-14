@@ -30,7 +30,15 @@
             text-align: center;
             padding: 32px 24px;
         }
-        .card-header .icon { font-size: 56px; margin-bottom: 10px; }
+        .card-header .icon { font-size: 52px; margin-bottom: 10px; line-height: 1; }
+        /* Bootstrap Icons — triangle-fill glyph, inline font to avoid CDN */
+        @font-face {
+            font-family: 'bootstrap-icons';
+            src: url('/fonts/bootstrap-icons.woff2') format('woff2'),
+                 url('/fonts/bootstrap-icons.woff') format('woff');
+        }
+        .bi { font-family: 'bootstrap-icons' !important; font-style: normal; }
+        .bi-exclamation-triangle-fill::before { content: "\f33a"; }
         .card-header h3 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
         .card-header p { font-size: 13px; color: rgba(255,255,255,.7); }
         .card-body { padding: 28px 32px; text-align: center; }
@@ -80,7 +88,7 @@
     <div>
         <div class="card">
             <div class="card-header">
-                <div class="icon">⚠️</div>
+                <div class="icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
                 <h3>Something Went Wrong</h3>
                 <p>An unexpected error occurred on the server</p>
             </div>

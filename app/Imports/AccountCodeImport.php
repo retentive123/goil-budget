@@ -48,12 +48,20 @@ class AccountCodeImport implements ToCollection, WithHeadingRow
                     continue;
                 }
 
+                $description  = trim($row['description']  ?? '') ?: null;
+                $defaultRate  = isset($row['default_rate'])  && $row['default_rate']  !== ''
+                    ? (float) $row['default_rate']  : null;
+                $defaultFreq  = isset($row['default_frequency']) && $row['default_frequency'] !== ''
+                    ? (float) $row['default_frequency'] : null;
+
                 if ($existing->has($code)) {
                     $toUpdate[] = [
                         'id'                  => $existing->get($code)->id,
                         'account_category_id' => $category->id,
                         'name'                => $name,
-                        'description'         => trim($row['description'] ?? '') ?: null,
+                        'description'         => $description,
+                        'default_rate'        => $defaultRate,
+                        'default_frequency'   => $defaultFreq,
                         'updated_at'          => $now,
                     ];
                     $this->updated++;
@@ -62,7 +70,9 @@ class AccountCodeImport implements ToCollection, WithHeadingRow
                         'account_category_id' => $category->id,
                         'code'                => $code,
                         'name'                => $name,
-                        'description'         => trim($row['description'] ?? '') ?: null,
+                        'description'         => $description,
+                        'default_rate'        => $defaultRate,
+                        'default_frequency'   => $defaultFreq,
                         'is_active'           => true,
                         'created_at'          => $now,
                         'updated_at'          => $now,
@@ -82,7 +92,7 @@ class AccountCodeImport implements ToCollection, WithHeadingRow
             DB::table('account_codes')->upsert(
                 $chunk,
                 ['id'],
-                ['account_category_id', 'name', 'description', 'updated_at']
+                ['account_category_id', 'name', 'description', 'default_rate', 'default_frequency', 'updated_at']
             );
         }
     }

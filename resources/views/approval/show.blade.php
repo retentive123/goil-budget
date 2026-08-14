@@ -56,7 +56,7 @@
                     </div>
                     <div class="col">
                         <div class="small text-muted">Total Budget</div>
-                        {{-- ✅ Use effective total --}}
+                        {{-- Use effective total --}}
                         <div class="fw-bold text-success">{{ currency() }} {{ number_format($grandTotals['total'], 2) }}</div>
                     </div>
                 </div>
@@ -134,7 +134,15 @@
                     <table class="table table-sm table-hover mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th style="width:30%">Account</th>
+                                <th style="width:{{ $calcMode !== 'none' ? '22%' : '30%' }}">Account</th>
+                                @if($calcMode !== 'none')
+                                <th class="text-end" style="color:#6D28D9" title="Quantity">Qty</th>
+                                <th class="text-end" style="color:#6D28D9" title="Rate">Rate</th>
+                                @if($calcMode === 'qty_rate_freq')
+                                <th class="text-end" style="color:#6D28D9" title="Frequency">Freq</th>
+                                @endif
+                                <th class="text-end" style="color:#6D28D9">Year Total</th>
+                                @endif
                                 <th class="text-end">Q1</th>
                                 <th class="text-end">Q2</th>
                                 <th class="text-end">Q3</th>
@@ -149,6 +157,12 @@
                             @php
                                 $itemSupp = $item->approvedSupplementaryTotal();
                                 $itemEffective = $item->effectiveBudget();
+                                $itemQty  = $item->quantity ?? '—';
+                                $itemRate = $item->rate     ?? '—';
+                                $itemFreq = $item->frequency ?? '—';
+                                $itemYearTotal = ($item->quantity !== null && $item->rate !== null)
+                                    ? ($item->quantity * $item->rate * ($calcMode === 'qty_rate_freq' ? ($item->frequency ?? 1) : 1))
+                                    : null;
                             @endphp
                             <tr>
                                 <td class="small">
@@ -160,6 +174,22 @@
                                         </div>
                                     @endif
                                 </td>
+                                @if($calcMode !== 'none')
+                                <td class="text-end small" style="color:#6D28D9">
+                                    {{ is_numeric($itemQty) ? number_format((float)$itemQty, 2) : $itemQty }}
+                                </td>
+                                <td class="text-end small" style="color:#6D28D9">
+                                    {{ is_numeric($itemRate) ? number_format((float)$itemRate, 4) : $itemRate }}
+                                </td>
+                                @if($calcMode === 'qty_rate_freq')
+                                <td class="text-end small" style="color:#6D28D9">
+                                    {{ is_numeric($itemFreq) ? number_format((float)$itemFreq, 2) : $itemFreq }}
+                                </td>
+                                @endif
+                                <td class="text-end small fw-semibold" style="color:#6D28D9">
+                                    {{ $itemYearTotal !== null ? number_format($itemYearTotal, 2) : '—' }}
+                                </td>
+                                @endif
                                 <td class="text-end small">{{ number_format($item->q1_amount, 2) }}</td>
                                 <td class="text-end small">{{ number_format($item->q2_amount, 2) }}</td>
                                 <td class="text-end small">{{ number_format($item->q3_amount, 2) }}</td>
@@ -199,6 +229,12 @@
                         <tfoot style="background:#F8FAFC;font-weight:700;font-size:11px">
                             <tr>
                                 <td>Category Total</td>
+                                @if($calcMode !== 'none')
+                                <td colspan="{{ $calcMode === 'qty_rate_freq' ? 3 : 2 }}"></td>
+                                <td class="text-end" style="color:#6D28D9">
+                                    {{ number_format($categoryData['items']->sum('total_amount'), 2) }}
+                                </td>
+                                @endif
                                 <td class="text-end">{{ number_format($categoryData['items']->sum('q1_amount'), 2) }}</td>
                                 <td class="text-end">{{ number_format($categoryData['items']->sum('q2_amount'), 2) }}</td>
                                 <td class="text-end">{{ number_format($categoryData['items']->sum('q3_amount'), 2) }}</td>
@@ -264,13 +300,13 @@
                 <div class="d-flex align-items-start gap-2 mb-3">
                     <div class="mt-1">
                         @if($step['status'] === 'approved')
-                            <span class="text-success">✔</span>
+                            <i class="bi bi-check-circle-fill text-success" style="font-size:16px"></i>
                         @elseif($step['status'] === 'rejected')
-                            <span class="text-danger">✘</span>
+                            <i class="bi bi-x-circle-fill text-danger" style="font-size:16px"></i>
                         @elseif($step['status'] === 'pending')
-                            <span class="text-warning">●</span>
+                            <i class="bi bi-hourglass-split text-warning" style="font-size:16px"></i>
                         @else
-                            <span class="text-muted">○</span>
+                            <i class="bi bi-circle text-muted" style="font-size:16px"></i>
                         @endif
                     </div>
                     <div class="flex-grow-1">
@@ -424,11 +460,11 @@
                                             data-item="{{ $item->id }}"
                                             style="max-width: 110px; border-radius: 6px; font-size: 11px;">
                                         <option value="">—</option>
-                                        <option value="approved">✅ Approve</option>
+                                        <option value="approved">Approve</option>
                                         @if($roleConfig?->can_reduce_amounts)
-                                        <option value="reduced">📉 Reduce</option>
+                                        <option value="reduced">Reduce</option>
                                         @endif
-                                        <option value="rejected">❌ Reject</option>
+                                        <option value="rejected">Reject</option>
                                     </select>
                                     @if($roleConfig?->can_reduce_amounts)
                                     <input type="number"
@@ -475,7 +511,7 @@
         @else
             <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px; border: 2px solid #E2E8F0; background: #F8FAFC;">
                 <div class="card-body p-4 text-center">
-                    <div style="font-size: 42px; margin-bottom: 12px;">🔒</div>
+                    <div style="font-size: 42px; margin-bottom: 12px; color:#94A3B8"><i class="bi bi-lock-fill"></i></div>
                     <div style="font-size: 15px; font-weight: 700; color: #1B2A4A; margin-bottom: 4px;">
                         You cannot action this budget
                     </div>

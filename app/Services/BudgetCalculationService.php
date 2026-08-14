@@ -10,21 +10,36 @@ use App\Models\BudgetPeriod;
 class BudgetCalculationService
 {
     /**
-     * Auto-populate line items for a new budget version
+     * Auto-populate line items for a new budget version.
+     * Pre-fills rate / frequency from account code defaults when the
+     * admin_sets_rate / admin_sets_freq settings are enabled.
      */
     public function populateLineItems(BudgetVersion $version): void
     {
         $department = $version->department;
 
-        // ✅ If department is null, skip population
         if (!$department) {
             return;
         }
+
+        // Read calc settings from the period's own snapshot (falls back to global
+        // system settings for periods that pre-date the budget_period_settings table)
+        $period        = $version->period;
+        $calcMode      = $period->calcMode();
+        $adminSetsRate = $period->adminSetsRate();
+        $adminSetsFreq = $period->adminSetsFreq();
 
         $accountCodes = $department->accountCodes()
                                    ->where('account_codes.is_active', true)
                                    ->with('category')
                                    ->get();
+
+        // Pre-load per-period rate snapshots so we don't N+1 inside the loop.
+        // Fallback chain: period code rate → global code rate
+        //                 → period category rate → global category rate
+        $period->loadMissing('codeRates', 'categoryRates');
+        $periodCodeRates = $period->codeRates->keyBy('account_code_id');
+        $periodCatRates  = $period->categoryRates->keyBy('account_category_id');
 
         foreach ($accountCodes as $code) {
             $lineType = match($code->category->budget_type) {
@@ -36,6 +51,27 @@ class BudgetCalculationService
                 default                => 'expense',
             };
 
+            // Determine default rate / frequency for new line items.
+            // Four-level fallback: period code → global code → period category → global category
+            $pCode = $periodCodeRates[$code->id] ?? null;
+            $pCat  = $periodCatRates[$code->account_category_id] ?? null;
+
+            $defaultRate = ($calcMode !== 'none' && $adminSetsRate)
+                ? ($pCode?->default_rate
+                    ?? $code->default_rate
+                    ?? $pCat?->default_rate
+                    ?? $code->category->default_rate
+                    ?? null)
+                : null;
+
+            $defaultFreq = ($calcMode === 'qty_rate_freq' && $adminSetsFreq)
+                ? ($pCode?->default_frequency
+                    ?? $code->default_frequency
+                    ?? $pCat?->default_frequency
+                    ?? $code->category->default_frequency
+                    ?? null)
+                : null;
+
             BudgetLineItem::firstOrCreate(
                 [
                     'budget_version_id' => $version->id,
@@ -46,10 +82,42 @@ class BudgetCalculationService
                     'm4_amount'  => 0, 'm5_amount'  => 0, 'm6_amount'  => 0,
                     'm7_amount'  => 0, 'm8_amount'  => 0, 'm9_amount'  => 0,
                     'm10_amount' => 0, 'm11_amount' => 0, 'm12_amount' => 0,
+                    'rate'            => $defaultRate,
+                    'frequency'       => $defaultFreq,
                     'line_type'       => $lineType,
                     'last_updated_by' => auth()->id(),
                 ]
             );
+
+            // When admin locks rate or freq, sync the line item's stored value with
+            // the period-specific rates (or fall back to global) so it stays current
+            // if the admin edits rates later via the period rate manager.
+            // IMPORTANT: Only do this for DRAFT versions — submitted/approved budgets
+            // must retain the rates that were in effect when they were entered.
+            if ($calcMode !== 'none'
+                && ($adminSetsRate || $adminSetsFreq)
+                && $version->status === BudgetVersion::STATUS_DRAFT)
+            {
+                $updates = [];
+
+                if ($adminSetsRate)
+                    $updates['rate'] = $pCode?->default_rate
+                        ?? $code->default_rate
+                        ?? $pCat?->default_rate
+                        ?? $code->category->default_rate;
+
+                if ($calcMode === 'qty_rate_freq' && $adminSetsFreq)
+                    $updates['frequency'] = $pCode?->default_frequency
+                        ?? $code->default_frequency
+                        ?? $pCat?->default_frequency
+                        ?? $code->category->default_frequency;
+
+                if (!empty($updates)) {
+                    BudgetLineItem::where('budget_version_id', $version->id)
+                        ->where('account_code_id', $code->id)
+                        ->update($updates);
+                }
+            }
         }
     }
 

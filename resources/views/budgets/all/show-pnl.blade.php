@@ -364,8 +364,10 @@
                     'pending'  => '#F59E0B', default    => '#E2E8F0',
                 };
                 $icon = match($step['status']) {
-                    'approved' => '✔', 'rejected' => '✘',
-                    'pending'  => '●', default    => '○',
+                    'approved' => 'bi bi-check-lg',
+                    'rejected' => 'bi bi-x-lg',
+                    'pending'  => 'bi bi-hourglass-split',
+                    default    => 'bi bi-circle',
                 };
             @endphp
             <div class="d-flex gap-3" style="position:relative">
@@ -376,8 +378,8 @@
                 @endif
                 <div style="width:32px;height:32px;border-radius:50%;background:{{ $iconBg }};color:#fff;
                             display:flex;align-items:center;justify-content:center;
-                            font-size:13px;font-weight:700;flex-shrink:0;position:relative;z-index:1">
-                    {{ $icon }}
+                            font-size:14px;flex-shrink:0;position:relative;z-index:1">
+                    <i class="{{ $icon }}"></i>
                 </div>
                 <div class="flex-grow-1 pb-4">
                     <div style="font-size:13px;font-weight:700;color:var(--navy)">
@@ -459,27 +461,27 @@
                 @if($canDecide)
                 <a href="{{ route('approvals.show-pnl', $budgetVersion) }}" class="btn btn-sm text-start"
                    style="background:var(--navy);color:#fff;border-radius:8px;padding:10px 14px">
-                    ✅ &nbsp; Review & Decide
+                    <i class="bi bi-clipboard-check me-2"></i>Review & Decide
                 </a>
                 @endif
 
                 <a href="{{ route('approvals.history', $budgetVersion) }}" class="btn btn-sm text-start"
                    style="background:var(--surface);border:1px solid var(--border);
                           border-radius:8px;padding:10px 14px;font-size:13px;color:var(--navy)">
-                    📋 &nbsp; Full Approval History
+                    <i class="bi bi-clock-history me-2"></i>Full Approval History
                 </a>
 
                 <a href="{{ route('budgets.department', $budgetVersion->department) }}" class="btn btn-sm text-start"
                    style="background:var(--surface);border:1px solid var(--border);
                           border-radius:8px;padding:10px 14px;font-size:13px;color:var(--navy)">
-                    🏢 &nbsp; All Versions — {{ $budgetVersion->department->name }}
+                    <i class="bi bi-building me-2"></i>All Versions — {{ $budgetVersion->department->name }}
                 </a>
 
                 <a href="{{ route('reports.department', ['department_id'=>$budgetVersion->department_id,'period_id'=>$budgetVersion->budget_period_id]) }}"
                    class="btn btn-sm text-start"
                    style="background:var(--surface);border:1px solid var(--border);
                           border-radius:8px;padding:10px 14px;font-size:13px;color:var(--navy)">
-                    📊 &nbsp; Department Report
+                    <i class="bi bi-bar-chart-line me-2"></i>Department Report
                 </a>
 
                 <hr style="margin:4px 0">

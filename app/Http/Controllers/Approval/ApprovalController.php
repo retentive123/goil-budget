@@ -67,9 +67,15 @@ class ApprovalController extends Controller
             return (in_array($typeA, $revenueTypes) ? 0 : 1) <=> (in_array($typeB, $revenueTypes) ? 0 : 1);
         });
 
+        // Calc mode for this period (needed to show Qty/Rate/Freq columns to approvers)
+        $calcMode      = $budgetVersion->period->calcMode();
+        $adminSetsRate = $budgetVersion->period->adminSetsRate();
+        $adminSetsFreq = $budgetVersion->period->adminSetsFreq();
+
         return view('approval.show', compact(
             'budgetVersion', 'canDecide', 'currentStage',
-            'progress', 'summary', 'grandTotals', 'approvalService'
+            'progress', 'summary', 'grandTotals', 'approvalService',
+            'calcMode', 'adminSetsRate', 'adminSetsFreq'
         ));
     }
 

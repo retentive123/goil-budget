@@ -1,5 +1,12 @@
 @extends('layouts.app')
 @section('title', 'Edit Category')
+@php
+    $calcMode      = \App\Models\SystemSetting::get('line_item_calc_mode', 'none');
+    $adminSetsRate = \App\Models\SystemSetting::get('admin_sets_rate', false);
+    $adminSetsFreq = \App\Models\SystemSetting::get('admin_sets_freq', false);
+    $showRateField = $calcMode !== 'none' && $adminSetsRate;
+    $showFreqField = $calcMode === 'qty_rate_freq' && $adminSetsFreq;
+@endphp
 @section('content')
 
 
@@ -168,6 +175,52 @@
                             <div class="invalid-feedback d-block mt-1">{{ $message }}</div>
                         @enderror
                     </div>
+
+                    {{-- ── Category-level Default Rate / Frequency ── --}}
+                    @if($showRateField || $showFreqField)
+                    <div class="mb-4 p-3 rounded-3" style="background:#F5F3FF;border:1px solid #C4B5FD;">
+                        <div style="font-size:12px;font-weight:700;color:#4C1D95;margin-bottom:4px;">
+                            <i class="bi bi-lock-fill"></i> Category Budget Defaults
+                        </div>
+                        <div style="font-size:11px;color:#6D28D9;margin-bottom:10px;">
+                            Used as a fallback when individual account codes in this category don't have their own default.
+                        </div>
+                        <div class="row g-3">
+                            @if($showRateField)
+                            <div class="col-sm-6">
+                                <label class="form-label fw-semibold" style="color:#1B2A4A;font-size:13px;">
+                                    Default Rate
+                                    <span class="text-muted fw-normal" style="font-size:11px;">({{ currency() }} per unit)</span>
+                                </label>
+                                <input type="number" name="default_rate"
+                                    value="{{ old('default_rate', $accountCategory->default_rate) }}"
+                                    class="form-control form-control-sm @error('default_rate') is-invalid @enderror"
+                                    min="0" step="any" placeholder="0.00">
+                                <div class="form-text" style="font-size:11px;">
+                                    Applies to all codes in this category that have no code-level rate.
+                                </div>
+                                @error('default_rate')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+                            @endif
+                            @if($showFreqField)
+                            <div class="col-sm-6">
+                                <label class="form-label fw-semibold" style="color:#1B2A4A;font-size:13px;">
+                                    Default Frequency
+                                    <span class="text-muted fw-normal" style="font-size:11px;">(times per year)</span>
+                                </label>
+                                <input type="number" name="default_frequency"
+                                    value="{{ old('default_frequency', $accountCategory->default_frequency) }}"
+                                    class="form-control form-control-sm @error('default_frequency') is-invalid @enderror"
+                                    min="0" step="any" placeholder="1">
+                                <div class="form-text" style="font-size:11px;">
+                                    Applies to all codes in this category that have no code-level frequency.
+                                </div>
+                                @error('default_frequency')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+                            @endif
+                        </div>
+                    </div>
+                    @endif
 
                     {{-- Status --}}
                     <div class="mb-4 p-3 rounded-3" style="background: #F8FAFC; border: 1px solid #E2E8F0;">

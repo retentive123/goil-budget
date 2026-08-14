@@ -87,7 +87,7 @@
                         {{ $count }}, '{{ addslashes($first->department->name) }}',
                         {{ $isBatch ? 'true' : 'false' }}, '{{ $bId }}'
                     )">
-                ✔ {{ $count > 1 ? 'Approve All' : 'Approve' }}
+                <i class="bi bi-check-lg me-1"></i>{{ $count > 1 ? 'Approve All' : 'Approve' }}
             </button>
             <button type="button"
                     class="btn btn-sm btn-danger"
@@ -172,7 +172,7 @@
                             <button type="submit"
                                     class="btn btn-sm btn-success"
                                     style="font-size:11px;padding:2px 10px;white-space:nowrap">
-                                ✔ Approve
+                                <i class="bi bi-check-lg me-1"></i>Approve
                             </button>
                         </form>
                     </td>
@@ -209,7 +209,7 @@
 </div>
 @empty
 <div class="chart-card text-center py-5 text-muted">
-    <div style="font-size:36px;margin-bottom:12px">✅</div>
+    <i class="bi bi-check-circle-fill" style="font-size:36px;color:#10B981;display:block;margin-bottom:12px"></i>
     <div style="font-size:15px;font-weight:600;color:var(--navy)">No pending supplementary requests</div>
     <p class="small mt-2">All requests have been reviewed.</p>
 </div>
@@ -255,7 +255,7 @@ function batchApprove(url, count, dept, isBatch, bId) {
         showCancelButton: true,
         confirmButtonColor: '#10B981',
         cancelButtonColor: '#64748B',
-        confirmButtonText: count > 1 ? `✔ Approve All ${count}` : '✔ Approve',
+        confirmButtonText: count > 1 ? `Approve All ${count}` : 'Approve',
         cancelButtonText: 'Cancel',
         reverseButtons: true,
     }).then(result => {

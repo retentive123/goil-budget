@@ -39,7 +39,7 @@
         <a href="{{ route('reports.department', ['department_id'=>$department->id]) }}"
            class="btn btn-sm btn-outline-secondary"
            style="border-radius:8px">
-            📊 Department Report
+            <i class="bi bi-bar-chart-line me-1"></i>Department Report
         </a>
     </div>
 </div>

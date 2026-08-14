@@ -1,5 +1,12 @@
 @extends('layouts.app')
 @section('title', 'Account Codes')
+@php
+    $calcMode      = \App\Models\SystemSetting::get('line_item_calc_mode', 'none');
+    $adminSetsRate = \App\Models\SystemSetting::get('admin_sets_rate', false);
+    $adminSetsFreq = \App\Models\SystemSetting::get('admin_sets_freq', false);
+    $showRatCol    = $calcMode !== 'none';
+    $showFreqCol   = $calcMode === 'qty_rate_freq';
+@endphp
 @section('content')
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -165,6 +172,22 @@
                         <th style="width:120px">Code</th>
                         <th>Name</th>
                         <th style="width:180px">Category</th>
+                        @if($showRatCol)
+                        <th style="width:110px" class="text-end" title="Default Rate ({{ currency() }}/unit)">
+                            Def. Rate
+                            @if($adminSetsRate)
+                            <span class="badge" style="background:#EDE9FE;color:#5B21B6;font-size:9px;vertical-align:middle"><i class="bi bi-lock-fill"></i> Admin</span>
+                            @endif
+                        </th>
+                        @endif
+                        @if($showFreqCol)
+                        <th style="width:90px" class="text-end" title="Default Frequency (times/year)">
+                            Def. Freq
+                            @if($adminSetsFreq)
+                            <span class="badge" style="background:#EDE9FE;color:#5B21B6;font-size:9px;vertical-align:middle"><i class="bi bi-lock-fill"></i> Admin</span>
+                            @endif
+                        </th>
+                        @endif
                         <th style="width:150px">Status</th>
                         <th style="width:140px">Actions</th>
                     </tr>
@@ -191,6 +214,38 @@
                                 {{ $code->category->name }}
                             </span>
                         </td>
+                        @if($showRatCol)
+                        <td class="text-end small">
+                            @if($code->default_rate !== null)
+                                <span style="font-variant-numeric:tabular-nums">
+                                    {{ number_format($code->default_rate, 2) }}
+                                </span>
+                            @elseif($code->category->default_rate !== null)
+                                <span class="text-muted" title="Inherited from category: {{ $code->category->name }}">
+                                    {{ number_format($code->category->default_rate, 2) }}
+                                    <i class="bi bi-arrow-up-left" style="font-size:10px"></i>
+                                </span>
+                            @else
+                                <span class="text-muted">—</span>
+                            @endif
+                        </td>
+                        @endif
+                        @if($showFreqCol)
+                        <td class="text-end small">
+                            @if($code->default_frequency !== null)
+                                <span style="font-variant-numeric:tabular-nums">
+                                    {{ number_format($code->default_frequency, 4) + 0 }}×
+                                </span>
+                            @elseif($code->category->default_frequency !== null)
+                                <span class="text-muted" title="Inherited from category: {{ $code->category->name }}">
+                                    {{ number_format($code->category->default_frequency, 4) + 0 }}×
+                                    <i class="bi bi-arrow-up-left" style="font-size:10px"></i>
+                                </span>
+                            @else
+                                <span class="text-muted">—</span>
+                            @endif
+                        </td>
+                        @endif
                         <td>
                             <div class="d-flex align-items-center gap-1 flex-wrap">
                                 <span class="badge bg-{{ $code->is_active ? 'success' : 'secondary' }}">
@@ -232,8 +287,9 @@
                     </tr>
                     @empty
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-5">
-                            <div style="font-size:48px;margin-bottom:12px">📋</div>
+                        <td colspan="{{ 7 + ($showRatCol ? 1 : 0) + ($showFreqCol ? 1 : 0) }}"
+                            class="text-center text-muted py-5">
+                            <i class="bi bi-clipboard2" style="font-size:48px;color:#CBD5E1;display:block;margin-bottom:12px"></i>
                             <div style="font-size:16px;font-weight:600;color:#1B2A4A;margin-bottom:8px">
                                 No account codes found
                             </div>

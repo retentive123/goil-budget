@@ -264,10 +264,10 @@
             };
             $iconColor = in_array($status, ['approved','rejected','pending']) ? '#fff' : '#94A3B8';
             $icon = match($status) {
-                'approved' => '✔',
-                'rejected' => '✘',
-                'pending'  => '●',
-                default    => '○',
+                'approved' => 'bi bi-check-lg',
+                'rejected' => 'bi bi-x-lg',
+                'pending'  => 'bi bi-hourglass-split',
+                default    => 'bi bi-circle',
             };
         @endphp
 
@@ -282,8 +282,8 @@
             <div style="width:32px;height:32px;border-radius:50%;flex-shrink:0;
                         background:{{ $iconBg }};color:{{ $iconColor }};
                         display:flex;align-items:center;justify-content:center;
-                        font-size:14px;font-weight:700;position:relative;z-index:1">
-                {{ $icon }}
+                        font-size:14px;position:relative;z-index:1">
+                <i class="{{ $icon }}"></i>
             </div>
 
             <div class="flex-grow-1 pb-4">

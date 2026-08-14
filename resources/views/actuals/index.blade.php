@@ -84,7 +84,7 @@
                     <div style="font-size:13px;font-weight:700;color:#065F46;margin-top:4px">
                         {{ currency() }} {{ number_format($summary['total'],0) }}
                     </div>
-                    <div style="font-size:10px;color:#10B981">✔ Recorded</div>
+                    <div style="font-size:10px;color:#10B981"><i class="bi bi-check-circle-fill me-1"></i>Recorded</div>
                     @elseif($isPast || $isCurrentMonth)
                     <div style="font-size:12px;color:var(--slate);margin-top:4px">—</div>
                     <div style="font-size:10px;color:#F59E0B">Pending</div>

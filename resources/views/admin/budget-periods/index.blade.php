@@ -17,12 +17,16 @@
                     <th>Start</th>
                     <th>End</th>
                     <th>Status</th>
+                    <th>Calc Mode</th>
                     <th>Submissions</th>
                     <th></th>
                 </tr>
             </thead>
             <tbody>
                 @forelse($periods as $period)
+                @php
+                    $calcMode = $period->calcMode();
+                @endphp
                 <tr>
                     <td>{{ $period->name }}</td>
                     <td>{{ $period->year }}</td>
@@ -39,36 +43,49 @@
                             }
                         }}">{{ ucfirst($period->status) }}</span>
                     </td>
+                    <td>
+                        @if($calcMode === 'qty_rate_freq')
+                            <span style="font-size:11px;padding:2px 8px;border-radius:20px;
+                                         background:#F5F3FF;color:#4C1D95;font-weight:600">
+                                Qty×Rate×Freq
+                            </span>
+                        @elseif($calcMode === 'qty_rate')
+                            <span style="font-size:11px;padding:2px 8px;border-radius:20px;
+                                         background:#EDE9FE;color:#5B21B6;font-weight:600">
+                                Qty×Rate
+                            </span>
+                        @else
+                            <span class="text-muted" style="font-size:11px">Direct</span>
+                        @endif
+                    </td>
                     <td>{{ $period->budget_versions_count }}</td>
                     <td>
-                        <div class="d-flex gap-1">
-                            {{-- ✅ DRAFT: Edit & Open with Alert --}}
+                        <div class="d-flex gap-1 flex-wrap">
+                            {{-- DRAFT: Edit & Open with Alert --}}
                             @if($period->status === 'draft')
                                 <a href="{{ route('admin.budget-periods.edit', $period) }}"
                                    class="btn btn-sm btn-outline-primary">Edit</a>
 
-                                {{-- ✅ Open button with alert --}}
                                 <button class="btn btn-sm btn-success"
                                         onclick="confirmOpenPeriod({{ $period->id }}, '{{ $period->name }}')">
                                     Open
                                 </button>
                             @endif
 
-                            {{-- ✅ OPEN: Close with Alert --}}
+                            {{-- OPEN: Close with Alert --}}
                             @if($period->status === 'open')
                                 @php
-                                    // Calculate stats for this period
                                     $versions = $period->budgetVersions;
                                     $inReview = $versions->whereIn('status', ['submitted', 'under_review'])->unique('department_id')->count();
                                     $rejected = $versions->where('status', 'rejected')->unique('department_id')->count();
-                                    $draft = $versions->where('status', 'draft')->unique('department_id')->count();
+                                    $draft    = $versions->where('status', 'draft')->unique('department_id')->count();
                                     $totalDepts = \App\Models\Department::where('is_active', true)->count();
                                     $notStarted = $totalDepts - $versions->unique('department_id')->count();
 
                                     $warnings = [];
-                                    if($inReview > 0) $warnings[] = $inReview.' department(s) still in review';
-                                    if($rejected > 0) $warnings[] = $rejected.' department(s) rejected (not revised)';
-                                    if($draft > 0) $warnings[] = $draft.' department(s) in draft (not submitted)';
+                                    if($inReview  > 0) $warnings[] = $inReview.' department(s) still in review';
+                                    if($rejected  > 0) $warnings[] = $rejected.' department(s) rejected (not revised)';
+                                    if($draft     > 0) $warnings[] = $draft.' department(s) in draft (not submitted)';
                                     if($notStarted > 0) $warnings[] = $notStarted.' department(s) have not started';
                                 @endphp
 
@@ -78,6 +95,17 @@
                                 </button>
                             @endif
 
+                            {{-- Rate manager — visible whenever calc mode is active --}}
+                            @if($calcMode !== 'none')
+                                <a href="{{ route('admin.budget-periods.rates', $period) }}"
+                                   class="btn btn-sm"
+                                   style="background:#F5F3FF;color:#4C1D95;
+                                          border:1px solid #C4B5FD;white-space:nowrap"
+                                   title="Manage period rates">
+                                    <i class="bi bi-calculator"></i> Rates
+                                </a>
+                            @endif
+
                             <a href="{{ route('admin.budget-periods.show', $period) }}"
                                class="btn btn-sm btn-outline-secondary">View</a>
                         </div>
@@ -85,7 +113,7 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="7" class="text-center text-muted py-4">No budget periods found.</td>
+                    <td colspan="8" class="text-center text-muted py-4">No budget periods found.</td>
                 </tr>
                 @endforelse
             </tbody>
@@ -126,8 +154,8 @@ function confirmOpenPeriod(periodId, periodName) {
             </p>
             <div style="background:#D1FAE5;border-radius:8px;padding:12px;
                         text-align:left;font-size:13px;color:#065F46;margin-bottom:12px">
-                <div>✅ Once opened, departments can start submitting their budgets.</div>
-                <div style="margin-top:4px;">✅ The period will be available for budget entry.</div>
+                <div><i class="bi bi-check-circle-fill"></i> Once opened, departments can start submitting their budgets.</div>
+                <div style="margin-top:4px;"><i class="bi bi-check-circle-fill"></i> The period will be available for budget entry.</div>
             </div>
             <p style="color:#64748B;font-size:13px">
                 Are you sure you want to open this period?
@@ -160,7 +188,7 @@ function confirmClosePeriod(periodId, periodName, warnings) {
             </p>
             <div style="background:#FEF3C7;border-radius:8px;padding:12px;
                         text-align:left;font-size:13px;color:#92400E;margin-bottom:12px">
-                ${warnings.map(w => `<div>⚠ ${w}</div>`).join('')}
+                ${warnings.map(w => `<div><i class="bi bi-exclamation-triangle-fill"></i> ${w}</div>`).join('')}
             </div>
             <p style="color:#64748B;font-size:13px">
                 Closing this period will prevent any further submissions or edits.

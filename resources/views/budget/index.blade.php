@@ -27,24 +27,42 @@
 {{-- Deadline status --}}
 @if($currentPeriod)
 @php
-    $deadlineCheck = app(\App\Services\BudgetCalculationService::class)
+    $deadlineCheck  = app(\App\Services\BudgetCalculationService::class)
         ->isDeadlinePassed($currentPeriod->id, $user->department_id);
+    $hasDraft       = $version && $version->isEditable();
+    // "soft" = deadline passed but we still have an editable draft (editing allowed, submission blocked)
+    $softBlock      = $deadlineCheck['passed'] && $hasDraft;
 @endphp
 
 @if($deadlineCheck['deadline'])
 <div style="border-radius:10px;padding:12px 16px;margin-bottom:16px;
-            background:{{ $deadlineCheck['passed'] ? '#FEE2E2' : '#FEF3C7' }};
-            border:1px solid {{ $deadlineCheck['passed'] ? '#FECACA' : '#FDE68A' }}">
+            background:{{ $deadlineCheck['passed'] ? ($softBlock ? '#FFFBEB' : '#FEE2E2') : '#FEF3C7' }};
+            border:1px solid {{ $deadlineCheck['passed'] ? ($softBlock ? '#FDE68A' : '#FECACA') : '#FDE68A' }}">
     <div style="font-size:13px;font-weight:600;
-                color:{{ $deadlineCheck['passed'] ? '#991B1B' : '#92400E' }}">
+                color:{{ $deadlineCheck['passed'] ? ($softBlock ? '#92400E' : '#991B1B') : '#92400E' }}">
         @if($deadlineCheck['passed'])
-            🚫 Submission deadline has passed
-            @if($deadlineCheck['has_override'])
-                (including your extension)
+            @if($softBlock)
+                {{-- Draft exists, editing is still allowed — only submission is blocked --}}
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                Submission deadline has passed — you can still edit your draft, but
+                <strong>you will not be able to submit</strong> until Finance grants an extension.
+                @if($deadlineCheck['has_override'])
+                    <span style="background:#FEE2E2;color:#991B1B;border-radius:4px;
+                                 padding:1px 6px;font-size:11px;margin-left:4px">
+                        Extension also expired
+                    </span>
+                @endif
+            @else
+                {{-- No editable draft — hard blocker --}}
+                <i class="bi bi-x-circle-fill me-1"></i>
+                Submission deadline has passed
+                @if($deadlineCheck['has_override']) (including your extension) @endif
+                — Contact Finance to request an extension.
             @endif
-            — Contact Finance to request an extension.
         @else
-            ⏰ Submission deadline:
+            {{-- Deadline still upcoming --}}
+            <i class="bi bi-clock me-1"></i>
+            Submission deadline:
             <strong>{{ $deadlineCheck['deadline']->format('d M Y H:i') }}</strong>
             ({{ $deadlineCheck['deadline']->diffForHumans() }})
             @if($deadlineCheck['has_override'])

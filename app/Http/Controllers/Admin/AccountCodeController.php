@@ -68,6 +68,8 @@ class AccountCodeController extends Controller
             'unit'                => ['nullable', 'string', 'max:50'],
             'calc_type'           => ['nullable', 'string', 'in:values,calculation'],
             'sort_order'          => ['nullable', 'integer'],
+            'default_rate'        => ['nullable', 'numeric', 'min:0'],
+            'default_frequency'   => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $calcConfig = null;
@@ -105,6 +107,8 @@ class AccountCodeController extends Controller
             'unit'                => ['nullable', 'string', 'max:50'],
             'calc_type'           => ['nullable', 'string', 'in:values,calculation'],
             'sort_order'          => ['nullable', 'integer'],
+            'default_rate'        => ['nullable', 'numeric', 'min:0'],
+            'default_frequency'   => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $calcConfig = null;

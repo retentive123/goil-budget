@@ -487,11 +487,11 @@
                                             data-item="{{ $item->id }}"
                                             style="max-width:110px;border-radius:6px;font-size:11px">
                                         <option value="">—</option>
-                                        <option value="approved">✅ Approve</option>
+                                        <option value="approved">✔ Approve</option>
                                         @if($roleConfig?->can_reduce_amounts)
-                                        <option value="reduced">📉 Reduce</option>
+                                        <option value="reduced">↓ Reduce</option>
                                         @endif
-                                        <option value="rejected">❌ Reject</option>
+                                        <option value="rejected">✖ Reject</option>
                                     </select>
                                     @if($roleConfig?->can_reduce_amounts)
                                     <input type="number"
@@ -532,7 +532,7 @@
         @else
             <div class="card border-0 shadow-sm mb-4" style="border-radius:16px;border:2px solid #E2E8F0;background:#F8FAFC">
                 <div class="card-body p-4 text-center">
-                    <div style="font-size:42px;margin-bottom:12px">🔒</div>
+                    <i class="bi bi-lock-fill" style="font-size:40px;color:#CBD5E1;display:block;margin-bottom:12px"></i>
                     <div style="font-size:15px;font-weight:700;color:#1B2A4A;margin-bottom:4px">
                         You cannot action this budget
                     </div>

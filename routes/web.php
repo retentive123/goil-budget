@@ -120,6 +120,8 @@ Route::middleware('auth')->group(function () {
         Route::resource('budget-periods', BudgetPeriodController::class);
         Route::patch('budget-periods/{budgetPeriod}/open',  [BudgetPeriodController::class, 'open'])->name('budget-periods.open');
         Route::patch('budget-periods/{budgetPeriod}/close', [BudgetPeriodController::class, 'close'])->name('budget-periods.close');
+        Route::get ('budget-periods/{budgetPeriod}/rates',  [BudgetPeriodController::class, 'rates'])->name('budget-periods.rates');
+        Route::put ('budget-periods/{budgetPeriod}/rates',  [BudgetPeriodController::class, 'updateRates'])->name('budget-periods.rates.update');
 
         // Audit log
         Route::middleware('permission:view audit log')->group(function () {

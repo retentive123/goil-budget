@@ -651,13 +651,13 @@ function confirmMonth() {
             </p>
             <div style="background:#D1FAE5;border-radius:8px;padding:12px;
                         text-align:left;font-size:13px;color:#065F46;margin-bottom:12px">
-                <div>✅ <strong>${itemCount}</strong> line item(s) with amounts</div>
-                <div style="margin-top:4px;">📊 <strong>Total:</strong> {{ currency() }} ${totalAmount.toLocaleString('en-GH', { minimumFractionDigits: 2 })}</div>
+                <div><i class="bi bi-check-circle-fill" style="color:#10B981"></i> <strong>${itemCount}</strong> line item(s) with amounts</div>
+                <div style="margin-top:4px;"><i class="bi bi-bar-chart-fill" style="color:#10B981"></i> <strong>Total:</strong> {{ currency() }} ${totalAmount.toLocaleString('en-GH', { minimumFractionDigits: 2 })}</div>
             </div>
             <div style="background:#FEF3C7;border-radius:8px;padding:12px;
                         text-align:left;font-size:13px;color:#92400E;margin-bottom:12px">
-                <div>⚠️ Confirmed actuals are <strong>locked</strong> and cannot be edited without Finance approval.</div>
-                <div style="margin-top:4px;">⚠️ Only proceed if all entries are correct.</div>
+                <div><i class="bi bi-exclamation-triangle-fill"></i> Confirmed actuals are <strong>locked</strong> and cannot be edited without Finance approval.</div>
+                <div style="margin-top:4px;"><i class="bi bi-exclamation-triangle-fill"></i> Only proceed if all entries are correct.</div>
             </div>
             <p style="color:#64748B;font-size:13px">
                 Are you sure you want to continue?

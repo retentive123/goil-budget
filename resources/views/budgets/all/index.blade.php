@@ -299,149 +299,248 @@
 </div>
 
 {{-- ── MATRIX VIEW ── --}}
+@php
+    $deptRows    = $deptMatrix->filter(fn($r) => $r['dept']->entity_type !== 'service_station')->values();
+    $stationRows = $deptMatrix->filter(fn($r) => $r['dept']->entity_type === 'service_station')->values();
+@endphp
+
 <div id="view_matrix" style="display:none">
-    <div class="chart-card">
-        <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0">
-                <thead style="font-size:11px;text-transform:uppercase;
-                              letter-spacing:.5px;color:var(--slate)">
-                    <tr>
-                        <th style="min-width:160px">Department</th>
-                        <th>Type</th>
-                        <th>Latest Status</th>
-                        <th class="text-end">Budget Total (GHS)</th>
-                        <th class="text-end">Actual (GHS)</th>
-                        <th>Utilisation</th>
-                        <th class="text-center">Versions</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach($deptMatrix as $row)
-                    @php
-                        $dept    = $row['dept'];
-                        $latest  = $row['latest'];
-                        $total   = $row['total'];
-                        $actual  = $period
-                            ? \App\Models\BudgetActual::where('department_id', $dept->id)
-                                ->where('budget_period_id', $period->id)
-                                ->where('status','confirmed')->sum('amount')
-                            : 0;
-                        $utilPct = $total > 0 ? round(($actual/$total)*100,1) : 0;
-                        $status  = $latest?->status ?? 'not_started';
-                    @endphp
-                    <tr>
-                        <td>
-                            <div style="font-size:13px;font-weight:600;color:var(--navy)">
-                                {{ $dept->name }}
-                            </div>
-                            <div style="font-size:10px;color:var(--slate)">{{ $dept->code }}</div>
-                        </td>
-                        <td>
-                            <span style="padding:2px 8px;border-radius:20px;font-size:10px;
-                                         font-weight:600;
-                                         background:{{ match($dept->budget_type) {
-                                             'revenue' => '#D1FAE5',
-                                             'both'    => '#DBEAFE',
-                                             default   => '#FEE2E2'
-                                         } }};
-                                         color:{{ match($dept->budget_type) {
-                                             'revenue' => '#065F46',
-                                             'both'    => '#1E40AF',
-                                             default   => '#991B1B'
-                                         } }}">
-                                {{ ucfirst($dept->budget_type) }}
-                            </span>
-                        </td>
-                        <td>
-                            <span style="padding:2px 10px;border-radius:20px;font-size:11px;
-                                         font-weight:600;
-                                         background:{{
-                                            match($status) {
-                                                'approved'     => '#D1FAE5',
-                                                'rejected'     => '#FEE2E2',
-                                                'submitted'    => '#DBEAFE',
-                                                'under_review' => '#FEF3C7',
-                                                'draft'        => '#F1F5F9',
-                                                default        => '#F8FAFC'
-                                            }
-                                         }};
-                                         color:{{
-                                            match($status) {
-                                                'approved'     => '#065F46',
-                                                'rejected'     => '#991B1B',
-                                                'submitted'    => '#1E40AF',
-                                                'under_review' => '#92400E',
-                                                'draft'        => '#475569',
-                                                default        => '#94A3B8'
-                                            }
-                                         }}">
-                                {{ ucfirst(str_replace('_',' ',$status)) }}
-                            </span>
-                        </td>
-                        <td class="text-end small fw-semibold">
-                            {{ $total > 0 ? number_format($total,0) : '—' }}
-                        </td>
-                        <td class="text-end small" style="color:#10B981">
-                            {{ $actual > 0 ? number_format($actual,0) : '—' }}
-                        </td>
-                        <td style="min-width:140px">
-                            @if($total > 0)
-                            <div class="d-flex align-items-center gap-2">
-                                <div class="progress flex-grow-1" style="height:6px">
-                                    <div class="progress-bar"
-                                         style="width:{{ min($utilPct,100) }}%;
-                                                background:{{ $utilPct>90?'#F43F5E':($utilPct>70?'#F59E0B':'#10B981') }}">
-                                    </div>
-                                </div>
-                                <span style="font-size:11px;color:var(--slate)">{{ $utilPct }}%</span>
-                            </div>
-                            @else
-                            <span style="color:#94A3B8;font-size:11px">—</span>
-                            @endif
-                        </td>
-                        <td class="text-center small text-muted">
-                            {{ $row['versions']->count() }}
-                        </td>
-                        <td>
-                            <div class="d-flex gap-1">
-                                @if($latest)
-                                <a href="{{ route('budgets.show', $latest) }}"
-                                   class="btn btn-sm"
-                                   style="background:var(--navy);color:#fff;
-                                          font-size:11px;border-radius:6px;padding:3px 12px">
-                                    View
-                                </a>
-                                @endif
-                                <a href="{{ route('budgets.department', $dept) }}"
-                                   class="btn btn-sm btn-outline-secondary"
-                                   style="font-size:11px;border-radius:6px;padding:3px 10px">
-                                    All Versions
-                                </a>
-                            </div>
-                        </td>
-                    </tr>
-                    @endforeach
-                </tbody>
-            </table>
+
+    {{-- Matrix tab bar + page-size selector --}}
+    <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <button id="mTab_depts" onclick="switchMatrixTab('depts')"
+                class="btn btn-sm"
+                style="background:#1B2A4A;color:#fff;border-radius:8px;font-size:12px">
+            <i class="bi bi-building me-1"></i>
+            Departments <span style="background:rgba(255,255,255,.2);border-radius:10px;
+                                     padding:1px 7px;margin-left:3px">{{ $deptRows->count() }}</span>
+        </button>
+        <button id="mTab_stations" onclick="switchMatrixTab('stations')"
+                class="btn btn-sm btn-outline-secondary"
+                style="border-radius:8px;font-size:12px">
+            <i class="bi bi-fuel-pump me-1"></i>
+            Service Stations <span id="stationBadge"
+                                   style="background:#E2E8F0;border-radius:10px;
+                                          padding:1px 7px;margin-left:3px">{{ $stationRows->count() }}</span>
+        </button>
+        <div class="ms-auto d-flex align-items-center gap-2">
+            <label style="font-size:12px;color:var(--slate);white-space:nowrap">Show:</label>
+            <select id="matrixPageSize" onchange="onPageSizeChange(this.value)"
+                    class="form-select form-select-sm" style="width:auto;font-size:12px">
+                <option value="15">15 per page</option>
+                <option value="25">25 per page</option>
+                <option value="50">50 per page</option>
+                <option value="0">Show all</option>
+            </select>
         </div>
+    </div>
+
+    {{-- ── Departments panel ── --}}
+    <div id="mPanel_depts">
+        <div class="chart-card p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--slate)">
+                        <tr>
+                            <th style="min-width:180px;padding:12px 16px">Department</th>
+                            <th>Type</th>
+                            <th>Latest Status</th>
+                            <th class="text-end">Budget (GHS)</th>
+                            <th class="text-end">Actual (GHS)</th>
+                            <th style="min-width:130px">Utilisation</th>
+                            <th class="text-center">Ver.</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="mBody_depts">
+                        @forelse($deptRows as $row)
+                        @php
+                            $dept    = $row['dept'];
+                            $latest  = $row['latest'];
+                            $total   = $row['total'];
+                            $actual  = $row['actual'];  // pre-computed in controller (no N+1)
+                            $utilPct = $total > 0 ? round(($actual/$total)*100,1) : 0;
+                            $status  = $latest?->status ?? 'not_started';
+                        @endphp
+                        @include('budgets.all._matrix_row', compact('dept','latest','total','actual','utilPct','status','row'))
+                        @empty
+                        <tr><td colspan="8" class="text-center text-muted py-4">No departments found.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div id="mPager_depts" class="d-flex gap-1 justify-content-center mt-3 flex-wrap"></div>
+        <div id="mInfo_depts" class="text-center mt-1"
+             style="font-size:11px;color:var(--slate)"></div>
+    </div>
+
+    {{-- ── Service Stations panel ── --}}
+    <div id="mPanel_stations" style="display:none">
+        <div class="chart-card p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--slate)">
+                        <tr>
+                            <th style="min-width:180px;padding:12px 16px">Service Station</th>
+                            <th>Type</th>
+                            <th>Latest Status</th>
+                            <th class="text-end">Budget (GHS)</th>
+                            <th class="text-end">Actual (GHS)</th>
+                            <th style="min-width:130px">Utilisation</th>
+                            <th class="text-center">Ver.</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="mBody_stations">
+                        @forelse($stationRows as $row)
+                        @php
+                            $dept    = $row['dept'];
+                            $latest  = $row['latest'];
+                            $total   = $row['total'];
+                            $actual  = $row['actual'];  // pre-computed in controller (no N+1)
+                            $utilPct = $total > 0 ? round(($actual/$total)*100,1) : 0;
+                            $status  = $latest?->status ?? 'not_started';
+                        @endphp
+                        @include('budgets.all._matrix_row', compact('dept','latest','total','actual','utilPct','status','row'))
+                        @empty
+                        <tr><td colspan="8" class="text-center text-muted py-4">No service stations found.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div id="mPager_stations" class="d-flex gap-1 justify-content-center mt-3 flex-wrap"></div>
+        <div id="mInfo_stations" class="text-center mt-1"
+             style="font-size:11px;color:var(--slate)"></div>
     </div>
 </div>
 
 <script>
+// ── View toggle (list / matrix) ──────────────────────────────────────
 function showView(view) {
     ['list','matrix'].forEach(v => {
         document.getElementById('view_'+v).style.display = v===view ? '' : 'none';
         const btn = document.getElementById('btn_'+v);
-        btn.style.background   = v===view ? 'var(--navy)' : '';
-        btn.style.color        = v===view ? '#fff'        : '';
-        btn.className = v===view
-            ? 'btn btn-sm'
-            : 'btn btn-sm btn-outline-secondary';
+        btn.style.background   = v===view ? '#1B2A4A' : '';
+        btn.style.color        = v===view ? '#fff'    : '';
+        btn.className = v===view ? 'btn btn-sm' : 'btn btn-sm btn-outline-secondary';
         btn.style.borderRadius = '6px';
         btn.style.fontSize     = '12px';
     });
+    if (view === 'matrix') renderMatrix();
 }
+
+// ── Matrix pagination state ──────────────────────────────────────────
+const mState = { tab: 'depts', page: { depts: 1, stations: 1 }, ps: 15 };
+
+function switchMatrixTab(tab) {
+    mState.tab = tab;
+    ['depts','stations'].forEach(t => {
+        document.getElementById('mPanel_'+t).style.display = t===tab ? '' : 'none';
+        const btn = document.getElementById('mTab_'+t);
+        if (t === tab) {
+            btn.style.background = '#1B2A4A'; btn.style.color = '#fff';
+            btn.className = 'btn btn-sm';
+        } else {
+            btn.style.background = ''; btn.style.color = '';
+            btn.className = 'btn btn-sm btn-outline-secondary';
+        }
+        btn.style.borderRadius = '8px'; btn.style.fontSize = '12px';
+    });
+    renderMatrix();
+}
+
+function onPageSizeChange(val) {
+    mState.ps = parseInt(val) || 0; // 0 = show all
+    mState.page.depts    = 1;
+    mState.page.stations = 1;
+    renderMatrix();
+}
+
+function goMatrixPage(tab, page) {
+    mState.page[tab] = page;
+    renderMatrix();
+    // Scroll to top of the panel
+    document.getElementById('mPanel_'+tab).scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderMatrix() {
+    ['depts','stations'].forEach(tab => {
+        const rows      = Array.from(document.querySelectorAll('#mBody_'+tab+' tr'));
+        const total     = rows.length;
+        const ps        = mState.ps;
+        const page      = mState.page[tab];
+        const showAll   = ps === 0;
+        const totalPages = showAll ? 1 : Math.ceil(total / ps);
+
+        // Show / hide rows
+        rows.forEach((r, i) => {
+            r.style.display = (showAll || (i >= (page-1)*ps && i < page*ps)) ? '' : 'none';
+        });
+
+        // Pager
+        const pagerEl = document.getElementById('mPager_'+tab);
+        const infoEl  = document.getElementById('mInfo_'+tab);
+        pagerEl.innerHTML = '';
+
+        if (!showAll && totalPages > 1) {
+            // Prev
+            const prev = makePagerBtn('‹', () => goMatrixPage(tab, page-1), page === 1);
+            pagerEl.appendChild(prev);
+
+            // Page numbers (show max 7, with ellipsis)
+            const range = pageRange(page, totalPages);
+            range.forEach(p => {
+                if (p === '…') {
+                    const el = document.createElement('span');
+                    el.textContent = '…';
+                    el.style.cssText = 'padding:4px 6px;font-size:12px;color:var(--slate)';
+                    pagerEl.appendChild(el);
+                } else {
+                    pagerEl.appendChild(makePagerBtn(p, () => goMatrixPage(tab, p), false, p === page));
+                }
+            });
+
+            // Next
+            pagerEl.appendChild(makePagerBtn('›', () => goMatrixPage(tab, page+1), page === totalPages));
+        }
+
+        // Info text
+        if (showAll) {
+            infoEl.textContent = total > 0 ? `Showing all ${total} rows` : '';
+        } else {
+            const from = Math.min((page-1)*ps+1, total);
+            const to   = Math.min(page*ps, total);
+            infoEl.textContent = total > 0 ? `${from}–${to} of ${total}` : '';
+        }
+    });
+}
+
+function makePagerBtn(label, onclick, disabled, active) {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    btn.onclick     = disabled ? null : onclick;
+    btn.disabled    = disabled;
+    btn.style.cssText = `padding:4px 10px;font-size:12px;border-radius:6px;border:1px solid #CBD5E1;
+                          cursor:${disabled?'default':'pointer'};
+                          background:${active?'#1B2A4A':'#fff'};
+                          color:${active?'#fff':disabled?'#CBD5E1':'#1B2A4A'}`;
+    return btn;
+}
+
+function pageRange(current, total) {
+    if (total <= 7) return Array.from({length:total},(_,i)=>i+1);
+    const pages = [1];
+    if (current > 3)          pages.push('…');
+    for (let p = Math.max(2,current-1); p <= Math.min(total-1,current+1); p++) pages.push(p);
+    if (current < total-2)    pages.push('…');
+    pages.push(total);
+    return pages;
+}
+
+// Init
+renderMatrix();
 </script>
 
 @endsection

@@ -26,9 +26,15 @@
                 }
             }}">{{ ucfirst(str_replace('_',' ',$budgetVersion->status)) }}</span>
             &nbsp;
-            <span class="badge" style="background:{{ $entryMode === 'monthly' ? '#0369A1' : '#6B7280' }};font-size:10px;">
-                {{ $entryMode === 'monthly' ? 'Monthly entry' : 'Quarterly entry' }}
-            </span>
+            @if($calcMode !== 'none')
+                <span class="badge" style="background:#7C3AED;font-size:10px;color:#fff;">
+                    {{ $calcMode === 'qty_rate_freq' ? 'Qty × Rate × Freq' : 'Qty × Rate' }}
+                </span>
+            @else
+                <span class="badge" style="background:{{ $entryMode === 'monthly' ? '#0369A1' : '#6B7280' }};font-size:10px;">
+                    {{ $entryMode === 'monthly' ? 'Monthly entry' : 'Quarterly entry' }}
+                </span>
+            @endif
         </p>
     </div>
 
@@ -64,7 +70,7 @@
 @php
     $lineItems = $budgetVersion->lineItems ?? collect();
     $totalSupplementary = $lineItems->sum(fn($i) => $i->approvedSupplementaryTotal());
-    $effectiveTotal = $grandTotals['total'] ;
+    $effectiveTotal = $grandTotals['total'];
 @endphp
 
 <div class="card mb-3 border-0 bg-goil-orange">
@@ -72,46 +78,34 @@
         <div class="row text-center">
             <div class="col">
                 <div class="small text-white-50">Q1</div>
-                <div class="fw-bold" id="gt-q1">
-                    {{ currency() }} {{ number_format($grandTotals['q1'], 2) }}
-                </div>
+                <div class="fw-bold" id="gt-q1">{{ currency() }} {{ number_format($grandTotals['q1'], 2) }}</div>
             </div>
             <div class="col">
                 <div class="small text-white-50">Q2</div>
-                <div class="fw-bold" id="gt-q2">
-                    {{ currency() }} {{ number_format($grandTotals['q2'], 2) }}
-                </div>
+                <div class="fw-bold" id="gt-q2">{{ currency() }} {{ number_format($grandTotals['q2'], 2) }}</div>
             </div>
             <div class="col">
                 <div class="small text-white-50">Q3</div>
-                <div class="fw-bold" id="gt-q3">
-                    {{ currency() }} {{ number_format($grandTotals['q3'], 2) }}
-                </div>
+                <div class="fw-bold" id="gt-q3">{{ currency() }} {{ number_format($grandTotals['q3'], 2) }}</div>
             </div>
             <div class="col">
                 <div class="small text-white-50">Q4</div>
-                <div class="fw-bold" id="gt-q4">
-                    {{ currency() }} {{ number_format($grandTotals['q4'], 2) }}
-                </div>
+                <div class="fw-bold" id="gt-q4">{{ currency() }} {{ number_format($grandTotals['q4'], 2) }}</div>
             </div>
             <div class="col border-start border-secondary">
                 <div class="small text-white-50">Original Total</div>
-                <div class="fw-bold" id="gt-total">
-                    {{ currency() }} {{ number_format($grandTotals['total'], 2) }}
-                </div>
+                <div class="fw-bold" id="gt-total">{{ currency() }} {{ number_format($grandTotals['total'], 2) }}</div>
                 @if($totalSupplementary > 0)
-                <div class="small" style="color: #6EE7B7;">
-                    +{{ currency() }} {{ number_format($totalSupplementary, 2) }} supp.
-                </div>
+                <div class="small" style="color:#6EE7B7;">+{{ currency() }} {{ number_format($totalSupplementary, 2) }} supp.</div>
                 @endif
             </div>
             <div class="col border-start border-secondary">
                 <div class="small text-white-50">Effective Total</div>
-                <div class="fw-bold fs-5" style="color: var(--gold);" id="gt-effective">
+                <div class="fw-bold fs-5" style="color:var(--gold);" id="gt-effective">
                     {{ currency() }} {{ number_format($effectiveTotal, 2) }}
                 </div>
                 @if($totalSupplementary > 0)
-                <div class="small" style="color: rgba(255,255,255,0.5);">
+                <div class="small" style="color:rgba(255,255,255,0.5);">
                     incl. {{ number_format($totalSupplementary, 2) }} supplementary
                 </div>
                 @endif
@@ -125,21 +119,16 @@
 <div class="chart-card mb-3">
     <div class="d-flex justify-content-between align-items-center">
         <div>
-            <div style="font-size:13px;font-weight:600;color:var(--navy)">
-                Excel Import / Export
-            </div>
+            <div style="font-size:13px;font-weight:600;color:var(--navy)">Excel Import / Export</div>
             <div style="font-size:12px;color:var(--slate)">
                 Download the template, fill it in Excel, then upload to save time.
             </div>
         </div>
         <div class="d-flex gap-2 align-items-center">
-            <a href="{{ route('ie.budget.download', $budgetVersion) }}"
-               class="btn btn-sm btn-outline-success">
+            <a href="{{ route('ie.budget.download', $budgetVersion) }}" class="btn btn-sm btn-outline-success">
                 ↓ Download Template
             </a>
-
-            <button type="button"
-                    onclick="document.getElementById('uploadPanel').classList.toggle('d-none')"
+            <button type="button" onclick="document.getElementById('uploadPanel').classList.toggle('d-none')"
                     class="btn btn-sm btn-outline-primary">
                 ↑ Upload Excel
             </button>
@@ -147,41 +136,74 @@
     </div>
 
     <div id="uploadPanel" class="d-none mt-3 pt-3 border-top">
-        <form method="POST"
-              action="{{ route('ie.budget.upload', $budgetVersion) }}"
-              enctype="multipart/form-data">
+        <form method="POST" action="{{ route('ie.budget.upload', $budgetVersion) }}" enctype="multipart/form-data">
             @csrf
             <div class="d-flex gap-2 align-items-end">
                 <div class="flex-grow-1">
-                    <label class="form-label small fw-semibold mb-1">
-                        Select filled Excel file
-                    </label>
-                    <input type="file" name="file"
-                           accept=".xlsx,.xls"
-                           class="form-control form-control-sm">
+                    <label class="form-label small fw-semibold mb-1">Select filled Excel file</label>
+                    <input type="file" name="file" accept=".xlsx,.xls" class="form-control form-control-sm">
                 </div>
-                <button type="submit" class="btn btn-sm btn-primary">
-                    Upload & Save
-                </button>
+                <button type="submit" class="btn btn-sm btn-primary">Upload & Save</button>
             </div>
-            <div class="form-text">
-                Only .xlsx and .xls files accepted. Max 5MB.
-                Use the downloaded template — do not change the file structure.
-            </div>
+            <div class="form-text">Only .xlsx and .xls files accepted. Max 5MB. Use the downloaded template.</div>
         </form>
     </div>
 
-    {{-- Show import errors if any --}}
     @if(session('import_errors'))
     <div class="mt-3 pt-3 border-top">
         <div style="font-size:12px;font-weight:600;color:#991B1B;margin-bottom:6px">
-            Import Errors:
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>Import Errors:
         </div>
         @foreach(session('import_errors') as $err)
-        <div style="font-size:11px;color:#991B1B;padding:2px 0">⚠ {{ $err }}</div>
+        <div style="font-size:11px;color:#991B1B;padding:2px 0">
+            <i class="bi bi-x-circle me-1"></i>{{ $err }}
+        </div>
         @endforeach
     </div>
     @endif
+
+    @if(session('admin_override_note'))
+    <div class="mt-3 pt-3 border-top d-flex align-items-start gap-2"
+         style="background:#FEF3C7;border-radius:8px;padding:10px 12px;margin-top:8px!important">
+        <i class="bi bi-lock-fill" style="color:#92400E;flex-shrink:0;margin-top:1px"></i>
+        <div style="font-size:12px;color:#92400E">
+            <strong>Admin-locked values ignored:</strong>
+            {{ session('admin_override_note') }}
+        </div>
+    </div>
+    @endif
+</div>
+@endif
+
+{{-- ──────────────────────────────────────────────────────────
+     Calc-mode legend (shown when not 'none')
+     ────────────────────────────────────────────────────────── --}}
+@if($calcMode !== 'none')
+<div class="alert mb-3 d-flex align-items-start gap-3"
+     style="background:#F5F3FF;border:1px solid #C4B5FD;border-radius:10px;
+            color:#4C1D95;font-size:13px;">
+    <div style="font-size:22px;line-height:1">🧮</div>
+    <div>
+        <div class="fw-semibold mb-1">
+            @if($calcMode === 'qty_rate_freq')
+                Budget amounts are computed as <strong>Quantity × Rate × Frequency</strong>.
+            @else
+                Budget amounts are computed as <strong>Quantity × Rate</strong>.
+            @endif
+            The annual total is spread equally across all 12 months.
+        </div>
+        <div style="font-size:12px;opacity:.8">
+            @if($adminSetsRate && $adminSetsFreq)
+                Rate and Frequency are set by your administrator and cannot be changed.
+            @elseif($adminSetsRate)
+                Rate is set by your administrator and cannot be changed. Enter Quantity (and Frequency if shown).
+            @elseif($adminSetsFreq && $calcMode === 'qty_rate_freq')
+                Frequency is set by your administrator and cannot be changed. Enter Quantity and Rate.
+            @else
+                Enter Quantity{{ $calcMode === 'qty_rate_freq' ? ', Rate, and Frequency' : ' and Rate' }} for each line item.
+            @endif
+        </div>
+    </div>
 </div>
 @endif
 
@@ -231,9 +253,7 @@
             <span class="small text-muted">
                 Original: <strong class="cat-header-orig">{{ currency() }} {{ number_format($categoryData['total'], 2) }}</strong>
                 @if($catSupp > 0)
-                <span style="color:#10B981;">
-                    +{{ currency() }} {{ number_format($catSupp, 2) }} supp.
-                </span>
+                <span style="color:#10B981;">+{{ currency() }} {{ number_format($catSupp, 2) }} supp.</span>
                 <span class="cat-header-eff" style="color:var(--navy);font-weight:700;">
                     | Effective: {{ currency() }} {{ number_format($categoryData['total'] + $catSupp, 2) }}
                 </span>
@@ -243,12 +263,38 @@
         @php
             $monthLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         @endphp
-        <div class="card-body p-0" style="{{ $entryMode === 'monthly' ? 'overflow-x:auto;' : '' }}">
-            <table class="table table-sm table-hover mb-0" style="{{ $entryMode === 'monthly' ? 'min-width:1400px;' : '' }}">
+        <div class="card-body p-0" style="overflow-x:auto;">
+            <table class="table table-sm table-hover mb-0"
+                   style="{{ $calcMode !== 'none' ? 'min-width:900px;' : ($entryMode === 'monthly' ? 'min-width:1400px;' : '') }}">
                 <thead class="table-light">
                     <tr>
                         <th style="min-width:180px;">Account</th>
-                        @if($entryMode === 'monthly')
+
+                        @if($calcMode !== 'none')
+                            {{-- ── Qty × Rate [× Freq] headers ── --}}
+                            <th class="text-end" style="min-width:90px;">
+                                Qty
+                            </th>
+                            <th class="text-end" style="min-width:110px;">
+                                Rate
+                                @if($adminSetsRate)
+                                    <i class="bi bi-lock-fill" title="Set by admin" style="cursor:help;opacity:.55;font-size:11px"></i>
+                                @endif
+                            </th>
+                            @if($calcMode === 'qty_rate_freq')
+                            <th class="text-end" style="min-width:90px;">
+                                Freq
+                                @if($adminSetsFreq)
+                                    <i class="bi bi-lock-fill" title="Set by admin" style="cursor:help;opacity:.55;font-size:11px"></i>
+                                @endif
+                            </th>
+                            @endif
+                            <th class="text-end" style="min-width:130px;">Year Total</th>
+                            <th class="text-end" style="min-width:100px;">Q1</th>
+                            <th class="text-end" style="min-width:100px;">Q2</th>
+                            <th class="text-end" style="min-width:100px;">Q3</th>
+                            <th class="text-end" style="min-width:100px;">Q4</th>
+                        @elseif($entryMode === 'monthly')
                             @foreach($monthLabels as $ml)
                                 <th class="text-end" style="min-width:90px;">{{ $ml }} ({{ currency() }})</th>
                             @endforeach
@@ -258,7 +304,10 @@
                             <th class="text-end">Q3 ({{ currency() }})</th>
                             <th class="text-end">Q4 ({{ currency() }})</th>
                         @endif
+
+                        @if($calcMode === 'none')
                         <th class="text-end">Original Total</th>
+                        @endif
                         <th class="text-end">Supplementary</th>
                         <th class="text-end">Effective Total</th>
                         @if($budgetVersion->isEditable())
@@ -279,6 +328,11 @@
                             'liability' => ['bg'=>'#F3E8FF','color'=>'#7C3AED'],
                             default     => ['bg'=>'#F1F5F9','color'=>'#475569'],
                         };
+                        // For qty mode: derive quarterly read-only display from monthly storage
+                        $displayQ1 = $item->q1_amount;
+                        $displayQ2 = $item->q2_amount;
+                        $displayQ3 = $item->q3_amount;
+                        $displayQ4 = $item->q4_amount;
                     @endphp
                     <tr data-item-id="{{ $item->id }}" data-supp="{{ $itemSupp }}">
                         <td class="small">
@@ -291,31 +345,111 @@
                             </span>
                             @endif
                         </td>
-                        @if($budgetVersion->isEditable())
-                            @if($entryMode === 'monthly')
-                                @foreach(range(1,12) as $mn)
-                                <td><input type="number"
-                                    class="form-control form-control-sm q-input m{{ $mn }} text-end"
-                                    value="{{ $item->{'m'.$mn.'_amount'} }}"
-                                    min="0" step="0.01" oninput="liveUpdate(this)"></td>
-                                @endforeach
-                            @else
-                                <td><input type="number" class="form-control form-control-sm q-input q1 text-end"
-                                    value="{{ $item->q1_amount }}" min="0" step="0.01"
-                                    oninput="liveUpdate(this)"></td>
-                                <td><input type="number" class="form-control form-control-sm q-input q2 text-end"
-                                    value="{{ $item->q2_amount }}" min="0" step="0.01"
-                                    oninput="liveUpdate(this)"></td>
-                                <td><input type="number" class="form-control form-control-sm q-input q3 text-end"
-                                    value="{{ $item->q3_amount }}" min="0" step="0.01"
-                                    oninput="liveUpdate(this)"></td>
-                                <td><input type="number" class="form-control form-control-sm q-input q4 text-end"
-                                    value="{{ $item->q4_amount }}" min="0" step="0.01"
-                                    oninput="liveUpdate(this)"></td>
+
+                        {{-- ════════════════════════════════════════════
+                             EDITABLE — Qty × Rate [× Freq] mode
+                             ════════════════════════════════════════════ --}}
+                        @if($budgetVersion->isEditable() && $calcMode !== 'none')
+                            {{-- Quantity (always user-entered) --}}
+                            <td>
+                                <input type="number"
+                                    class="form-control form-control-sm qty-input text-end"
+                                    value="{{ $item->quantity ?? '' }}"
+                                    min="0" step="any"
+                                    placeholder="0"
+                                    oninput="liveUpdate(this)">
+                            </td>
+
+                            {{-- Rate (locked or user-entered) --}}
+                            <td>
+                                @if($adminSetsRate)
+                                @php
+                                    // Fallback: line item → account code → category
+                                    $displayRate = $item->rate
+                                        ?? $item->accountCode->default_rate
+                                        ?? $item->accountCode->category->default_rate
+                                        ?? '';
+                                @endphp
+                                <input type="number"
+                                    class="form-control form-control-sm rate-input text-end"
+                                    value="{{ $displayRate }}"
+                                    min="0" step="any"
+                                    readonly
+                                    style="background:#F8FAFC;color:#475569;cursor:not-allowed;">
+                                @else
+                                <input type="number"
+                                    class="form-control form-control-sm rate-input text-end"
+                                    value="{{ $item->rate ?? '' }}"
+                                    min="0" step="any"
+                                    placeholder="0.00"
+                                    oninput="liveUpdate(this)">
+                                @endif
+                            </td>
+
+                            {{-- Frequency (if qty_rate_freq mode) --}}
+                            @if($calcMode === 'qty_rate_freq')
+                            <td>
+                                @if($adminSetsFreq)
+                                @php
+                                    // Fallback: line item → account code → category
+                                    $displayFreq = $item->frequency
+                                        ?? $item->accountCode->default_frequency
+                                        ?? $item->accountCode->category->default_frequency
+                                        ?? '';
+                                @endphp
+                                <input type="number"
+                                    class="form-control form-control-sm freq-input text-end"
+                                    value="{{ $displayFreq }}"
+                                    min="0" step="any"
+                                    readonly
+                                    style="background:#F8FAFC;color:#475569;cursor:not-allowed;">
+                                @else
+                                <input type="number"
+                                    class="form-control form-control-sm freq-input text-end"
+                                    value="{{ $item->frequency ?? '' }}"
+                                    min="0" step="any"
+                                    placeholder="1"
+                                    oninput="liveUpdate(this)">
+                                @endif
+                            </td>
                             @endif
-                            <td class="text-end text-muted small row-original">
+
+                            {{-- Computed year total --}}
+                            <td class="text-end fw-semibold row-original"
+                                style="color:var(--navy)">
                                 {{ number_format($item->total_amount, 2) }}
                             </td>
+                            {{-- Quarterly split (read-only, live-computed) --}}
+                            <td class="text-end small text-muted q1-display">{{ number_format($displayQ1, 2) }}</td>
+                            <td class="text-end small text-muted q2-display">{{ number_format($displayQ2, 2) }}</td>
+                            <td class="text-end small text-muted q3-display">{{ number_format($displayQ3, 2) }}</td>
+                            <td class="text-end small text-muted q4-display">{{ number_format($displayQ4, 2) }}</td>
+
+                            {{-- Supplementary & Effective --}}
+                            <td class="text-end" style="color:{{ $itemSupp > 0 ? '#10B981' : 'inherit' }}">
+                                {{ $itemSupp > 0 ? '+'.number_format($itemSupp, 2) : '—' }}
+                            </td>
+                            <td class="text-end fw-bold row-total" style="color:var(--navy)">
+                                {{ number_format($itemEffective, 2) }}
+                            </td>
+                            <td>
+                                <input type="text" class="form-control form-control-sm notes-input"
+                                    value="{{ $item->justification }}"
+                                    placeholder="Optional note"
+                                    onkeyup="scheduleAutoSave()">
+                            </td>
+
+                        {{-- ════════════════════════════════════════════
+                             EDITABLE — Direct amount (monthly) mode
+                             ════════════════════════════════════════════ --}}
+                        @elseif($budgetVersion->isEditable() && $entryMode === 'monthly')
+                            @foreach(range(1,12) as $mn)
+                            <td><input type="number"
+                                class="form-control form-control-sm q-input m{{ $mn }} text-end"
+                                value="{{ $item->{'m'.$mn.'_amount'} }}"
+                                min="0" step="0.01" oninput="liveUpdate(this)"></td>
+                            @endforeach
+                            <td class="text-end text-muted small row-original">{{ number_format($item->total_amount, 2) }}</td>
                             <td class="text-end" style="color:{{ $itemSupp > 0 ? '#10B981' : 'inherit' }}">
                                 {{ $itemSupp > 0 ? '+'.number_format($itemSupp, 2) : '—' }}
                             </td>
@@ -326,18 +460,62 @@
                                 value="{{ $item->justification }}"
                                 placeholder="Optional note"
                                 onkeyup="scheduleAutoSave()"></td>
+
+                        {{-- ════════════════════════════════════════════
+                             EDITABLE — Direct amount (quarterly) mode
+                             ════════════════════════════════════════════ --}}
+                        @elseif($budgetVersion->isEditable())
+                            <td><input type="number" class="form-control form-control-sm q-input q1 text-end"
+                                value="{{ $item->q1_amount }}" min="0" step="0.01"
+                                oninput="liveUpdate(this)"></td>
+                            <td><input type="number" class="form-control form-control-sm q-input q2 text-end"
+                                value="{{ $item->q2_amount }}" min="0" step="0.01"
+                                oninput="liveUpdate(this)"></td>
+                            <td><input type="number" class="form-control form-control-sm q-input q3 text-end"
+                                value="{{ $item->q3_amount }}" min="0" step="0.01"
+                                oninput="liveUpdate(this)"></td>
+                            <td><input type="number" class="form-control form-control-sm q-input q4 text-end"
+                                value="{{ $item->q4_amount }}" min="0" step="0.01"
+                                oninput="liveUpdate(this)"></td>
+                            <td class="text-end text-muted small row-original">{{ number_format($item->total_amount, 2) }}</td>
+                            <td class="text-end" style="color:{{ $itemSupp > 0 ? '#10B981' : 'inherit' }}">
+                                {{ $itemSupp > 0 ? '+'.number_format($itemSupp, 2) : '—' }}
+                            </td>
+                            <td class="text-end fw-bold row-total" style="color:var(--navy)">
+                                {{ number_format($itemEffective, 2) }}
+                            </td>
+                            <td><input type="text" class="form-control form-control-sm notes-input"
+                                value="{{ $item->justification }}"
+                                placeholder="Optional note"
+                                onkeyup="scheduleAutoSave()"></td>
+
+                        {{-- ════════════════════════════════════════════
+                             READ-ONLY views
+                             ════════════════════════════════════════════ --}}
                         @else
-                            @if($entryMode === 'monthly')
+                            @if($calcMode !== 'none')
+                                <td class="text-end small">{{ $item->quantity !== null ? number_format($item->quantity, 4) : '—' }}</td>
+                                <td class="text-end small">{{ $item->rate      !== null ? number_format($item->rate, 4)     : '—' }}</td>
+                                @if($calcMode === 'qty_rate_freq')
+                                <td class="text-end small">{{ $item->frequency !== null ? number_format($item->frequency, 4) : '—' }}</td>
+                                @endif
+                                <td class="text-end small fw-semibold">{{ number_format($item->total_amount, 2) }}</td>
+                                <td class="text-end small text-muted">{{ number_format($displayQ1, 2) }}</td>
+                                <td class="text-end small text-muted">{{ number_format($displayQ2, 2) }}</td>
+                                <td class="text-end small text-muted">{{ number_format($displayQ3, 2) }}</td>
+                                <td class="text-end small text-muted">{{ number_format($displayQ4, 2) }}</td>
+                            @elseif($entryMode === 'monthly')
                                 @foreach(range(1,12) as $mn)
                                 <td class="text-end small">{{ number_format($item->{'m'.$mn.'_amount'}, 2) }}</td>
                                 @endforeach
+                                <td class="text-end small text-muted">{{ number_format($item->total_amount, 2) }}</td>
                             @else
                                 <td class="text-end small">{{ number_format($item->q1_amount, 2) }}</td>
                                 <td class="text-end small">{{ number_format($item->q2_amount, 2) }}</td>
                                 <td class="text-end small">{{ number_format($item->q3_amount, 2) }}</td>
                                 <td class="text-end small">{{ number_format($item->q4_amount, 2) }}</td>
+                                <td class="text-end small text-muted">{{ number_format($item->total_amount, 2) }}</td>
                             @endif
-                            <td class="text-end small text-muted">{{ number_format($item->total_amount, 2) }}</td>
                             <td class="text-end" style="color:{{ $itemSupp > 0 ? '#10B981' : 'inherit' }}">
                                 {{ $itemSupp > 0 ? '+'.number_format($itemSupp, 2) : '—' }}
                             </td>
@@ -346,24 +524,38 @@
                     </tr>
                     @endforeach
                 </tbody>
-                <tfoot style="background:#F8FAFC;font-weight:700;" data-cat-supp="{{ $catSupp }}">
+
+                {{-- Category footer --}}
+                <tfoot style="background:#F8FAFC;font-weight:700;"
+                       data-cat-supp="{{ $catSupp }}">
                     <tr>
                         <td>Category Total</td>
-                        @if($entryMode === 'monthly')
+                        @if($calcMode !== 'none')
+                            {{-- Blank spacers align with qty / rate [/ freq] input columns --}}
+                            <td></td><td></td>
+                            @if($calcMode === 'qty_rate_freq')<td></td>@endif
+                            {{-- data-foot lets JS find cells without fragile index arithmetic --}}
+                            <td class="text-end" data-foot="yearTotal">{{ number_format($categoryData['total'], 2) }}</td>
+                            <td class="text-end" data-foot="q1">{{ number_format($categoryData['q1'], 2) }}</td>
+                            <td class="text-end" data-foot="q2">{{ number_format($categoryData['q2'], 2) }}</td>
+                            <td class="text-end" data-foot="q3">{{ number_format($categoryData['q3'], 2) }}</td>
+                            <td class="text-end" data-foot="q4">{{ number_format($categoryData['q4'], 2) }}</td>
+                        @elseif($entryMode === 'monthly')
                             @foreach(range(1,12) as $mn)
                             <td class="text-end">{{ number_format($categoryData["m{$mn}"], 2) }}</td>
                             @endforeach
+                            <td class="text-end">{{ number_format($categoryData['total'], 2) }}</td>
                         @else
                             <td class="text-end">{{ number_format($categoryData['q1'], 2) }}</td>
                             <td class="text-end">{{ number_format($categoryData['q2'], 2) }}</td>
                             <td class="text-end">{{ number_format($categoryData['q3'], 2) }}</td>
                             <td class="text-end">{{ number_format($categoryData['q4'], 2) }}</td>
+                            <td class="text-end">{{ number_format($categoryData['total'], 2) }}</td>
                         @endif
-                        <td class="text-end">{{ number_format($categoryData['total'], 2) }}</td>
                         <td class="text-end" style="color:{{ $catSupp > 0 ? '#10B981' : 'inherit' }}">
                             {{ $catSupp > 0 ? '+'.number_format($catSupp, 2) : '—' }}
                         </td>
-                        <td class="text-end" style="color:var(--navy)">
+                        <td class="text-end" data-foot="eff" style="color:var(--navy)">
                             {{ number_format($categoryData['total'] + $catSupp, 2) }}
                         </td>
                         @if($budgetVersion->isEditable())
@@ -386,10 +578,11 @@
 
 @if($budgetVersion->isEditable())
 <script>
-    const SAVE_URL = "{{ route('budget.save', $budgetVersion) }}";
-    const CSRF     = document.querySelector('meta[name="csrf-token"]')?.content
-                     || "{{ csrf_token() }}";
-    const CUR      = "{{ currency() }}";
+    const SAVE_URL  = "{{ route('budget.save', $budgetVersion) }}";
+    const CSRF      = document.querySelector('meta[name="csrf-token"]')?.content || "{{ csrf_token() }}";
+    const CUR       = "{{ currency() }}";
+    const ENTRY_MODE = '{{ $entryMode }}';
+    const CALC_MODE  = '{{ $calcMode }}';
 
     let autoSaveTimer = null;
     let isSaving      = false;
@@ -400,15 +593,34 @@
         });
     }
 
-    const ENTRY_MODE = '{{ $entryMode }}';
-
-    // Called on every input keystroke — updates row totals, category footer, grand total bar
+    // ── Called on every input — updates row totals, category footer, grand total bar ──
     function liveUpdate(input) {
         const row  = input.closest('tr');
         const supp = parseFloat(row.dataset.supp) || 0;
         let orig = 0;
 
-        if (ENTRY_MODE === 'monthly') {
+        if (CALC_MODE !== 'none') {
+            // Qty × Rate [× Freq]
+            const qty  = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
+            const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
+            // Empty freq field defaults to 1 (not 0, which would zero-out the total)
+            const freq = CALC_MODE === 'qty_rate_freq'
+                ? parseFloat(row.querySelector('.freq-input')?.value || '1')
+                : 1;
+            orig = qty * rate * freq;
+
+            // Year total cell
+            const ytEl = row.querySelector('.row-original');
+            if (ytEl) ytEl.textContent = numFmt(orig);
+
+            // Quarterly split display (equal quarters)
+            const qShare = orig / 4;
+            const qVals  = [qShare, qShare, qShare, orig - qShare * 3];
+            ['q1-display','q2-display','q3-display','q4-display'].forEach((cls, i) => {
+                const el = row.querySelector('.' + cls);
+                if (el) el.textContent = numFmt(qVals[i]);
+            });
+        } else if (ENTRY_MODE === 'monthly') {
             for (let m = 1; m <= 12; m++) {
                 orig += parseFloat(row.querySelector(`.m${m}`)?.value) || 0;
             }
@@ -421,7 +633,7 @@
 
         const origEl = row.querySelector('.row-original');
         const effEl  = row.querySelector('.row-total');
-        if (origEl) origEl.textContent = numFmt(orig);
+        if (origEl && CALC_MODE === 'none') origEl.textContent = numFmt(orig);
         if (effEl)  effEl.textContent  = numFmt(orig + supp);
 
         updateCategoryFooter(row.closest('table'));
@@ -430,13 +642,46 @@
     }
 
     function updateCategoryFooter(table) {
-        const rows  = table.querySelectorAll('tbody tr[data-item-id]');
-        const tfoot = table.querySelector('tfoot');
+        const rows    = table.querySelectorAll('tbody tr[data-item-id]');
+        const tfoot   = table.querySelector('tfoot');
         if (!tfoot) return;
         const catSupp = parseFloat(tfoot.dataset.catSupp) || 0;
         const cells   = tfoot.querySelectorAll('td');
 
-        if (ENTRY_MODE === 'monthly') {
+        if (CALC_MODE !== 'none') {
+            let orig = 0;
+            const qs = [0, 0, 0, 0];
+            rows.forEach(row => {
+                const qty  = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
+                const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
+                // Empty freq defaults to 1 so totals stay correct when field is blank
+                const freq = CALC_MODE === 'qty_rate_freq'
+                    ? parseFloat(row.querySelector('.freq-input')?.value || '1')
+                    : 1;
+                const rowTotal = qty * rate * freq;
+                orig += rowTotal;
+                const qShare = rowTotal / 4;
+                qs[0] += qShare; qs[1] += qShare; qs[2] += qShare; qs[3] += rowTotal - qShare * 3;
+            });
+
+            // Use data-foot attributes — no fragile cell-index arithmetic needed
+            const foot = tfoot.querySelector('tr');
+            const fq = name => foot?.querySelector(`[data-foot="${name}"]`);
+            const ytEl = fq('yearTotal'); if (ytEl) ytEl.textContent = numFmt(orig);
+            const qLabels = ['q1','q2','q3','q4'];
+            qLabels.forEach((lbl, i) => { const c = fq(lbl); if (c) c.textContent = numFmt(qs[i]); });
+            const effCell = fq('eff');
+            if (effCell) effCell.textContent = numFmt(orig + catSupp);
+
+            const card = table.closest('.card');
+            if (card) {
+                const hOrig = card.querySelector('.cat-header-orig');
+                const hEff  = card.querySelector('.cat-header-eff');
+                if (hOrig) hOrig.textContent = CUR + ' ' + numFmt(orig);
+                if (hEff)  hEff.textContent  = '| Effective: ' + CUR + ' ' + numFmt(orig + catSupp);
+            }
+
+        } else if (ENTRY_MODE === 'monthly') {
             const ms = new Array(12).fill(0);
             let orig = 0;
             rows.forEach(row => {
@@ -446,7 +691,6 @@
                     orig += v;
                 }
             });
-            // cells[0]=label, cells[1..12]=months, cells[13]=orig, cells[14]=supp, cells[15]=eff
             for (let m = 0; m < 12; m++) {
                 if (cells[m + 1]) cells[m + 1].textContent = numFmt(ms[m]);
             }
@@ -469,7 +713,6 @@
                 q1 += rq1; q2 += rq2; q3 += rq3; q4 += rq4;
                 orig += rq1 + rq2 + rq3 + rq4;
             });
-            // cells[0]=label, cells[1..4]=Q1-Q4, cells[5]=orig, cells[6]=supp, cells[7]=eff
             if (cells[1]) cells[1].textContent = numFmt(q1);
             if (cells[2]) cells[2].textContent = numFmt(q2);
             if (cells[3]) cells[3].textContent = numFmt(q3);
@@ -488,10 +731,22 @@
 
     function updateGrandTotals() {
         let q1=0, q2=0, q3=0, q4=0, orig=0, totalSupp=0;
+
         document.querySelectorAll('tr[data-item-id]').forEach(row => {
             const supp = parseFloat(row.dataset.supp) || 0;
             totalSupp += supp;
-            if (ENTRY_MODE === 'monthly') {
+
+            if (CALC_MODE !== 'none') {
+                const qty  = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
+                const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
+                const freq = CALC_MODE === 'qty_rate_freq'
+                    ? parseFloat(row.querySelector('.freq-input')?.value || '1')
+                    : 1;
+                const rowTotal = qty * rate * freq;
+                const qShare = rowTotal / 4;
+                q1 += qShare; q2 += qShare; q3 += qShare; q4 += rowTotal - qShare * 3;
+                orig += rowTotal;
+            } else if (ENTRY_MODE === 'monthly') {
                 const ms = [1,2,3,4,5,6,7,8,9,10,11,12].map(n =>
                     parseFloat(row.querySelector(`.m${n}`)?.value) || 0);
                 q1 += ms[0]+ms[1]+ms[2];
@@ -508,6 +763,7 @@
                 orig += rq1 + rq2 + rq3 + rq4;
             }
         });
+
         const fmt = v => CUR + ' ' + numFmt(v);
         const el  = id => document.getElementById(id);
         if (el('gt-q1'))        el('gt-q1').textContent        = fmt(q1);
@@ -521,6 +777,19 @@
     function collectItems() {
         return Array.from(document.querySelectorAll('tr[data-item-id]')).map(row => {
             const notes = row.querySelector('.notes-input')?.value || '';
+
+            if (CALC_MODE !== 'none') {
+                return {
+                    id:   row.dataset.itemId,
+                    qty:  parseFloat(row.querySelector('.qty-input')?.value)  || 0,
+                    rate: parseFloat(row.querySelector('.rate-input')?.value) || 0,
+                    freq: CALC_MODE === 'qty_rate_freq'
+                        ? parseFloat(row.querySelector('.freq-input')?.value || '1')
+                        : 1,
+                    notes,
+                };
+            }
+
             if (ENTRY_MODE === 'monthly') {
                 const item = { id: row.dataset.itemId, notes };
                 [1,2,3,4,5,6,7,8,9,10,11,12].forEach(n => {
@@ -528,6 +797,7 @@
                 });
                 return item;
             }
+
             return {
                 id:    row.dataset.itemId,
                 q1:    parseFloat(row.querySelector('.q1')?.value) || 0,
@@ -579,6 +849,14 @@
         const status = document.getElementById('save-status');
         if (status) status.textContent = 'Unsaved changes…';
         autoSaveTimer = setTimeout(saveBudget, 3000);
+    }
+
+    // ── On load: compute year-total / Q1-Q4 display for any saved qty/rate/freq values ──
+    if (CALC_MODE !== 'none') {
+        document.querySelectorAll('tr[data-item-id]').forEach(row => {
+            const firstInput = row.querySelector('.qty-input, .rate-input, .freq-input');
+            if (firstInput) liveUpdate(firstInput);
+        });
     }
 </script>
 @endif

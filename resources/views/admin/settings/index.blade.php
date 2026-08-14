@@ -28,14 +28,14 @@
                     <div style="width:36px;height:36px;border-radius:8px;
                                 background:var(--navy);display:flex;
                                 align-items:center;justify-content:center;
-                                font-size:16px">
-                        {{ match($group) {
-                            'general'       => '⚙️',
-                            'budget'        => '📋',
-                            'notifications' => '🔔',
-                            'security'      => '🔒',
-                            default         => '🔧'
-                        } }}
+                                font-size:17px;color:#fff">
+                        <i class="{{ match($group) {
+                            'general'       => 'bi bi-gear-fill',
+                            'budget'        => 'bi bi-clipboard2-fill',
+                            'notifications' => 'bi bi-bell-fill',
+                            'security'      => 'bi bi-shield-lock-fill',
+                            default         => 'bi bi-wrench-adjustable'
+                        } }}"></i>
                     </div>
                     <div>
                         <div style="font-size:14px;font-weight:700;color:var(--navy)">
@@ -54,7 +54,7 @@
                     @if($group === 'security')
                     <div class="ms-auto">
                         <span class="badge" style="background:#E65C00;color:#fff;font-size:10px">
-                            🔐 SSO & Security
+                            <i class="bi bi-shield-lock-fill me-1"></i>SSO & Security
                         </span>
                     </div>
                     @endif
@@ -113,6 +113,29 @@
                                class="form-control form-control-sm"
                                style="max-width:120px"
                                onchange="markDirty(this)">
+
+                        @elseif($setting->key === 'line_item_calc_mode')
+                        <select id="setting_{{ $setting->key }}"
+                                name="settings[{{ $setting->key }}]"
+                                class="form-select form-select-sm"
+                                style="max-width:260px"
+                                onchange="markDirty(this)">
+                            @foreach([
+                                'none'          => 'Direct entry (no Qty / Rate)',
+                                'qty_rate'      => 'Qty × Rate',
+                                'qty_rate_freq' => 'Qty × Rate × Frequency',
+                            ] as $val => $lbl)
+                            <option value="{{ $val }}"
+                                {{ old("settings.{$setting->key}", $setting->value) === $val ? 'selected' : '' }}>
+                                {{ $lbl }}
+                            </option>
+                            @endforeach
+                        </select>
+                        <div style="font-size:11px;color:var(--slate);margin-top:4px">
+                            Affects all budget entry forms.
+                            "Admin Controls Rate/Freq" settings below only apply
+                            when this is not "Direct entry".
+                        </div>
 
                         @elseif($setting->key === 'backup_frequency')
                         <select id="setting_{{ $setting->key }}"
@@ -194,7 +217,11 @@
                             <i class="bi bi-shield-lock"></i> SSO Status
                         </div>
                         <div style="font-size:11px;color:var(--slate)">
-                            {{ $ssoEnabled ? '✅ Active Directory SSO is ENABLED' : '⚠️ SSO is DISABLED' }}
+                            @if($ssoEnabled)
+                            <i class="bi bi-check-circle-fill text-success me-1"></i>Active Directory SSO is ENABLED
+                        @else
+                            <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>SSO is DISABLED
+                        @endif
                         </div>
                     </div>
                     <span class="badge" style="background:{{ $ssoEnabled ? '#10B981' : '#F59E0B' }};color:#fff;">

@@ -1,6 +1,13 @@
 @extends('layouts.app')
 @section('title', 'Add Account Code')
-@php $isExpump = old('account_category_id') ? ($categories->find(old('account_category_id'))?->budget_type === 'ex_pump_item') : false; @endphp
+@php
+    $isExpump      = old('account_category_id') ? ($categories->find(old('account_category_id'))?->budget_type === 'ex_pump_item') : false;
+    $calcMode      = \App\Models\SystemSetting::get('line_item_calc_mode', 'none');
+    $adminSetsRate = \App\Models\SystemSetting::get('admin_sets_rate', false);
+    $adminSetsFreq = \App\Models\SystemSetting::get('admin_sets_freq', false);
+    $showRateField = $calcMode !== 'none' && $adminSetsRate;
+    $showFreqField = $calcMode === 'qty_rate_freq' && $adminSetsFreq;
+@endphp
 
 @push('styles')
 <style>
@@ -91,6 +98,47 @@
                 <textarea name="description" rows="2"
                     class="form-control">{{ old('description') }}</textarea>
             </div>
+
+            {{-- ── Default Rate / Frequency (shown when admin-lock settings are on) ── --}}
+            @if($showRateField || $showFreqField)
+            <div class="mb-3 p-3 rounded" style="background:#F5F3FF;border:1px solid #C4B5FD;">
+                <div style="font-size:12px;font-weight:700;color:#4C1D95;margin-bottom:10px;">
+                    <i class="bi bi-lock-fill"></i> Admin-Controlled Budget Defaults
+                </div>
+                <div class="row g-3">
+                    @if($showRateField)
+                    <div class="col-sm-6">
+                        <label class="form-label small fw-semibold">Default Rate
+                            <span class="text-muted fw-normal">({{ currency() }} per unit)</span>
+                        </label>
+                        <input type="number" name="default_rate"
+                            value="{{ old('default_rate') }}"
+                            class="form-control form-control-sm @error('default_rate') is-invalid @enderror"
+                            min="0" step="any" placeholder="0.00">
+                        <div class="form-text" style="font-size:11px;">
+                            Budget inputters will see this rate as read-only.
+                        </div>
+                        @error('default_rate')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+                    @endif
+                    @if($showFreqField)
+                    <div class="col-sm-6">
+                        <label class="form-label small fw-semibold">Default Frequency
+                            <span class="text-muted fw-normal">(times per year, e.g. 12 = monthly)</span>
+                        </label>
+                        <input type="number" name="default_frequency"
+                            value="{{ old('default_frequency') }}"
+                            class="form-control form-control-sm @error('default_frequency') is-invalid @enderror"
+                            min="0" step="any" placeholder="1">
+                        <div class="form-text" style="font-size:11px;">
+                            Budget inputters will see this frequency as read-only.
+                        </div>
+                        @error('default_frequency')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+                    @endif
+                </div>
+            </div>
+            @endif
 
             {{-- Ex-pump–specific fields: shown only when category type = ex_pump_item --}}
             <div id="expumpFields" style="display:{{ $isExpump ? '' : 'none' }};">

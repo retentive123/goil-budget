@@ -31,7 +31,7 @@ class ImportExportController extends Controller
     {
         $this->authorizeBudgetAccess($budgetVersion);
 
-        $budgetVersion->load('lineItems.accountCode.category','department','period');
+        $budgetVersion->load('lineItems.accountCode.category','department','period.setting','period.codeRates','period.categoryRates');
 
         $filename = 'budget-' .
             str($budgetVersion->department->name)->slug() . '-' .
@@ -131,6 +131,9 @@ class ImportExportController extends Controller
             'file' => ['required','file','mimes:xlsx,xls','max:5120'],
         ]);
 
+        // Eager-load period settings so the import knows calc mode / admin-lock state
+        $budgetVersion->load('period.setting');
+
         $import = new BudgetImport($budgetVersion);
 
         try {
@@ -139,20 +142,43 @@ class ImportExportController extends Controller
             return back()->with('error', 'File could not be read: '.$e->getMessage());
         }
 
-        if (!empty($import->errors)) {
-            return back()
-                ->with('warning', 'Imported with errors. '.$import->imported.' rows saved.')
-                ->with('import_errors', $import->errors);
-        }
-
         \App\Services\AuditLogger::record(
             'budget_imported', 'budget', 'updated',
             ['subject_label' => "Budget v{$budgetVersion->version_number} imported from Excel"]
         );
 
-        return redirect()
-            ->route('budget.show', $budgetVersion)
-            ->with('success', $import->imported.' line items updated from Excel.');
+        // Build flash state
+        $hasErrors    = !empty($import->errors);
+        $hasOverrides = $import->skippedAdminOverrides > 0;
+
+        $overrideText = $hasOverrides
+            ? "{$import->skippedAdminOverrides} row(s) had admin-locked Rate/Frequency values changed in the file — those changes were discarded and the admin-set values were kept."
+            : null;
+
+        if ($hasErrors) {
+            $response = back()
+                ->with('warning', 'Import completed with errors. '.$import->imported.' row(s) saved.')
+                ->with('import_errors', $import->errors);
+
+            if ($overrideText) {
+                $response = $response->with('admin_override_note', $overrideText);
+            }
+
+            return $response;
+        }
+
+        $redirect = redirect()->route('budget.show', $budgetVersion);
+
+        if ($hasOverrides) {
+            // Show amber warning toast AND inline lock notice near the upload form
+            $redirect = $redirect
+                ->with('warning', $import->imported.' line item(s) updated from Excel.')
+                ->with('admin_override_note', $overrideText);
+        } else {
+            $redirect = $redirect->with('success', $import->imported.' line item(s) updated from Excel.');
+        }
+
+        return $redirect;
     }
 
     // ── Actuals Template Download ─────────────────────

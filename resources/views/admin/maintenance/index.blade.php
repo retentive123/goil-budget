@@ -7,7 +7,11 @@
 
 <div class="chart-card mb-4" style="border-left:4px solid {{ $isDown ? '#F43F5E' : '#10B981' }}">
     <div style="font-size:18px;font-weight:700;color:var(--navy)">
-        System Status: {{ $isDown ? '🔴 Under Maintenance' : '🟢 Live' }}
+        @if($isDown)
+            <i class="bi bi-circle-fill me-1" style="color:#F43F5E"></i>System Status: Under Maintenance
+        @else
+            <i class="bi bi-circle-fill me-1" style="color:#10B981"></i>System Status: Live
+        @endif
     </div>
     <p class="text-muted small mt-2 mb-0">
         Maintenance mode shows a friendly "we'll be back soon" page to all regular users

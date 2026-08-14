@@ -14,6 +14,7 @@ class BudgetLineItem extends Model
         'm1_amount',  'm2_amount',  'm3_amount',  'm4_amount',
         'm5_amount',  'm6_amount',  'm7_amount',  'm8_amount',
         'm9_amount',  'm10_amount', 'm11_amount', 'm12_amount',
+        'quantity', 'rate', 'frequency',
         'justification', 'last_updated_by', 'line_type',
     ];
 
@@ -23,6 +24,9 @@ class BudgetLineItem extends Model
         'm7_amount'  => 'float', 'm8_amount'  => 'float', 'm9_amount'  => 'float',
         'm10_amount' => 'float', 'm11_amount' => 'float', 'm12_amount' => 'float',
         'total_amount' => 'float',
+        'quantity'     => 'float',
+        'rate'         => 'float',
+        'frequency'    => 'float',
     ];
 
     // Backward-compat quarterly accessors — quarters derived from monthly storage

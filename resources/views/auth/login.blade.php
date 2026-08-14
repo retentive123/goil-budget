@@ -600,14 +600,14 @@
         {{-- Status messages --}}
         @if(session('status'))
         <div class="alert-msg alert-success">
-            <span>✓</span>
+            <i class="bi bi-check-circle-fill"></i>
             <span>{{ session('status') }}</span>
         </div>
         @endif
 
         @if($errors->has('email') && !$errors->has('password'))
         <div class="alert-msg">
-            <span>⚠</span>
+            <i class="bi bi-exclamation-triangle-fill"></i>
             <span>{{ $errors->first('email') }}</span>
         </div>
         @endif
@@ -643,7 +643,7 @@
             <div class="form-group">
                 <label class="form-label" for="password">Password</label>
                 <div class="input-wrap">
-                    <span class="input-icon">🔒</span>
+                    <span class="input-icon"><i class="bi bi-lock-fill"></i></span>
                     <input
                         type="password"
                         id="password"

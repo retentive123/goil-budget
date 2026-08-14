@@ -182,6 +182,7 @@
       <span class="docs-nav-label">Core Modules</span>
       <a class="docs-nav-link" href="#dashboard">Dashboard</a>
       <a class="docs-nav-link" href="#budget-entry">Budget Entry</a>
+      <a class="docs-nav-link" href="#all-budgets">All Budgets</a>
       <a class="docs-nav-link" href="#approvals">Approvals</a>
       <a class="docs-nav-link" href="#virements">Virements</a>
       <a class="docs-nav-link" href="#supplementary">Supplementary</a>
@@ -228,7 +229,7 @@
           <div class="docs-hero-meta-item"><strong>Organisation</strong>Ghana Oil Company Limited</div>
           <div class="docs-hero-meta-item"><strong>Currency</strong>GHS (Ghanaian Cedi)</div>
           <div class="docs-hero-meta-item"><strong>Authentication</strong>Local + Active Directory SSO</div>
-          <div class="docs-hero-meta-item"><strong>Last updated</strong>July 2026</div>
+          <div class="docs-hero-meta-item"><strong>Last updated</strong>August 2026</div>
         </div>
       </div>
 
@@ -373,12 +374,20 @@
         <ul>
           <li><strong>Pending approvals</strong> — budgets awaiting your decision.</li>
           <li><strong>Period statistics</strong> — total / submitted / approved / rejected / draft / not-started counts.</li>
+          <li><strong>Approved count breakdown</strong> — the Approved tile shows the total count and a breakdown of how many are departments vs. service stations (e.g. "3 depts, 5 stations").</li>
           <li><strong>Department status matrix</strong> — one-glance view of where every department stands.</li>
           <li><strong>Category breakdown</strong> — approved totals by account category.</li>
           <li><strong>Year-over-year trend</strong> — total approved budget across all periods.</li>
           <li><strong>Organisation budget chart</strong> — approved budget by department.</li>
         </ul>
         <div class="doc-tip">Finance dashboard data is cached for 5 minutes. If you have just approved a budget and the figures do not yet reflect it, wait a moment and refresh.</div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Period filter &amp; "All Periods" mode</div>
+        <p>The dashboard header includes a <strong>Period</strong> and <strong>Year</strong> filter. Selecting a specific period scopes all tiles, charts, and statistics to that period. Clearing both filters switches the dashboard to <strong>All Periods</strong> mode, which aggregates data across every budget period on record — useful for an organisation-wide snapshot rather than a single-year view.</p>
+        <p>In All Periods mode, charts show combined totals and the approved count reflects all periods. The period health bar and submission deadline banner are hidden because they are meaningless in an aggregate context.</p>
+        <div class="doc-note">All Periods mode uses a separate cache entry from individual-period views. Cached data refreshes every 5 minutes regardless of mode.</div>
       </div>
     </div>
     <hr class="docs-divider">
@@ -414,6 +423,46 @@
       <div class="doc-sub">
         <div class="doc-sub-title">Version limits &amp; Excel import</div>
         <p>Each department may submit up to <strong>4 versions</strong> per period. Amounts can also be uploaded via an Excel template — download the template from the budget entry screen, fill in the Q1–Q4 columns, and upload.</p>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Submission deadline behaviour</div>
+        <p>The <strong>My Budget</strong> page shows a deadline banner reflecting the current status:</p>
+        <ul>
+          <li><strong>Deadline upcoming</strong> — an amber banner shows the deadline date and a countdown.</li>
+          <li><strong>Deadline passed, draft exists</strong> — an amber warning: <em>"you can still edit your draft, but you will not be able to submit."</em> Editing continues normally; only the submission step is blocked until Finance grants an extension via <a href="{{ route('admin.budget-periods.index') }}">Admin → Budget Periods → Deadline Overrides</a>.</li>
+          <li><strong>Deadline passed, no draft</strong> — a red blocker: <em>"Contact Finance to request an extension."</em> No draft can be started or submitted until an override is granted.</li>
+        </ul>
+        <div class="doc-note">Editing a draft after the deadline is intentional — it lets departments keep their work-in-progress accurate while Finance decides whether to grant an extension.</div>
+      </div>
+    </div>
+    <hr class="docs-divider">
+
+    {{-- All Budgets ─────────────────────────────────── --}}
+    <div class="doc-section" id="all-budgets">
+      <div class="doc-eyebrow">Module</div>
+      <div class="doc-title">All Budgets</div>
+      <div class="doc-lead">Finance, admin, and senior leadership roles can view, filter, and compare budget submissions from all departments and service stations in one place at <strong>Budgets → All Budgets</strong>.</div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Filtering &amp; period selection</div>
+        <p>Use the filter bar to narrow by <strong>period</strong>, <strong>department</strong>, <strong>status</strong>, or <strong>version number</strong>. Selecting <em>All Periods</em> (the default when no period is chosen) aggregates across all periods — statistics reflect every budget ever submitted. Selecting a specific period scopes statistics and charts to that period.</p>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Matrix view — Departments &amp; Service Stations</div>
+        <p>The matrix view shows every entity's latest budget status, approved value, confirmed actuals, and utilisation bar at a glance. Entities are split into two tabs:</p>
+        <ul>
+          <li><strong>Departments</strong> — all active head-office and operational departments.</li>
+          <li><strong>Service Stations</strong> — all retail and fuel sites grouped under zones.</li>
+        </ul>
+        <p>Use the tab buttons to switch between the two lists. Each panel paginates independently — the <em>Show</em> dropdown sets page size (15 / 25 / 50 / All). Clicking a department or station row opens the detailed version view.</p>
+        <div class="doc-tip">Actuals appear only when a specific period is selected. In All Periods mode the Actual and Utilisation columns show zero because actuals are period-specific and cannot be meaningfully summed across periods.</div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">List view</div>
+        <p>The list view shows every budget <em>version</em> (not just the latest) with pagination and column-level filters. Use this when you need to review rejected or earlier versions, or export the full dataset.</p>
       </div>
     </div>
     <hr class="docs-divider">

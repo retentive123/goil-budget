@@ -40,6 +40,8 @@ class AccountCategoryController extends Controller
             'description'             => ['nullable', 'string'],
             'budget_type'             => ['required','in:revenue,expense,both,capital_expenditure,assets,liabilities,ex_pump_item'],
             'account_sub_category_id' => ['nullable', 'exists:account_sub_categories,id'],
+            'default_rate'            => ['nullable', 'numeric', 'min:0'],
+            'default_frequency'       => ['nullable', 'numeric', 'min:0'],
         ]);
 
         AccountCategory::create([...$validated, 'is_active' => true]);
@@ -76,6 +78,8 @@ class AccountCategoryController extends Controller
             'is_active'               => ['boolean'],
             'budget_type'             => ['required','in:revenue,expense,both,capital_expenditure,assets,liabilities,ex_pump_item'],
             'account_sub_category_id' => ['nullable', 'exists:account_sub_categories,id'],
+            'default_rate'            => ['nullable', 'numeric', 'min:0'],
+            'default_frequency'       => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $accountCategory->update($validated);

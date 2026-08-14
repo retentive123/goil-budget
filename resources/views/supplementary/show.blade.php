@@ -203,7 +203,7 @@
                           placeholder="Approval notes (optional)"></textarea>
             </div>
             <button type="submit" class="btn btn-sm btn-success w-100">
-                ✔ Approve
+                <i class="bi bi-check-lg me-1"></i>Approve
             </button>
         </form>
 

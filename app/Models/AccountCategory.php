@@ -9,9 +9,17 @@ class AccountCategory extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'code', 'description', 'is_active', 'budget_type', 'account_sub_category_id'];
+    protected $fillable = [
+        'name', 'code', 'description', 'is_active', 'budget_type',
+        'account_sub_category_id',
+        'default_rate', 'default_frequency',
+    ];
 
-    protected $casts = ['is_active' => 'boolean'];
+    protected $casts = [
+        'is_active'        => 'boolean',
+        'default_rate'     => 'float',
+        'default_frequency'=> 'float',
+    ];
 
     // Types that appear in the P&L income statement
     public const PNL_TYPES = ['revenue', 'expense', 'both'];

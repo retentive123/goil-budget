@@ -49,25 +49,33 @@ class AccountCategoryImport implements ToCollection, WithHeadingRow
                 }
 
                 $description = trim($row['description'] ?? '') ?: null;
+                $defaultRate = isset($row['default_rate']) && $row['default_rate'] !== ''
+                    ? (float) $row['default_rate']  : null;
+                $defaultFreq = isset($row['default_frequency']) && $row['default_frequency'] !== ''
+                    ? (float) $row['default_frequency'] : null;
 
                 if ($existing->has($code)) {
                     $toUpdate[] = [
-                        'id'          => $existing->get($code)->id,
-                        'name'        => $name,
-                        'budget_type' => $budgetType,
-                        'description' => $description,
-                        'updated_at'  => $now,
+                        'id'               => $existing->get($code)->id,
+                        'name'             => $name,
+                        'budget_type'      => $budgetType,
+                        'description'      => $description,
+                        'default_rate'     => $defaultRate,
+                        'default_frequency'=> $defaultFreq,
+                        'updated_at'       => $now,
                     ];
                     $this->updated++;
                 } else {
                     $toInsert[] = [
-                        'code'        => $code,
-                        'name'        => $name,
-                        'budget_type' => $budgetType,
-                        'description' => $description,
-                        'is_active'   => true,
-                        'created_at'  => $now,
-                        'updated_at'  => $now,
+                        'code'             => $code,
+                        'name'             => $name,
+                        'budget_type'      => $budgetType,
+                        'description'      => $description,
+                        'default_rate'     => $defaultRate,
+                        'default_frequency'=> $defaultFreq,
+                        'is_active'        => true,
+                        'created_at'       => $now,
+                        'updated_at'       => $now,
                     ];
                     $this->imported++;
                 }
@@ -84,7 +92,7 @@ class AccountCategoryImport implements ToCollection, WithHeadingRow
             DB::table('account_categories')->upsert(
                 $chunk,
                 ['id'],
-                ['name', 'budget_type', 'description', 'updated_at']
+                ['name', 'budget_type', 'description', 'default_rate', 'default_frequency', 'updated_at']
             );
         }
     }

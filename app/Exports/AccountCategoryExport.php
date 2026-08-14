@@ -47,17 +47,19 @@ class AccountCategoryDataSheet implements
                 $c->description,
                 $c->is_active ? 'Yes' : 'No',
                 $c->accountCodes()->count(),
+                $c->default_rate,
+                $c->default_frequency,
             ]);
     }
 
     public function headings(): array
     {
-        return ['ID', 'Code', 'Name', 'Budget Type', 'Description', 'Active', 'Code Count'];
+        return ['ID', 'Code', 'Name', 'Budget Type', 'Description', 'Active', 'Code Count', 'Default Rate', 'Default Frequency'];
     }
 
     public function styles(Worksheet $sheet)
     {
-        $sheet->getStyle('A1:G1')->applyFromArray([
+        $sheet->getStyle('A1:I1')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF'], 'size' => 12],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF1B2A4A']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
@@ -66,7 +68,7 @@ class AccountCategoryDataSheet implements
         $sheet->getColumnDimension('A')->setVisible(false);
 
         $highestRow = $sheet->getHighestRow();
-        $sheet->getStyle('A1:G' . $highestRow)->applyFromArray([
+        $sheet->getStyle('A1:I' . $highestRow)->applyFromArray([
             'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['argb' => 'FFCBD5E1']]],
         ]);
 
@@ -86,18 +88,18 @@ class AccountCategoryTemplateSheet implements
 
     public function styles(Worksheet $sheet)
     {
-        // Headers: A=code, B=name, C=budget_type, D=description
-        $sheet->fromArray([['code', 'name', 'budget_type', 'description']], null, 'A1');
+        // Headers: A=code, B=name, C=budget_type, D=description, E=default_rate, F=default_frequency
+        $sheet->fromArray([['code', 'name', 'budget_type', 'description', 'default_rate', 'default_frequency']], null, 'A1');
 
-        $sheet->getStyle('A1:D1')->applyFromArray([
+        $sheet->getStyle('A1:F1')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF'], 'size' => 12],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF1B2A4A']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
         ]);
 
         // Sample row
-        $sheet->fromArray([['OPEX', 'Operating Expenses', 'expense', 'Day-to-day operational costs']], null, 'A2');
-        $sheet->getStyle('A2:D2')->applyFromArray([
+        $sheet->fromArray([['OPEX', 'Operating Expenses', 'expense', 'Day-to-day operational costs', '', '']], null, 'A2');
+        $sheet->getStyle('A2:F2')->applyFromArray([
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFFF9C4']],
             'font' => ['color' => ['argb' => 'FF666666']],
         ]);
@@ -120,14 +122,15 @@ class AccountCategoryTemplateSheet implements
         }
 
         // Helper text
-        $sheet->setCellValue('F1', '← Sample row (delete before uploading).');
-        $sheet->setCellValue('F2', 'budget_type values: revenue | expense | both | assets | liabilities | capital_expenditure');
-        $sheet->getStyle('F1:F2')->applyFromArray([
+        $sheet->setCellValue('H1', '← Sample row (delete before uploading).');
+        $sheet->setCellValue('H2', 'budget_type values: revenue | expense | both | assets | liabilities | capital_expenditure');
+        $sheet->setCellValue('H3', 'default_rate / default_frequency: leave blank if not using Qty×Rate mode.');
+        $sheet->getStyle('H1:H3')->applyFromArray([
             'font' => ['italic' => true, 'color' => ['argb' => 'FF999999'], 'size' => 10],
         ]);
 
         $highestRow = max(2, $sheet->getHighestDataRow());
-        $sheet->getStyle("A1:D{$highestRow}")->applyFromArray([
+        $sheet->getStyle("A1:F{$highestRow}")->applyFromArray([
             'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['argb' => 'FFCBD5E1']]],
         ]);
 

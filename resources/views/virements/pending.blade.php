@@ -77,7 +77,7 @@
                             placeholder="Approval comments (optional)"></textarea>
                     </div>
                     <button type="submit" class="btn btn-success btn-sm w-100">
-                        ✔ Approve
+                        <i class="bi bi-check-lg me-1"></i>Approve
                     </button>
                 </form>
 

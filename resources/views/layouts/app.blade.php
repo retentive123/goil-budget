@@ -1090,7 +1090,23 @@
     @if(session('success'))
     <div class="alert alert-success alert-dismissible fade show mb-4" role="alert"
          style="border-radius:10px;border:none;background:#D1FAE5;color:#065F46">
-        <i class="fas fa-check-circle me-2"></i>{{ session('success') }}
+        <i class="bi bi-check-circle-fill me-2"></i>{{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    @endif
+
+    @if(session('warning'))
+    <div class="alert alert-warning alert-dismissible fade show mb-4" role="alert"
+         style="border-radius:10px;border:none;background:#FEF3C7;color:#92400E">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>{{ session('warning') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    @endif
+
+    @if(session('info'))
+    <div class="alert alert-info alert-dismissible fade show mb-4" role="alert"
+         style="border-radius:10px;border:none;background:#DBEAFE;color:#1E40AF">
+        <i class="bi bi-info-circle-fill me-2"></i>{{ session('info') }}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     @endif
@@ -1098,7 +1114,7 @@
     @if(session('error'))
     <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert"
          style="border-radius:10px;border:none;background:#FEE2E2;color:#991B1B">
-        <i class="fas fa-exclamation-circle me-2"></i>{{ session('error') }}
+        <i class="bi bi-exclamation-circle-fill me-2"></i>{{ session('error') }}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     @endif
