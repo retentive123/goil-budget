@@ -103,10 +103,10 @@ class BudgetDataSheet implements
                     $item->accountCode->code,
                     $item->accountCode->name,
                     $item->quantity ?? 0,
-                    $item->rate    ?? '',
+                    $this->adminSetsRate ? ($item->rate ?? 1) : ($item->rate ?? ''),
                 ];
                 if ($this->calcMode === 'qty_rate_freq') {
-                    $row[] = $item->frequency ?? '';
+                    $row[] = $this->adminSetsFreq ? ($item->frequency ?? 1) : ($item->frequency ?? '');
                 }
                 $row[] = '';           // Year Total — formula written in styles()
                 $row[] = $item->justification;

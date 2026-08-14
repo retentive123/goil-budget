@@ -56,12 +56,14 @@ class BudgetCalculationService
             $pCode = $periodCodeRates[$code->id] ?? null;
             $pCat  = $periodCatRates[$code->account_category_id] ?? null;
 
+            // When admin controls rate/freq, the final fallback is 1 (not null/0)
+            // so a line item is never silently zeroed when no defaults are configured.
             $defaultRate = ($calcMode !== 'none' && $adminSetsRate)
                 ? ($pCode?->default_rate
                     ?? $code->default_rate
                     ?? $pCat?->default_rate
                     ?? $code->category->default_rate
-                    ?? null)
+                    ?? 1)
                 : null;
 
             $defaultFreq = ($calcMode === 'qty_rate_freq' && $adminSetsFreq)
@@ -69,7 +71,7 @@ class BudgetCalculationService
                     ?? $code->default_frequency
                     ?? $pCat?->default_frequency
                     ?? $code->category->default_frequency
-                    ?? null)
+                    ?? 1)
                 : null;
 
             BudgetLineItem::firstOrCreate(
@@ -104,13 +106,15 @@ class BudgetCalculationService
                     $updates['rate'] = $pCode?->default_rate
                         ?? $code->default_rate
                         ?? $pCat?->default_rate
-                        ?? $code->category->default_rate;
+                        ?? $code->category->default_rate
+                        ?? 1;
 
                 if ($calcMode === 'qty_rate_freq' && $adminSetsFreq)
                     $updates['frequency'] = $pCode?->default_frequency
                         ?? $code->default_frequency
                         ?? $pCat?->default_frequency
-                        ?? $code->category->default_frequency;
+                        ?? $code->category->default_frequency
+                        ?? 1;
 
                 if (!empty($updates)) {
                     BudgetLineItem::where('budget_version_id', $version->id)

@@ -38,7 +38,7 @@
             </div>
         </div>
         <div class="form-text mt-1">
-            ⚠ Backup may take a few seconds depending on database size.
+            <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>Backup may take a few seconds depending on database size.
             The page will reload when complete.
         </div>
     </form>

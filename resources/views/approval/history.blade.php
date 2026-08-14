@@ -356,7 +356,7 @@
                 @elseif($status === 'pending')
                 <div style="background:#FEF3C7;border-radius:8px;padding:8px 12px;
                             margin-top:8px;font-size:12px;color:#92400E">
-                    ⏳ Awaiting decision
+                    <i class="bi bi-hourglass-split me-1"></i>Awaiting decision
                 </div>
                 @else
                 <div style="background:#F8FAFC;border-radius:8px;padding:8px 12px;

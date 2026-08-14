@@ -150,7 +150,11 @@
                         <div class="d-flex align-items-center justify-content-center rounded-circle"
                              style="width: 44px; height: 44px; background: {{ Auth::user()->two_factor_enabled ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)' }};">
                             <span style="font-size: 20px;">
-                                @if(Auth::user()->two_factor_enabled) 🔐 @else 🔓 @endif
+                                @if(Auth::user()->two_factor_enabled)
+                                    <i class="bi bi-shield-lock-fill" style="color:#10B981"></i>
+                                @else
+                                    <i class="bi bi-shield" style="color:#F59E0B"></i>
+                                @endif
                             </span>
                         </div>
                         <div>

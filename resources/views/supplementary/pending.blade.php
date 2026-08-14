@@ -96,7 +96,7 @@
                         '{{ $isBatch ? route('supplementary.reject-batch', $first->batch_id) : route('supplementary.reject', $first->id) }}',
                         {{ $count }}, '{{ addslashes($first->department->name) }}'
                     )">
-                ✘ {{ $count > 1 ? 'Reject All' : 'Reject' }}
+                <i class="bi bi-x-lg me-1"></i>{{ $count > 1 ? 'Reject All' : 'Reject' }}
             </button>
             <button type="button"
                     class="btn btn-sm btn-outline-danger"
@@ -186,7 +186,7 @@
                             <button type="submit"
                                     class="btn btn-sm btn-outline-danger"
                                     style="font-size:11px;padding:2px 10px">
-                                ✘ Reject
+                                <i class="bi bi-x-lg me-1"></i>Reject
                             </button>
                         </form>
                     </td>
@@ -294,7 +294,7 @@ function batchReject(url, count, dept) {
         showCancelButton: true,
         confirmButtonColor: '#DC2626',
         cancelButtonColor: '#64748B',
-        confirmButtonText: count > 1 ? `✘ Reject All ${count}` : '✘ Reject',
+        confirmButtonText: count > 1 ? `Reject All ${count}` : 'Reject',
         cancelButtonText: 'Cancel',
         reverseButtons: true,
     }).then(result => {
@@ -320,7 +320,7 @@ function promptReject(event, form) {
         showCancelButton: true,
         confirmButtonColor: '#DC2626',
         cancelButtonColor: '#64748B',
-        confirmButtonText: '✘ Reject',
+        confirmButtonText: 'Reject',
         cancelButtonText: 'Cancel',
         reverseButtons: true,
     }).then(result => {

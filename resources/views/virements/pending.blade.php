@@ -91,7 +91,7 @@
                             required></textarea>
                     </div>
                     <button type="submit" class="btn btn-danger btn-sm w-100">
-                        ✘ Reject
+                        <i class="bi bi-x-lg me-1"></i>Reject
                     </button>
                 </form>
 

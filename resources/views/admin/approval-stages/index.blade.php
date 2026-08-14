@@ -22,7 +22,7 @@
 @if($anyInProgress)
 <div class="alert mb-4"
      style="background:#FEF3C7;color:#92400E;border:none;border-radius:10px;font-size:13px">
-    ⚠ Some budgets are currently in the approval pipeline.
+    <i class="bi bi-exclamation-triangle-fill me-1"></i>Some budgets are currently in the approval pipeline.
     Stages with active budgets cannot be deleted until those budgets are processed.
 </div>
 @endif

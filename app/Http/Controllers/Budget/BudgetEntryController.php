@@ -181,7 +181,7 @@ class BudgetEntryController extends Controller
                     // Honour admin locks — ignore whatever the client sent
                     $snap = $adminSnapshots->get($d['id']);
                     $rate = $adminSetsRate
-                        ? (float) ($snap['rate'] ?? 0)
+                        ? (float) ($snap['rate'] ?? 1)
                         : (float) $d['rate'];
                     $freq = $calcMode === 'qty_rate_freq'
                         ? ($adminSetsFreq ? (float) ($snap['frequency'] ?? 1) : (float) $d['freq'])

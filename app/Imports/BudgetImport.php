@@ -143,7 +143,7 @@ class BudgetImport implements
             $storedRate = $item->rate;
             if ($storedRate === null) {
                 $snap       = $this->periodCodeRates->get($item->account_code_id);
-                $storedRate = $snap?->rate ?? $item->accountCode?->default_rate ?? 0;
+                $storedRate = $snap?->rate ?? $item->accountCode?->default_rate ?? 1;
             }
             $rate     = (float) $storedRate;
             $fileRate = trim((string) ($row['rate'] ?? '')) !== '' ? (float) $row['rate'] : null;

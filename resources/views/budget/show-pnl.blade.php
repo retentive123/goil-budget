@@ -128,7 +128,7 @@
     <div class="mt-3 pt-3 border-top">
         <div style="font-size:12px;font-weight:600;color:#991B1B;margin-bottom:6px">Import Errors:</div>
         @foreach(session('import_errors') as $err)
-        <div style="font-size:11px;color:#991B1B;padding:2px 0">⚠ {{ $err }}</div>
+        <div style="font-size:11px;color:#991B1B;padding:2px 0"><i class="bi bi-exclamation-triangle-fill me-1"></i>{{ $err }}</div>
         @endforeach
     </div>
     @endif

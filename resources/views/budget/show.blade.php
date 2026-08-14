@@ -364,11 +364,11 @@
                             <td>
                                 @if($adminSetsRate)
                                 @php
-                                    // Fallback: line item → account code → category
+                                    // Fallback: line item → account code → category → 1
                                     $displayRate = $item->rate
                                         ?? $item->accountCode->default_rate
                                         ?? $item->accountCode->category->default_rate
-                                        ?? '';
+                                        ?? 1;
                                 @endphp
                                 <input type="number"
                                     class="form-control form-control-sm rate-input text-end"
@@ -391,11 +391,11 @@
                             <td>
                                 @if($adminSetsFreq)
                                 @php
-                                    // Fallback: line item → account code → category
+                                    // Fallback: line item → account code → category → 1
                                     $displayFreq = $item->frequency
                                         ?? $item->accountCode->default_frequency
                                         ?? $item->accountCode->category->default_frequency
-                                        ?? '';
+                                        ?? 1;
                                 @endphp
                                 <input type="number"
                                     class="form-control form-control-sm freq-input text-end"

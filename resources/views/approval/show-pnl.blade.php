@@ -335,13 +335,13 @@
                 <div class="d-flex align-items-start gap-2 mb-3">
                     <div class="mt-1">
                         @if($step['status'] === 'approved')
-                            <span class="text-success">✔</span>
+                            <i class="bi bi-check-circle-fill text-success" style="font-size:16px"></i>
                         @elseif($step['status'] === 'rejected')
-                            <span class="text-danger">✘</span>
+                            <i class="bi bi-x-circle-fill text-danger" style="font-size:16px"></i>
                         @elseif($step['status'] === 'pending')
-                            <span class="text-warning">●</span>
+                            <i class="bi bi-hourglass-split text-warning" style="font-size:16px"></i>
                         @else
-                            <span class="text-muted">○</span>
+                            <i class="bi bi-circle text-muted" style="font-size:16px"></i>
                         @endif
                     </div>
                     <div class="flex-grow-1">

@@ -191,7 +191,7 @@
                 <div id="changeIndicator" class="alert mb-3"
                      style="background:#FEF3C7;color:#92400E;border:none;
                             border-radius:8px;font-size:12px;display:none">
-                    ⚠ You have unsaved changes.
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>You have unsaved changes.
                 </div>
 
                 <button type="submit" class="btn w-100 mb-2"

@@ -634,7 +634,7 @@
                 </div>
                 @error('email')
                 <div class="invalid-msg">
-                    <span>⚠</span> {{ $message }}
+                    <i class="bi bi-exclamation-triangle-fill"></i> {{ $message }}
                 </div>
                 @enderror
             </div>
@@ -653,12 +653,12 @@
                         autocomplete="current-password"
                     >
                     <button type="button" class="pw-toggle" onclick="togglePassword()" id="pwToggle">
-                        👁
+                        <i class="bi bi-eye" id="pwToggleIcon"></i>
                     </button>
                 </div>
                 @error('password')
                 <div class="invalid-msg">
-                    <span>⚠</span> {{ $message }}
+                    <i class="bi bi-exclamation-triangle-fill"></i> {{ $message }}
                 </div>
                 @enderror
             </div>
@@ -705,7 +705,8 @@ function togglePassword() {
     const toggle = document.getElementById('pwToggle');
     pwVisible    = !pwVisible;
     input.type   = pwVisible ? 'text' : 'password';
-    toggle.textContent = pwVisible ? '🙈' : '👁';
+    const ic = document.getElementById('pwToggleIcon');
+    if (ic) { ic.className = pwVisible ? 'bi bi-eye-slash' : 'bi bi-eye'; }
 }
 
 // Loading state on submit

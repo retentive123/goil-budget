@@ -506,7 +506,7 @@ function updateTotals() {
 function setStatus(state, text) {
     const el = document.getElementById('save-status');
     if (!el) return;
-    el.textContent  = text;
+    el.innerHTML  = text;
     el.style.visibility = 'visible';
     // unsaved → amber  |  saving → blue  |  saved → green  |  error → red
     const styles = {
@@ -525,7 +525,7 @@ function setStatus(state, text) {
 function scheduleAutoSave() {
     if (IS_CONFIRMED) return;
     clearTimeout(autoSaveTimer);
-    setStatus('unsaved', '● Unsaved changes');
+    setStatus('unsaved', '<i class="bi bi-circle-fill" style="font-size:8px;vertical-align:middle"></i> Unsaved changes');
     autoSaveTimer = setTimeout(saveActuals, 3000);
 }
 
@@ -579,9 +579,9 @@ async function saveActuals() {
 
         const data = await res.json();
         if (data.success) {
-            setStatus('saved', '✓ Saved at ' + data.saved_at);
+            setStatus('saved', '<i class="bi bi-check-circle-fill" style="vertical-align:middle"></i> Saved at ' + data.saved_at);
         } else {
-            setStatus('error', '✕ Save failed');
+            setStatus('error', '<i class="bi bi-x-circle-fill" style="vertical-align:middle"></i> Save failed');
         }
     } catch (e) {
         setStatus('error', '✕ Network error');

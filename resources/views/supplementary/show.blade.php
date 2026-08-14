@@ -144,7 +144,7 @@
         <div class="chart-title">Timeline</div>
         <div style="font-size:12px">
             <div class="d-flex gap-2 mb-3">
-                <div style="color:#10B981;font-size:18px">●</div>
+                <div><i class="bi bi-check-circle-fill" style="color:#10B981;font-size:18px"></i></div>
                 <div>
                     <div class="fw-semibold">Submitted</div>
                     <div style="color:var(--slate)">{{ $supplementary->requestedBy->name }}</div>
@@ -156,7 +156,8 @@
 
             @if($supplementary->reviewedBy)
             <div class="d-flex gap-2 mb-3">
-                <div style="color:{{ $supplementary->status==='approved'?'#10B981':'#F43F5E' }};font-size:18px">●</div>
+                <div><i class="{{ $supplementary->status==='approved'?'bi bi-check-circle-fill':'bi bi-x-circle-fill' }}"
+                        style="color:{{ $supplementary->status==='approved'?'#10B981':'#F43F5E' }};font-size:18px"></i></div>
                 <div>
                     <div class="fw-semibold">
                         {{ $supplementary->status === 'approved' ? 'Approved' : 'Rejected' }}
@@ -169,7 +170,7 @@
             </div>
             @else
             <div class="d-flex gap-2">
-                <div style="color:#F59E0B;font-size:18px">○</div>
+                <div><i class="bi bi-hourglass-split" style="color:#F59E0B;font-size:18px"></i></div>
                 <div style="color:var(--slate)">Awaiting Finance review</div>
             </div>
             @endif
@@ -218,7 +219,7 @@
                           required></textarea>
             </div>
             <button type="submit" class="btn btn-sm btn-danger w-100">
-                ✘ Reject
+                <i class="bi bi-x-lg me-1"></i>Reject
             </button>
         </form>
     </div>
