@@ -29,7 +29,12 @@
                     <span class="badge bg-secondary ms-2" id="totalSelected">0</span>
                     <span class="text-muted small ms-1">selected</span>
                 </div>
-                <div>
+                <div class="d-flex gap-2">
+                    <a href="{{ route('admin.departments.export-account-codes', $department) }}"
+                       class="btn btn-sm btn-outline-success"
+                       title="Download assigned codes as CSV">
+                        <i class="bi bi-download me-1"></i>Export Codes
+                    </a>
                     <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllCategories()">
                         <i class="bi bi-check-all"></i> Toggle All
                     </button>
@@ -178,17 +183,21 @@
                         <span class="small text-muted">{{ $percentage }}% assigned</span>
                     </div>
                 </div>
-                @if(count($assigned) > 0)
                 <div class="mt-3 pt-3 border-top">
                     <div class="text-muted small mb-1">Quick Actions:</div>
+                    <a href="{{ route('admin.departments.export-account-codes', $department) }}"
+                       class="btn btn-sm btn-outline-success w-100 mb-1">
+                        <i class="bi bi-download me-1"></i>Export Assigned Codes
+                    </a>
+                    @if(count($assigned) > 0)
                     <a href="{{ route('admin.departments.show', $department) }}" class="btn btn-sm btn-outline-info w-100 mb-1">
                         <i class="bi bi-eye"></i> View Department
                     </a>
                     <a href="{{ route('admin.departments.edit', $department) }}" class="btn btn-sm btn-outline-primary w-100">
                         <i class="bi bi-pencil"></i> Edit Department
                     </a>
+                    @endif
                 </div>
-                @endif
             </div>
         </div>
     </div>

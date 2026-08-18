@@ -74,8 +74,9 @@ Route::middleware('auth')->group(function () {
         Route::get('departments/mass-assign',  [DepartmentController::class, 'massAssignForm'])->name('departments.mass-assign');
         Route::post('departments/mass-assign', [DepartmentController::class, 'massAssign'])->name('departments.mass-assign.store');
         Route::resource('departments', DepartmentController::class);
-        Route::get('departments/{department}/account-codes',  [DepartmentController::class, 'accountCodes'])->name('departments.account-codes');
-        Route::post('departments/{department}/account-codes', [DepartmentController::class, 'syncAccountCodes'])->name('departments.sync-account-codes');
+        Route::get('departments/{department}/account-codes',        [DepartmentController::class, 'accountCodes'])->name('departments.account-codes');
+        Route::post('departments/{department}/account-codes',       [DepartmentController::class, 'syncAccountCodes'])->name('departments.sync-account-codes');
+        Route::get('departments/{department}/account-codes/export', [DepartmentController::class, 'exportAccountCodes'])->name('departments.export-account-codes');
 
         // Zones
         Route::resource('zones', ZoneController::class);

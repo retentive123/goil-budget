@@ -198,4 +198,52 @@ class DepartmentController extends Controller
         return redirect()->route('admin.departments.index')
             ->with('success', "Account codes updated for {$department->name}.");
     }
+
+    /**
+     * Download a CSV of all account codes assigned to this department.
+     * Accessible to admins and finance roles — no form POST, read-only.
+     */
+    public function exportAccountCodes(Department $department)
+    {
+        $codes = $department->accountCodes()
+            ->with('category')
+            ->orderBy('account_codes.code')
+            ->get();
+
+        $filename = 'department-codes-' . \Illuminate\Support\Str::slug($department->name) . '-' . now()->format('Y-m-d') . '.csv';
+
+        $headers = [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'no-cache, no-store, must-revalidate',
+        ];
+
+        $callback = function () use ($codes, $department) {
+            $out = fopen('php://output', 'w');
+
+            // Report header
+            fputcsv($out, ['Department Code Assignment Report']);
+            fputcsv($out, ['Department:', $department->name . ' (' . $department->code . ')']);
+            fputcsv($out, ['Generated:', now()->format('d M Y H:i')]);
+            fputcsv($out, ['Total Codes Assigned:', $codes->count()]);
+            fputcsv($out, []);
+
+            // Column headings
+            fputcsv($out, ['Code', 'Name', 'Category', 'Status', 'Description']);
+
+            foreach ($codes as $code) {
+                fputcsv($out, [
+                    $code->code,
+                    $code->name,
+                    $code->category->name ?? '—',
+                    $code->is_active ? 'Active' : 'Inactive',
+                    $code->description ?? '',
+                ]);
+            }
+
+            fclose($out);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
 }

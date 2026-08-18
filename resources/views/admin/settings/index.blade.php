@@ -137,6 +137,29 @@
                             when this is not "Direct entry".
                         </div>
 
+                        @elseif($setting->key === 'actuals_budget_check_mode')
+                        <select id="setting_{{ $setting->key }}"
+                                name="settings[{{ $setting->key }}]"
+                                class="form-select form-select-sm"
+                                style="max-width:260px"
+                                onchange="markDirty(this)">
+                            @foreach([
+                                'annual'  => 'Annual (flexible) — YTD vs full annual budget',
+                                'monthly' => 'Monthly (strict) — each month vs its allocation',
+                            ] as $val => $lbl)
+                            <option value="{{ $val }}"
+                                {{ old("settings.{$setting->key}", $setting->value) === $val ? 'selected' : '' }}>
+                                {{ $lbl }}
+                            </option>
+                            @endforeach
+                        </select>
+                        <div style="font-size:11px;color:var(--slate);margin-top:4px">
+                            <strong>Annual:</strong> a single month can exceed its monthly allocation
+                            as long as the total YTD stays under the annual budget.<br>
+                            <strong>Monthly:</strong> each month's actuals cannot exceed that
+                            month's specific budgeted amount.
+                        </div>
+
                         @elseif($setting->key === 'backup_frequency')
                         <select id="setting_{{ $setting->key }}"
                                 name="settings[{{ $setting->key }}]"

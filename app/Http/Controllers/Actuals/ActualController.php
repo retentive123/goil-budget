@@ -152,6 +152,10 @@ class ActualController extends Controller
      *
      * Over-budget check uses BudgetLineItem::effectiveBudget() exclusively —
      * never re-add supplementary manually here.
+     *
+     * Accepts both regular form POST and JSON (for the Save & Confirm AJAX flow).
+     * When called with Accept: application/json, returns JSON instead of redirects
+     * so the JS can chain a confirm step after a successful save.
      */
     public function store(Request $request)
     {
@@ -167,8 +171,11 @@ class ActualController extends Controller
             'actuals.*.description'  => ['nullable', 'string', 'max:500'],
         ]);
 
+        $wantsJson = $request->expectsJson();
+
         $this->assertDeptOwnership($request->department_id);
 
+        $checkMode       = \App\Models\SystemSetting::get('actuals_budget_check_mode', 'annual');
         $overBudgetItems = [];
 
         foreach ($request->actuals as $data) {
@@ -178,39 +185,15 @@ class ActualController extends Controller
             $lineItem = BudgetLineItem::with('accountCode')->find($data['line_item_id']);
             if (!$lineItem) continue;
 
-            // Only expense lines have a budget cap. Revenue lines are never blocked.
-            if ($lineItem->line_type !== 'expense') continue;
+            $hit = $this->checkLineOverBudget(
+                $lineItem,
+                (float) $data['amount'],
+                (int) $request->month,
+                (int) $request->year,
+                $checkMode,
+            );
 
-            // YTD confirmed actuals strictly BEFORE this month (this entry is additive on top)
-            $existingYTD = BudgetActual::where('budget_line_item_id', $lineItem->id)
-                ->where('status', 'confirmed')
-                ->where(function ($q) use ($request) {
-                    $q->where('year', '<', (int) $request->year)
-                      ->orWhere(function ($q2) use ($request) {
-                          $q2->where('year',  (int) $request->year)
-                             ->where('month', '<', (int) $request->month);
-                      });
-                })
-                ->sum('amount');
-
-            // SINGLE SOURCE OF TRUTH — never manually re-add supplementary anywhere else
-            $effectiveBudget = $lineItem->effectiveBudget();
-            $projectedTotal  = (float) $existingYTD + (float) $data['amount'];
-
-            if ($projectedTotal > $effectiveBudget) {
-                $overBudgetItems[] = [
-                    'code'            => $lineItem->accountCode->code,
-                    'name'            => $lineItem->accountCode->name,
-                    'original_budget' => $lineItem->total_amount,
-                    'supplementary'   => $lineItem->approvedSupplementaryTotal(),
-                    'budget'          => $effectiveBudget,
-                    'ytd_before'      => $existingYTD,
-                    'this_entry'      => (float) $data['amount'],
-                    'projected_total' => $projectedTotal,
-                    'overrun'         => $projectedTotal - $effectiveBudget,
-                    'line_item_id'    => $lineItem->id,
-                ];
-            }
+            if ($hit) $overBudgetItems[] = $hit;
         }
 
         if (!empty($overBudgetItems)) {
@@ -224,6 +207,15 @@ class ActualController extends Controller
                 'notifiable_id'   => (int) $request->department_id,
                 'notifiable_type' => Department::class,
             ]);
+
+            if ($wantsJson) {
+                return response()->json([
+                    'status'  => 'over_budget',
+                    'message' => 'Submission blocked: ' . count($overBudgetItems) .
+                                 ' expense line(s) would exceed the approved budget.',
+                    'items'   => $overBudgetItems,
+                ], 422);
+            }
 
             return back()
                 ->withInput()
@@ -272,6 +264,14 @@ class ActualController extends Controller
 
         $monthName = BudgetActual::MONTHS[(int) $request->month];
 
+        if ($wantsJson) {
+            return response()->json([
+                'status'  => 'ok',
+                'saved'   => $saved,
+                'message' => "{$saved} actuals saved as draft for {$monthName} {$request->year}.",
+            ]);
+        }
+
         return redirect()->route('actuals.entry', [
             'period_id'     => $request->period_id,
             'department_id' => $request->department_id,
@@ -281,7 +281,9 @@ class ActualController extends Controller
     }
 
     /**
-     * Autosave actuals — JSON endpoint, no over-budget block, returns saved_at timestamp.
+     * Autosave actuals — JSON endpoint. Saves without blocking, but returns an
+     * `over_budget_lines` array in the response so the JS can surface a warning
+     * badge. Expense lines only; revenue lines are never flagged.
      */
     public function autosave(Request $request)
     {
@@ -299,7 +301,8 @@ class ActualController extends Controller
 
         $this->assertDeptOwnership($request->department_id);
 
-        $saved = 0;
+        $saved           = 0;
+        $overBudgetLines = [];
 
         DB::transaction(function () use ($request, &$saved) {
             foreach ($request->actuals as $item) {
@@ -333,10 +336,39 @@ class ActualController extends Controller
             }
         });
 
+        // Non-blocking over-budget check — compute after save (advisory only, does not block).
+        $checkMode = \App\Models\SystemSetting::get('actuals_budget_check_mode', 'annual');
+
+        foreach ($request->actuals as $item) {
+            $amount = isset($item['amount']) ? (float) $item['amount'] : 0.0;
+            if ($amount <= 0) continue;
+
+            $lineItem = BudgetLineItem::with('accountCode')->find($item['line_item_id']);
+            if (!$lineItem) continue;
+
+            $hit = $this->checkLineOverBudget(
+                $lineItem, $amount,
+                (int) $request->month, (int) $request->year,
+                $checkMode,
+            );
+
+            if ($hit) {
+                $overBudgetLines[] = [
+                    'line_item_id' => $hit['line_item_id'],
+                    'code'         => $hit['code'],
+                    'name'         => $hit['name'],
+                    'budget'       => $hit['budget'],
+                    'projected'    => $hit['projected_total'],
+                    'overrun'      => $hit['overrun'],
+                ];
+            }
+        }
+
         return response()->json([
-            'success'  => true,
-            'saved'    => $saved,
-            'saved_at' => now()->format('H:i:s'),
+            'success'          => true,
+            'saved'            => $saved,
+            'saved_at'         => now()->format('H:i:s'),
+            'over_budget_lines' => $overBudgetLines,
         ]);
     }
 
@@ -352,6 +384,8 @@ class ActualController extends Controller
 
         $this->assertDeptOwnership($request->department_id);
 
+        $monthName = BudgetActual::MONTHS[(int) $request->month];
+
         // Segregation of duties — confirmer cannot have recorded any of these drafts
         if (\App\Services\SegregationService::enabled()) {
             $recorders = BudgetActual::where('department_id',    $request->department_id)
@@ -363,13 +397,60 @@ class ActualController extends Controller
                 ->unique();
 
             if ($recorders->contains(auth()->id())) {
-                $monthName = BudgetActual::MONTHS[(int) $request->month];
                 return back()->with('error',
                     "You cannot confirm the {$monthName} actuals because you recorded " .
                     "one or more of the entries. A different user must confirm them. " .
                     "(Segregation of duties)"
                 );
             }
+        }
+
+        // Over-budget check — confirm is the point-of-no-return; block if any
+        // expense draft would breach the budget cap when confirmed.
+        $drafts = BudgetActual::with(['lineItem.accountCode'])
+            ->where('department_id',    $request->department_id)
+            ->where('budget_period_id', $request->period_id)
+            ->where('month',            $request->month)
+            ->where('year',             $request->year)
+            ->where('status',           'draft')
+            ->get();
+
+        $checkMode       = \App\Models\SystemSetting::get('actuals_budget_check_mode', 'annual');
+        $overBudgetItems = [];
+
+        foreach ($drafts as $draft) {
+            $lineItem = $draft->lineItem;
+            if (!$lineItem) continue;
+
+            $hit = $this->checkLineOverBudget(
+                $lineItem,
+                (float) $draft->amount,
+                (int) $request->month,
+                (int) $request->year,
+                $checkMode,
+            );
+
+            if ($hit) $overBudgetItems[] = $hit;
+        }
+
+        if (!empty($overBudgetItems)) {
+            BudgetNotification::create([
+                'user_id'         => auth()->id(),
+                'type'            => 'over_budget_blocked',
+                'subject'         => 'Confirmation blocked — budget overrun detected',
+                'message'         => 'The confirmation of ' . $monthName . ' actuals was blocked because ' .
+                                     count($overBudgetItems) . ' expense line(s) would exceed the approved budget.',
+                'notifiable_id'   => (int) $request->department_id,
+                'notifiable_type' => Department::class,
+            ]);
+
+            return back()
+                ->with('over_budget_items', $overBudgetItems)
+                ->with('error',
+                    "Confirmation blocked: " . count($overBudgetItems) .
+                    " expense line(s) would exceed the approved budget for {$monthName}. " .
+                    "Edit the draft entries or request a supplementary budget."
+                );
         }
 
         $count = BudgetActual::where('department_id',    $request->department_id)
@@ -381,8 +462,6 @@ class ActualController extends Controller
                 'status'      => 'confirmed',
                 'approved_by' => auth()->id(),
             ]);
-
-        $monthName = BudgetActual::MONTHS[(int) $request->month];
 
         return redirect()->route('actuals.entry', [
             'period_id'     => $request->period_id,
@@ -458,5 +537,79 @@ class ActualController extends Controller
         }
         abort_unless((int) $requestedDeptId === (int) $user->department_id, 403,
             'You can only record actuals for your own department.');
+    }
+
+    /**
+     * Check whether a single expense line item would breach its budget cap.
+     *
+     * Mode `annual` (flexible, default):
+     *   YTD confirmed actuals BEFORE this month + this entry vs effectiveBudget() (annual total).
+     *   A month can exceed its monthly allocation as long as the annual total is not breached.
+     *
+     * Mode `monthly` (strict):
+     *   This entry alone vs the line item's budgeted amount for this specific month (m{N}_amount).
+     *   Revenue lines are never checked regardless of mode.
+     *
+     * Returns an associative array with over-budget details, or null if within budget.
+     */
+    private function checkLineOverBudget(
+        BudgetLineItem $lineItem,
+        float          $amount,
+        int            $month,
+        int            $year,
+        string         $mode,
+    ): ?array {
+        // Revenue lines are never capped
+        if ($lineItem->line_type !== 'expense') return null;
+
+        if ($mode === 'monthly') {
+            // Strict: compare this entry against this month's specific budget amount
+            $monthBudget = (float) ($lineItem->{"m{$month}_amount"} ?? 0);
+            if ($amount <= $monthBudget) return null;
+
+            return [
+                'code'            => $lineItem->accountCode->code,
+                'name'            => $lineItem->accountCode->name,
+                'original_budget' => $lineItem->total_amount,
+                'supplementary'   => $lineItem->approvedSupplementaryTotal(),
+                'budget'          => $monthBudget,                // the monthly cap
+                'ytd_before'      => 0,
+                'this_entry'      => $amount,
+                'projected_total' => $amount,
+                'overrun'         => $amount - $monthBudget,
+                'line_item_id'    => $lineItem->id,
+                'check_mode'      => 'monthly',
+            ];
+        }
+
+        // Annual (flexible): YTD confirmed before this month + this entry vs annual budget
+        $ytd = BudgetActual::where('budget_line_item_id', $lineItem->id)
+            ->where('status', 'confirmed')
+            ->where(function ($q) use ($month, $year) {
+                $q->where('year', '<', $year)
+                  ->orWhere(function ($q2) use ($month, $year) {
+                      $q2->where('year', $year)->where('month', '<', $month);
+                  });
+            })
+            ->sum('amount');
+
+        $effectiveBudget = $lineItem->effectiveBudget();
+        $projected       = (float) $ytd + $amount;
+
+        if ($projected <= $effectiveBudget) return null;
+
+        return [
+            'code'            => $lineItem->accountCode->code,
+            'name'            => $lineItem->accountCode->name,
+            'original_budget' => $lineItem->total_amount,
+            'supplementary'   => $lineItem->approvedSupplementaryTotal(),
+            'budget'          => $effectiveBudget,
+            'ytd_before'      => (float) $ytd,
+            'this_entry'      => $amount,
+            'projected_total' => $projected,
+            'overrun'         => $projected - $effectiveBudget,
+            'line_item_id'    => $lineItem->id,
+            'check_mode'      => 'annual',
+        ];
     }
 }

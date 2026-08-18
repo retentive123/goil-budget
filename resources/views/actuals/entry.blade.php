@@ -482,6 +482,7 @@
 
 <script>
 const AUTOSAVE_URL = "{{ route('actuals.autosave') }}";
+const STORE_URL    = "{{ route('actuals.store') }}";
 const CSRF         = "{{ csrf_token() }}";
 const PERIOD_ID    = {{ $period->id }};
 const DEPT_ID      = {{ $department->id }};
@@ -580,6 +581,9 @@ async function saveActuals() {
         const data = await res.json();
         if (data.success) {
             setStatus('saved', '<i class="bi bi-check-circle-fill" style="vertical-align:middle"></i> Saved at ' + data.saved_at);
+
+            // Non-blocking over-budget warning badge
+            showOverBudgetWarning(data.over_budget_lines || []);
         } else {
             setStatus('error', '<i class="bi bi-x-circle-fill" style="vertical-align:middle"></i> Save failed');
         }
@@ -589,6 +593,62 @@ async function saveActuals() {
         isSaving = false;
         if (btn) btn.disabled = false;
     }
+}
+
+/**
+ * Show or clear a non-blocking warning badge when autosaved drafts exceed budget.
+ * Does not block saving — just informs the user so they can fix before confirming.
+ */
+function showOverBudgetWarning(lines) {
+    let badge = document.getElementById('over-budget-badge');
+
+    if (!lines || lines.length === 0) {
+        if (badge) badge.remove();
+        return;
+    }
+
+    if (!badge) {
+        badge = document.createElement('div');
+        badge.id = 'over-budget-badge';
+        badge.style.cssText = [
+            'position:fixed', 'bottom:24px', 'right:24px', 'z-index:1060',
+            'background:#FEF3C7', 'border:1px solid #F59E0B', 'border-radius:8px',
+            'padding:12px 16px', 'max-width:360px', 'box-shadow:0 4px 12px rgba(0,0,0,.15)',
+            'font-size:13px', 'line-height:1.5',
+        ].join(';');
+
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '&times;';
+        closeBtn.style.cssText = 'float:right;background:none;border:none;font-size:16px;cursor:pointer;margin:-4px -4px 0 8px;color:#92400E';
+        closeBtn.onclick = () => badge.remove();
+        badge.appendChild(closeBtn);
+
+        document.body.appendChild(badge);
+    }
+
+    // Rebuild content (close button is preserved as first child)
+    const closeBtn = badge.firstChild;
+    badge.innerHTML = '';
+    badge.appendChild(closeBtn);
+
+    const title = document.createElement('strong');
+    title.style.color = '#92400E';
+    title.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i>' + lines.length + ' line(s) exceed budget';
+    badge.appendChild(title);
+
+    const list = document.createElement('ul');
+    list.style.cssText = 'margin:6px 0 0;padding-left:16px';
+    lines.forEach(l => {
+        const li = document.createElement('li');
+        li.textContent = l.code + ' ' + l.name + ': over by ' + Number(l.overrun).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+        list.appendChild(li);
+    });
+    badge.appendChild(list);
+
+    const note = document.createElement('p');
+    note.style.cssText = 'margin:6px 0 0;color:#78350F;font-size:12px';
+    note.textContent = 'Draft saved. Confirmation will be blocked until resolved.';
+    badge.appendChild(note);
 }
 
 /* ── Attach listeners ── */
@@ -682,13 +742,73 @@ function confirmMonth() {
                 }
             });
 
-            // Submit the form
-            document.getElementById('actualForm').submit();
+            // Step 1: Save as draft via JSON fetch (no page navigation).
+            // On success, Step 2 submits confirmForm to lock the month.
+            // On over-budget 422, surface the blocked lines in a Swal error.
+            fetch(STORE_URL, {
+                method:  'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': CSRF,
+                    'Accept':       'application/json',
+                },
+                body: JSON.stringify({
+                    period_id:     PERIOD_ID,
+                    department_id: DEPT_ID,
+                    month:         MONTH,
+                    year:          YEAR,
+                    actuals:       collectActuals(),
+                }),
+            })
+            .then(async res => {
+                const data = await res.json();
 
-            // Submit confirmation after form submits
-            setTimeout(() => {
+                if (res.status === 422 && data.status === 'over_budget') {
+                    // Build a readable list of blocked lines
+                    const rows = (data.items || []).map(it =>
+                        `<li><strong>${it.code}</strong> ${it.name}: ` +
+                        `budget {{ currency() }} ${Number(it.budget).toLocaleString('en-GH',{minimumFractionDigits:2})} · ` +
+                        `projected {{ currency() }} ${Number(it.projected_total).toLocaleString('en-GH',{minimumFractionDigits:2})} ` +
+                        `<span style="color:#F43F5E">(+${Number(it.overrun).toLocaleString('en-GH',{minimumFractionDigits:2})})</span></li>`
+                    ).join('');
+
+                    Swal.fire({
+                        title: 'Confirmation Blocked',
+                        html: `
+                            <p style="color:#64748B;margin-bottom:12px">
+                                ${data.items.length} expense line(s) would exceed the approved budget.
+                                Request a supplementary budget for the affected lines before confirming.
+                            </p>
+                            <ul style="text-align:left;font-size:13px;padding-left:18px;color:#1E293B">${rows}</ul>
+                        `,
+                        icon: 'error',
+                        confirmButtonColor: '#1B2A4A',
+                        confirmButtonText: 'OK, I\'ll Review',
+                    });
+                    return;
+                }
+
+                if (!res.ok) {
+                    Swal.fire({
+                        title: 'Save Failed',
+                        text: data.message || 'An unexpected error occurred. Please try again.',
+                        icon: 'error',
+                        confirmButtonColor: '#1B2A4A',
+                    });
+                    return;
+                }
+
+                // Step 2: Draft saved successfully — now confirm (lock) the month.
                 document.getElementById('confirmForm').submit();
-            }, 1500);
+            })
+            .catch(() => {
+                Swal.fire({
+                    title: 'Network Error',
+                    text: 'Could not reach the server. Check your connection and try again.',
+                    icon: 'error',
+                    confirmButtonColor: '#1B2A4A',
+                });
+            });
         }
     });
 }

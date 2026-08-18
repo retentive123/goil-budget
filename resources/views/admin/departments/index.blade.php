@@ -190,6 +190,12 @@
                                        title="Manage Account Codes">
                                         <i class="fas fa-hashtag"></i>
                                     </a>
+                                    <a href="{{ route('admin.departments.export-account-codes', $dept) }}"
+                                       class="btn btn-sm btn-outline-success"
+                                       style="border-radius: 6px; font-size: 11px; padding: 2px 8px;"
+                                       title="Export Assigned Codes (CSV)">
+                                        <i class="bi bi-download"></i>
+                                    </a>
                                     <a href="{{ route('admin.departments.edit', $dept) }}"
                                        class="btn btn-sm btn-outline-primary"
                                        style="border-radius: 6px; font-size: 11px; padding: 2px 8px;"
