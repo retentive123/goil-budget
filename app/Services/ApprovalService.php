@@ -90,6 +90,14 @@ class ApprovalService
                 throw new \Exception('No pending approval stage found.');
             }
 
+            // Remove any stale decision for this version+stage (e.g. the version
+            // was reopened after rejection and is now going through approval again).
+            // The unique constraint on (budget_version_id, approval_stage_id) means
+            // we must clear the old row before inserting the new one.
+            ApprovalDecision::where('budget_version_id', $version->id)
+                ->where('approval_stage_id', $stage->id)
+                ->delete(); // cascade removes child line_item_approvals automatically
+
             $approvalDecision = ApprovalDecision::create([
                 'budget_version_id' => $version->id,
                 'approval_stage_id' => $stage->id,

@@ -211,5 +211,25 @@
         </div>
     </div>
 
+    <div class="col-md-4">
+        <div class="chart-card h-100 position-relative" style="border-top:3px solid #7C3AED">
+            <div style="font-size:28px;color:#7C3AED">
+                <i class="bi bi-pencil-square"></i>
+            </div>
+            <div class="chart-title mt-2">Revised Budget</div>
+            <span class="badge position-absolute top-0 end-0 m-2"
+                  style="background:#EDE9FE;color:#5B21B6;font-size:10px">New</span>
+            <p class="small text-muted">
+                Original Budget vs Mid-Year Revised Budget vs Actuals.
+                Shows what changed, how much, and how actuals track against both.
+            </p>
+            <a href="{{ route('reports.revised') }}"
+               class="btn btn-sm"
+               style="background:#7C3AED;color:#fff;border-radius:8px">
+                Open Report →
+            </a>
+        </div>
+    </div>
+
 </div>
 @endsection

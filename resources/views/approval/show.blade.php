@@ -484,7 +484,7 @@
                         @endif
 
                         {{-- Submit Button --}}
-                        <button type="submit" class="btn w-100 py-2 fw-semibold"
+                        <button type="button" id="submit-decision-btn" class="btn w-100 py-2 fw-semibold"
                                 style="background: #E65C00; color: #fff; border-radius: 10px; border: none; transition: all 0.3s ease; font-size: 14px;">
                             <i class="bi bi-send"></i> Submit Decision
                         </button>
@@ -604,6 +604,54 @@ document.querySelectorAll('input[name="decision"]').forEach(radio => {
     radio.addEventListener('change', function () {
         const hint = document.getElementById('comments-required');
         hint.style.display = this.value === 'rejected' ? 'inline' : 'none';
+    });
+});
+
+// SweetAlert2 confirmation before submitting the decision
+document.getElementById('submit-decision-btn')?.addEventListener('click', function () {
+    const form     = document.getElementById('decision-form');
+    const selected = form.querySelector('input[name="decision"]:checked');
+
+    if (!selected) {
+        Swal.fire({
+            icon:             'warning',
+            title:            'No decision selected',
+            text:             'Please choose Approve or Reject before submitting.',
+            confirmButtonColor: '#E65C00',
+        });
+        return;
+    }
+
+    const isApprove = selected.value === 'approved';
+    const comments  = (form.querySelector('textarea[name="comments"]')?.value ?? '').trim();
+
+    if (!isApprove && !comments) {
+        Swal.fire({
+            icon:             'warning',
+            title:            'Comments required',
+            text:             'Please add a reason before rejecting.',
+            confirmButtonColor: '#E65C00',
+        });
+        return;
+    }
+
+    Swal.fire({
+        title:              isApprove ? 'Approve this budget?' : 'Reject this budget?',
+        text:               isApprove
+                                ? 'This will advance the budget through the approval workflow.'
+                                : 'The department will be notified to revise and resubmit.',
+        icon:               isApprove ? 'question' : 'warning',
+        showCancelButton:   true,
+        confirmButtonText:  isApprove ? 'Yes, Approve' : 'Yes, Reject',
+        cancelButtonText:   'Cancel',
+        confirmButtonColor: isApprove ? '#10B981' : '#EF4444',
+        cancelButtonColor:  '#64748B',
+        reverseButtons:     true,
+        focusCancel:        true,
+    }).then(function (result) {
+        if (result.isConfirmed) {
+            form.submit();
+        }
     });
 });
 </script>

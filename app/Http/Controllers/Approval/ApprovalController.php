@@ -147,9 +147,14 @@ class ApprovalController extends Controller
                 $lineItemDecisions
             );
 
-            $message = $request->decision === 'approved'
-                ? 'Budget approved and forwarded to the next stage.'
-                : 'Budget rejected. The department has been notified to revise.';
+            if ($request->decision === 'approved') {
+                $freshStatus = $budgetVersion->fresh()->status;
+                $message = $freshStatus === \App\Models\BudgetVersion::STATUS_APPROVED
+                    ? 'Budget fully approved. The department has been notified.'
+                    : 'Budget approved and forwarded to the next stage.';
+            } else {
+                $message = 'Budget rejected. The department has been notified to revise.';
+            }
 
             return redirect()->route('approvals.index')->with('success', $message);
 

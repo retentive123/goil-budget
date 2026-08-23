@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BudgetVersion;
 use App\Models\BudgetPeriod;
 use App\Models\BudgetLineItem;
+use App\Models\Subsidiary;
 use App\Models\SystemSetting;
 use App\Services\BudgetCalculationService;
 use Illuminate\Http\Request;
@@ -17,23 +18,71 @@ class BudgetEntryController extends Controller
         protected BudgetCalculationService $calculator
     ) {}
 
-    // Show the department's budget for the current period
-    public function index()
+    // Show the department's (or subsidiary's) budget for the current period
+    public function index(Request $request)
     {
-        $user          = auth()->user();
-        $currentPeriod = BudgetPeriod::current();
+        $user    = auth()->user();
+        $periods = BudgetPeriod::orderByDesc('year')->orderByDesc('id')->get();
 
-        if (!$currentPeriod) {
+        // Resolve the selected period: URL param → current open → latest overall
+        if ($request->period_id) {
+            $currentPeriod = BudgetPeriod::find($request->period_id);
+        } else {
+            $currentPeriod = BudgetPeriod::current()
+                ?? $periods->first();
+        }
+
+        if (!$currentPeriod && $periods->isEmpty()) {
             return view('budget.no-period');
         }
 
-        // Get the latest version for this department
-        $version = BudgetVersion::where('budget_period_id', $currentPeriod->id)
-                                ->where('department_id', $user->department_id)
-                                ->orderByDesc('version_number')
-                                ->first();
+        // All versions for this user's entity in the selected period, newest first
+        $allVersions = $currentPeriod
+            ? BudgetVersion::where('budget_period_id', $currentPeriod->id)
+                ->when($user->subsidiary_id,
+                    fn($q) => $q->where('subsidiary_id', $user->subsidiary_id),
+                    fn($q) => $q->where('department_id', $user->department_id)
+                )
+                ->with('originalVersion', 'submittedBy')
+                ->withCount('lineItems')
+                ->orderByDesc('version_number')
+                ->get()
+            : collect();
 
-        return view('budget.index', compact('currentPeriod', 'version', 'user'));
+        // Latest version drives the primary action card
+        $version = $allVersions->first();
+
+        // Cross-period history — one row per period that has any version
+        // Use DB aggregates to avoid N+1 on line items
+        $historyVersions = BudgetVersion::when($user->subsidiary_id,
+                               fn($q) => $q->where('subsidiary_id', $user->subsidiary_id),
+                               fn($q) => $q->where('department_id', $user->department_id)
+                           )
+                           ->with('period')
+                           ->withSum('lineItems as line_total', 'total_amount')
+                           ->orderByDesc('version_number')
+                           ->get();
+
+        $periodHistory = $historyVersions
+            ->groupBy('budget_period_id')
+            ->map(function ($vv) {
+                $approved = $vv->where('status', 'approved')->first(); // already sorted desc
+                $latest   = $vv->first();
+                return [
+                    'period'   => $latest->period,
+                    'latest'   => $latest,
+                    'approved' => $approved,
+                    'count'    => $vv->count(),
+                    'total'    => (float) ($approved?->line_total ?? $latest->line_total ?? 0),
+                ];
+            })
+            ->sortByDesc(fn($r) => $r['period']?->year)
+            ->values();
+
+        return view('budget.index', compact(
+            'currentPeriod', 'version', 'allVersions',
+            'user', 'periods', 'periodHistory'
+        ));
     }
 
     // Start a new budget version for the current period
@@ -41,8 +90,12 @@ class BudgetEntryController extends Controller
     {
         $user = auth()->user();
 
-        if (!$user->department_id) {
-            return back()->with('error', 'Your account is not assigned to a department. Please contact the administrator.');
+        // Resolve which entity this user belongs to
+        $isSubsidiary = $user->isSubsidiaryUser();
+        $entityId     = $isSubsidiary ? $user->subsidiary_id : $user->department_id;
+
+        if (!$entityId) {
+            return back()->with('error', 'Your account is not assigned to a department or subsidiary. Please contact the administrator.');
         }
 
         $currentPeriod = BudgetPeriod::current();
@@ -51,29 +104,94 @@ class BudgetEntryController extends Controller
             return back()->with('error', 'No active budget period.');
         }
 
-        if (!BudgetVersion::canCreateNew($currentPeriod->id, $user->department_id)) {
-            return back()->with('error', 'Maximum of 4 budget versions reached for this period.');
+        // Guard: if a draft already exists (e.g. double-click), redirect to it
+        $existingDraft = BudgetVersion::where('budget_period_id', $currentPeriod->id)
+            ->when($isSubsidiary,
+                fn($q) => $q->where('subsidiary_id', $entityId),
+                fn($q) => $q->where('department_id', $entityId)
+            )
+            ->where('status', BudgetVersion::STATUS_DRAFT)
+            ->orderByDesc('version_number')
+            ->first();
+
+        if ($existingDraft) {
+            return redirect()->route('budget.show', $existingDraft)
+                ->with('info', "You already have a draft budget (v{$existingDraft->version_number}). Continue editing it below.");
         }
 
-        DB::transaction(function () use ($user, $currentPeriod) {
+        $canCreate = $isSubsidiary
+            ? BudgetVersion::canCreateNew($currentPeriod->id, null, $entityId)
+            : BudgetVersion::canCreateNew($currentPeriod->id, $entityId);
+
+        if (!$canCreate) {
+            return back()->with('error', 'Maximum of ' . BudgetVersion::maxVersions() . ' budget versions reached for this period.');
+        }
+
+        // Find the most recent previous version to copy figures from
+        $previousVersion = BudgetVersion::where('budget_period_id', $currentPeriod->id)
+            ->when($isSubsidiary,
+                fn($q) => $q->where('subsidiary_id', $entityId),
+                fn($q) => $q->where('department_id', $entityId)
+            )
+            ->whereIn('status', [BudgetVersion::STATUS_REJECTED, BudgetVersion::STATUS_APPROVED])
+            ->orderByDesc('version_number')
+            ->with('lineItems')
+            ->first();
+
+        $nextNum = $isSubsidiary
+            ? BudgetVersion::nextVersionNumber($currentPeriod->id, null, $entityId)
+            : BudgetVersion::nextVersionNumber($currentPeriod->id, $entityId);
+
+        $version = DB::transaction(function () use ($user, $currentPeriod, $isSubsidiary, $entityId, $nextNum, $previousVersion) {
             $version = BudgetVersion::create([
                 'budget_period_id' => $currentPeriod->id,
-                'department_id'    => $user->department_id,
-                'version_number'   => BudgetVersion::nextVersionNumber($currentPeriod->id, $user->department_id),
+                'department_id'    => $isSubsidiary ? null : $entityId,
+                'subsidiary_id'    => $isSubsidiary ? $entityId : null,
+                'version_number'   => $nextNum,
                 'status'           => BudgetVersion::STATUS_DRAFT,
                 'submitted_by'     => null,
             ]);
 
+            // Copy figures from the previous version if one exists, so the
+            // user starts from the last submitted numbers rather than blanks.
+            if ($previousVersion && $previousVersion->lineItems->isNotEmpty()) {
+                foreach ($previousVersion->lineItems as $item) {
+                    BudgetLineItem::create([
+                        'budget_version_id' => $version->id,
+                        'account_code_id'   => $item->account_code_id,
+                        'line_type'         => $item->line_type,
+                        'quantity'          => $item->quantity,
+                        'rate'              => $item->rate,
+                        'frequency'         => $item->frequency,
+                        'justification'     => $item->justification,
+                        'last_updated_by'   => auth()->id(),
+                        'm1_amount'         => $item->m1_amount,
+                        'm2_amount'         => $item->m2_amount,
+                        'm3_amount'         => $item->m3_amount,
+                        'm4_amount'         => $item->m4_amount,
+                        'm5_amount'         => $item->m5_amount,
+                        'm6_amount'         => $item->m6_amount,
+                        'm7_amount'         => $item->m7_amount,
+                        'm8_amount'         => $item->m8_amount,
+                        'm9_amount'         => $item->m9_amount,
+                        'm10_amount'        => $item->m10_amount,
+                        'm11_amount'        => $item->m11_amount,
+                        'm12_amount'        => $item->m12_amount,
+                    ]);
+                }
+            }
+
+            // Sync any newly-assigned account codes (adds missing rows, does not overwrite copied amounts)
             $this->calculator->populateLineItems($version);
+
+            return $version;
         });
 
-        $version = BudgetVersion::where('budget_period_id', $currentPeriod->id)
-                                ->where('department_id', $user->department_id)
-                                ->orderByDesc('version_number')
-                                ->first();
+        $msg = $previousVersion
+            ? "Budget v{$version->version_number} created with figures copied from v{$previousVersion->version_number}. Update what's changed and resubmit."
+            : "Budget v{$version->version_number} created. Start entering your figures.";
 
-        return redirect()->route('budget.show', $version)
-            ->with('success', "Budget v{$version->version_number} created. Start entering your figures.");
+        return redirect()->route('budget.show', $version)->with('success', $msg);
     }
 
     // Show the budget entry form
@@ -86,7 +204,7 @@ class BudgetEntryController extends Controller
             $this->calculator->populateLineItems($budgetVersion);
         }
 
-        $budgetVersion->load('lineItems.accountCode.category', 'period', 'department');
+        $budgetVersion->load('lineItems.accountCode.category', 'period', 'department', 'subsidiary.category', 'originalVersion');
 
         $summary     = $this->calculator->summaryByCategory($budgetVersion);
         $grandTotals = $this->calculator->grandTotals($budgetVersion);
@@ -121,7 +239,7 @@ class BudgetEntryController extends Controller
             $this->calculator->populateLineItems($budgetVersion);
         }
 
-        $budgetVersion->load('lineItems.accountCode.category', 'period', 'department');
+        $budgetVersion->load('lineItems.accountCode.category', 'period', 'department', 'subsidiary.category', 'originalVersion');
 
         $grandTotals = $this->calculator->grandTotals($budgetVersion);
 
@@ -169,7 +287,8 @@ class BudgetEntryController extends Controller
             $itemIds       = collect($request->items)->pluck('id');
             $adminSnapshots = $adminSetsRate || $adminSetsFreq
                 ? \App\Models\BudgetLineItem::whereIn('id', $itemIds)
-                    ->pluck(null, 'id')   // keyed by id for O(1) lookup
+                    ->get(['id', 'rate', 'frequency'])
+                    ->keyBy('id')
                     ->map(fn($i) => ['rate' => $i->rate, 'frequency' => $i->frequency])
                 : collect();
 
@@ -307,7 +426,7 @@ class BudgetEntryController extends Controller
                 $share, $share, $share, $share, $share, $last];
     }
 
-    // Ensure only the owning department can access this version
+    // Ensure only the owning department/subsidiary can access this version
     private function authorizeBudgetAccess(BudgetVersion $version): void
     {
         $user = auth()->user();
@@ -316,7 +435,16 @@ class BudgetEntryController extends Controller
             return; // These roles can view all
         }
 
-        if ($version->department_id !== $user->department_id) {
+        // Subsidiary user → must match subsidiary_id
+        if ($user->isSubsidiaryUser()) {
+            if ((int) $version->subsidiary_id !== (int) $user->subsidiary_id) {
+                abort(403, 'You do not have access to this budget.');
+            }
+            return;
+        }
+
+        // Department user → must match department_id
+        if ((int) $version->department_id !== (int) $user->department_id) {
             abort(403, 'You do not have access to this budget.');
         }
     }

@@ -77,32 +77,45 @@ class ActualController extends Controller
             ? BudgetPeriod::find($request->period_id)
             : BudgetPeriod::current();
 
-        $department = $request->department_id
-            ? Department::find($request->department_id)
-            : $user->department;
-
         $month = (int) $request->get('month', now()->month);
         $year  = (int) $request->get('year',  now()->year);
 
-        if (!$period || !$department) {
+        // Resolve entity — subsidiary users go through their subsidiary
+        $subsidiary = null;
+        $department = null;
+
+        if ($user->isSubsidiaryUser()) {
+            $subsidiaryId = $request->subsidiary_id ?? $user->subsidiary_id;
+            $subsidiary   = \App\Models\Subsidiary::find($subsidiaryId);
+        } else {
+            $department = $request->department_id
+                ? Department::find($request->department_id)
+                : $user->department;
+        }
+
+        $entityName = $subsidiary?->name ?? $department?->name;
+
+        if (!$period || (!$subsidiary && !$department)) {
             return redirect()->route('actuals.index')
                 ->with('error', 'Please select a period and department.');
         }
 
         $version = BudgetVersion::with('lineItems.accountCode.category')
             ->where('budget_period_id', $period->id)
-            ->where('department_id',    $department->id)
+            ->when($subsidiary, fn($q) => $q->where('subsidiary_id', $subsidiary->id))
+            ->when($department, fn($q) => $q->where('department_id', $department->id))
             ->where('status', 'approved')
             ->orderByDesc('version_number')
             ->first();
 
         if (!$version) {
             return redirect()->route('actuals.index')
-                ->with('error', "No approved budget found for {$department->name} in {$period->name}.");
+                ->with('error', "No approved budget found for {$entityName} in {$period->name}.");
         }
 
         // Existing actuals recorded for THIS specific month/year
-        $existingActuals = BudgetActual::where('department_id', $department->id)
+        $existingActuals = BudgetActual::when($subsidiary, fn($q) => $q->where('subsidiary_id', $subsidiary->id))
+            ->when($department, fn($q) => $q->where('department_id', $department->id))
             ->where('budget_period_id', $period->id)
             ->where('month', $month)
             ->where('year',  $year)
@@ -112,7 +125,8 @@ class ActualController extends Controller
         $byCategory = $version->lineItems->groupBy('accountCode.category.name');
 
         // YTD confirmed actuals up to and including this month
-        $ytdActuals = BudgetActual::where('department_id', $department->id)
+        $ytdActuals = BudgetActual::when($subsidiary, fn($q) => $q->where('subsidiary_id', $subsidiary->id))
+            ->when($department, fn($q) => $q->where('department_id', $department->id))
             ->where('budget_period_id', $period->id)
             ->where('month', '<=', $month)
             ->where('status', 'confirmed')
@@ -141,7 +155,7 @@ class ActualController extends Controller
         $departments = Department::where('is_active', true)->orderBy('name')->get();
 
         return view('actuals.entry', compact(
-            'period', 'periods', 'departments', 'department',
+            'period', 'periods', 'departments', 'department', 'subsidiary',
             'version', 'byCategory', 'existingActuals', 'ytdActuals',
             'month', 'year', 'lineRemaining'
         ));
@@ -161,7 +175,8 @@ class ActualController extends Controller
     {
         $request->validate([
             'period_id'              => ['required', 'exists:budget_periods,id'],
-            'department_id'          => ['required', 'exists:departments,id'],
+            'department_id'          => ['nullable', 'exists:departments,id'],
+            'subsidiary_id'          => ['nullable', 'exists:subsidiaries,id'],
             'month'                  => ['required', 'integer', 'min:1', 'max:12'],
             'year'                   => ['required', 'integer', 'min:2000', 'max:2100'],
             'actuals'                => ['required', 'array'],
@@ -173,7 +188,7 @@ class ActualController extends Controller
 
         $wantsJson = $request->expectsJson();
 
-        $this->assertDeptOwnership($request->department_id);
+        $this->assertDeptOwnership($request->department_id, $request->subsidiary_id);
 
         $checkMode       = \App\Models\SystemSetting::get('actuals_budget_check_mode', 'annual');
         $overBudgetItems = [];
@@ -248,7 +263,8 @@ class ActualController extends Controller
                     ],
                     [
                         'budget_period_id' => (int) $request->period_id,
-                        'department_id'    => (int) $request->department_id,
+                        'department_id'    => $request->department_id ? (int) $request->department_id : null,
+                        'subsidiary_id'    => $request->subsidiary_id ? (int) $request->subsidiary_id : null,
                         'account_code_id'  => $lineItem->account_code_id,
                         'amount'           => $amount,
                         'reference'        => $data['reference']   ?? null,
@@ -289,7 +305,8 @@ class ActualController extends Controller
     {
         $request->validate([
             'period_id'              => ['required', 'exists:budget_periods,id'],
-            'department_id'          => ['required', 'exists:departments,id'],
+            'department_id'          => ['nullable', 'exists:departments,id'],
+            'subsidiary_id'          => ['nullable', 'exists:subsidiaries,id'],
             'month'                  => ['required', 'integer', 'min:1', 'max:12'],
             'year'                   => ['required', 'integer', 'min:2000', 'max:2100'],
             'actuals'                => ['required', 'array'],
@@ -299,7 +316,7 @@ class ActualController extends Controller
             'actuals.*.description'  => ['nullable', 'string', 'max:500'],
         ]);
 
-        $this->assertDeptOwnership($request->department_id);
+        $this->assertDeptOwnership($request->department_id, $request->subsidiary_id);
 
         $saved           = 0;
         $overBudgetLines = [];
@@ -322,7 +339,8 @@ class ActualController extends Controller
                     ],
                     [
                         'budget_period_id' => (int) $request->period_id,
-                        'department_id'    => (int) $request->department_id,
+                        'department_id'    => $request->department_id ? (int) $request->department_id : null,
+                        'subsidiary_id'    => $request->subsidiary_id ? (int) $request->subsidiary_id : null,
                         'account_code_id'  => $lineItem->account_code_id,
                         'amount'           => (float) $item['amount'],
                         'reference'        => $item['reference']   ?? null,
@@ -377,12 +395,13 @@ class ActualController extends Controller
     {
         $request->validate([
             'period_id'     => ['required', 'exists:budget_periods,id'],
-            'department_id' => ['required', 'exists:departments,id'],
+            'department_id' => ['nullable', 'exists:departments,id'],
+            'subsidiary_id' => ['nullable', 'exists:subsidiaries,id'],
             'month'         => ['required', 'integer', 'min:1', 'max:12'],
             'year'          => ['required', 'integer', 'min:2000', 'max:2100'],
         ]);
 
-        $this->assertDeptOwnership($request->department_id);
+        $this->assertDeptOwnership($request->department_id, $request->subsidiary_id);
 
         $monthName = BudgetActual::MONTHS[(int) $request->month];
 
@@ -529,12 +548,28 @@ class ActualController extends Controller
         ));
     }
 
-    private function assertDeptOwnership(int|string $requestedDeptId): void
+    /**
+     * Ensure the user may record actuals for the requested entity.
+     * Accepts either a department_id or subsidiary_id depending on what was passed.
+     * Finance / admin roles bypass all checks.
+     */
+    private function assertDeptOwnership(int|string $requestedDeptId, int|string|null $requestedSubId = null): void
     {
         $user = auth()->user();
+
         if ($user->hasAnyRole(['finance_reviewer', 'bdu_admin', 'super_admin'])) {
             return;
         }
+
+        if ($user->isSubsidiaryUser()) {
+            abort_unless(
+                $requestedSubId && (int) $requestedSubId === (int) $user->subsidiary_id,
+                403,
+                'You can only record actuals for your own subsidiary.'
+            );
+            return;
+        }
+
         abort_unless((int) $requestedDeptId === (int) $user->department_id, 403,
             'You can only record actuals for your own department.');
     }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Department;
+use App\Models\Subsidiary;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
@@ -60,14 +61,18 @@ class UserController extends Controller
 
     public function create()
     {
-        $departments = Department::where('is_active', true)
+        $departments  = Department::where('is_active', true)
             ->with('zone')
             ->orderBy('entity_type')
             ->orderBy('name')
             ->get();
+        $subsidiaries = Subsidiary::where('is_active', true)
+            ->with('category')
+            ->orderBy('name')
+            ->get();
         $roles = Role::orderBy('name')->get();
 
-        return view('admin.users.create', compact('departments', 'roles'));
+        return view('admin.users.create', compact('departments', 'subsidiaries', 'roles'));
     }
 
     public function store(Request $request)
@@ -78,17 +83,23 @@ class UserController extends Controller
             'employee_id'        => ['nullable', 'string', 'unique:users,employee_id'],
             'phone'              => ['nullable', 'string', 'max:20'],
             'department_id'      => ['nullable', 'exists:departments,id'],
+            'subsidiary_id'      => ['nullable', 'exists:subsidiaries,id'],
             'role'               => ['required', 'exists:roles,name'],
             'password'           => ['required', Password::min(8)->mixedCase()->numbers()->symbols()],
             'two_factor_enabled' => ['nullable', 'in:0,1'],
         ]);
+
+        // Subsidiary and department are mutually exclusive; subsidiary takes priority if both sent
+        $departmentId = filled($validated['subsidiary_id'] ?? null) ? null : ($validated['department_id'] ?? null);
+        $subsidiaryId = $validated['subsidiary_id'] ?? null;
 
         $user = User::create([
             'name'               => $validated['name'],
             'email'              => $validated['email'],
             'employee_id'        => $validated['employee_id'] ?? null,
             'phone'              => $validated['phone'] ?? null,
-            'department_id'      => $validated['department_id'] ?? null,
+            'department_id'      => $departmentId,
+            'subsidiary_id'      => $subsidiaryId,
             'password'           => Hash::make($validated['password']),
             'is_active'          => true,
             'two_factor_enabled' => (bool) ($validated['two_factor_enabled'] ?? false),
@@ -110,14 +121,18 @@ class UserController extends Controller
 
     public function edit(User $user)
     {
-        $departments = Department::where('is_active', true)
+        $departments  = Department::where('is_active', true)
             ->with('zone')
             ->orderBy('entity_type')
             ->orderBy('name')
             ->get();
+        $subsidiaries = Subsidiary::where('is_active', true)
+            ->with('category')
+            ->orderBy('name')
+            ->get();
         $roles = Role::orderBy('name')->get();
 
-        return view('admin.users.edit', compact('user', 'departments', 'roles'));
+        return view('admin.users.edit', compact('user', 'departments', 'subsidiaries', 'roles'));
     }
 
     public function update(Request $request, User $user)
@@ -128,6 +143,7 @@ class UserController extends Controller
             'employee_id'        => ['nullable', 'string', 'unique:users,employee_id,' . $user->id],
             'phone'              => ['nullable', 'string', 'max:20'],
             'department_id'      => ['nullable', 'exists:departments,id'],
+            'subsidiary_id'      => ['nullable', 'exists:subsidiaries,id'],
             'role'               => ['required', 'exists:roles,name'],
             'is_active'          => ['nullable', 'in:0,1'],
             'two_factor_enabled' => ['nullable', 'in:0,1'],
@@ -137,12 +153,17 @@ class UserController extends Controller
             ? $user->is_active  // cannot deactivate self
             : (bool) ($validated['is_active'] ?? $user->is_active);
 
+        // Subsidiary and department are mutually exclusive; subsidiary takes priority if both sent
+        $departmentId = filled($validated['subsidiary_id'] ?? null) ? null : ($validated['department_id'] ?? null);
+        $subsidiaryId = $validated['subsidiary_id'] ?? null;
+
         $user->update([
             'name'               => $validated['name'],
             'email'              => $validated['email'],
             'employee_id'        => $validated['employee_id'] ?? null,
             'phone'              => $validated['phone'] ?? null,
-            'department_id'      => $validated['department_id'] ?? null,
+            'department_id'      => $departmentId,
+            'subsidiary_id'      => $subsidiaryId,
             'is_active'          => $isActive,
             'two_factor_enabled' => (bool) ($validated['two_factor_enabled'] ?? false),
         ]);

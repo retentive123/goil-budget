@@ -19,6 +19,7 @@ class User extends Authenticatable
         'email',
         'password',
         'department_id',
+        'subsidiary_id',
         'employee_id',
         'phone',
         'is_active',
@@ -51,6 +52,19 @@ class User extends Authenticatable
     public function department()
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function subsidiary()
+    {
+        return $this->belongsTo(Subsidiary::class);
+    }
+
+    /**
+     * True when this user belongs to a subsidiary rather than a main department.
+     */
+    public function isSubsidiaryUser(): bool
+    {
+        return $this->subsidiary_id !== null;
     }
 
     public function submittedVersions()

@@ -1,69 +1,147 @@
-@extends('layouts.app')
-@section('title', 'Too Many Requests')
-@section('content')
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Too Many Requests — GOIL Budget</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #F4F6FA;
+            font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+            color: #1E293B;
+        }
+        .card {
+            width: 100%;
+            max-width: 480px;
+            margin: 24px;
+            background: #fff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,.12);
+        }
+        .card-header {
+            background: #065F46;
+            color: #fff;
+            text-align: center;
+            padding: 32px 24px;
+        }
+        .card-header .icon { font-size: 56px; margin-bottom: 8px; }
+        .card-header h3 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+        .card-header p  { font-size: 13px; opacity: .75; }
+        .card-body {
+            padding: 28px 28px 24px;
+            text-align: center;
+        }
+        .error-code {
+            font-size: 80px;
+            font-weight: 800;
+            color: #065F46;
+            opacity: .1;
+            line-height: 1;
+        }
+        .main-msg {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1B2A4A;
+            margin: -12px 0 6px;
+        }
+        .sub-msg { font-size: 13px; color: #64748B; }
+        .btn-row {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 22px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+        }
+        .btn-secondary { background: #F1F5F9; color: #475569; border: 1px solid #E2E8F0; }
+        .btn-primary   { background: #E65C00; color: #fff; }
+        .tips {
+            margin-top: 20px;
+            padding-top: 18px;
+            border-top: 1px solid #E2E8F0;
+            text-align: left;
+        }
+        .tips-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #1B2A4A;
+            margin-bottom: 8px;
+        }
+        .tips ul { list-style: none; }
+        .tips li {
+            font-size: 12px;
+            color: #64748B;
+            margin-bottom: 4px;
+        }
+        .tips li::before {
+            content: '✓';
+            color: #10B981;
+            margin-right: 6px;
+            font-size: 11px;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 11px;
+            color: #94A3B8;
+        }
+    </style>
+</head>
+<body>
 
-<div class="container-fluid">
-    <div class="row justify-content-center align-items-center" style="min-height: 70vh;">
-        <div class="col-md-6 col-lg-5">
+<div class="card">
+    <div class="card-header">
+        <div class="icon">✋</div>
+        <h3>Slow Down</h3>
+        <p>Too many requests in a short period</p>
+    </div>
 
-            <div class="card border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
-                <div class="card-header border-0 text-center py-4" style="background: #065F46; color: #fff;">
-                    <div style="font-size: 64px; margin-bottom: 8px;">
-                        <i class="fas fa-hand-paper"></i>
-                    </div>
-                    <h3 class="fw-bold mb-0" style="color: #fff;">Slow Down</h3>
-                    <p class="mb-0" style="color: rgba(255,255,255,0.7); font-size: 14px;">
-                        Too many requests in a short period
-                    </p>
-                </div>
+    <div class="card-body">
+        <div class="error-code">429</div>
 
-                <div class="card-body p-4 text-center">
-                    <div style="font-size: 80px; font-weight: 700; color: #065F46; opacity: 0.1; line-height: 1; margin-top: -20px;">
-                        429
-                    </div>
+        <div class="main-msg">You've made too many requests</div>
 
-                    <div style="font-size: 16px; color: #1B2A4A; font-weight: 600; margin-top: -20px; margin-bottom: 8px;">
-                        You've made too many requests
-                    </div>
+        <p class="sub-msg">
+            For security reasons, access is temporarily limited after too many rapid requests.
+            Please wait a moment before trying again.
+        </p>
 
-                    <p class="text-muted small" style="font-size: 13px;">
-                        For security reasons, access is temporarily limited after too many rapid requests.
-                        Please wait a moment before trying again.
-                    </p>
+        <div class="btn-row">
+            <a href="javascript:history.back()" class="btn btn-secondary">← Go Back</a>
+            @auth
+            <a href="{{ route('dashboard') }}" class="btn btn-primary">🏠 Dashboard</a>
+            @else
+            <a href="{{ route('login') }}" class="btn btn-primary">🔑 Log In</a>
+            @endauth
+        </div>
 
-                    <div class="d-flex gap-2 justify-content-center mt-3 flex-wrap">
-                        <a href="javascript:history.back()" class="btn px-4 py-2"
-                           style="background: #F1F5F9; color: #475569; border-radius: 10px; border: 1px solid #E2E8F0; font-weight: 500;">
-                            <i class="fas fa-arrow-left me-1"></i> Go Back
-                        </a>
-                        <a href="{{ route('dashboard') }}" class="btn px-4 py-2"
-                           style="background: #E65C00; color: #fff; border-radius: 10px; border: none; font-weight: 500;">
-                            <i class="fas fa-home me-1"></i> Dashboard
-                        </a>
-                    </div>
-
-                    <div class="mt-4 pt-3 border-top text-start" style="border-color: #E2E8F0 !important;">
-                        <div style="font-size: 12px; font-weight: 600; color: #1B2A4A; margin-bottom: 6px;">
-                            <i class="fas fa-lightbulb" style="color: #C9A84C;"></i> What now?
-                        </div>
-                        <ul class="list-unstyled small text-muted mb-0" style="font-size: 12px;">
-                            <li><i class="fas fa-check-circle" style="color: #10B981; font-size: 10px;"></i> Wait 60 seconds and try again</li>
-                            <li><i class="fas fa-check-circle" style="color: #10B981; font-size: 10px;"></i> Avoid clicking buttons repeatedly</li>
-                            <li><i class="fas fa-check-circle" style="color: #10B981; font-size: 10px;"></i> Contact your administrator if this persists</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            <div class="text-center mt-3">
-                <span style="font-size: 11px; color: #94A3B8;">
-                    <i class="fas fa-shield-alt" style="color: #E65C00;"></i>
-                    GOIL Budget Management System
-                </span>
-            </div>
-
+        <div class="tips">
+            <div class="tips-title">💡 What now?</div>
+            <ul>
+                <li>Wait 60 seconds and try again</li>
+                <li>Avoid clicking buttons repeatedly</li>
+                <li>Contact your administrator if this persists</li>
+            </ul>
         </div>
     </div>
 </div>
 
-@endsection
+<div class="footer">🛡 GOIL Budget Management System</div>
+
+</body>
+</html>

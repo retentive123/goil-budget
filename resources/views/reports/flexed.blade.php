@@ -40,6 +40,18 @@
                    class="form-range"
                    oninput="document.getElementById('actLabel').textContent=this.value+'%'">
         </div>
+        <div class="col-auto">
+            <div style="display:flex;align-items:center;gap:10px;
+                        background:#F1F5F9;border:1px solid #CBD5E1;
+                        border-radius:10px;padding:6px 12px">
+                <span style="font-size:11px;font-weight:600;color:#64748B;
+                              white-space:nowrap;letter-spacing:.4px;text-transform:uppercase">
+                    View&nbsp;as
+                </span>
+                <div style="width:1px;height:20px;background:#CBD5E1"></div>
+                @include('reports._basis_toggle')
+            </div>
+        </div>
         <div class="col-md-2">
             <button type="submit" class="btn btn-sm w-100"
                     style="background:var(--navy);color:#fff;border-radius:8px">
@@ -47,6 +59,7 @@
             </button>
         </div>
     </div>
+    <input type="hidden" name="budget_basis" value="{{ $basis ?? 'original' }}">
     <div class="small text-muted mt-2">
         Flexed budget = Approved budget × {{ $activityLevel / 100 }}.
         Values below 100% represent a budget reduction; above 100% an increase.

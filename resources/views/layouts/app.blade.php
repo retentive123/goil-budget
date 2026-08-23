@@ -875,6 +875,16 @@
                 <i class="fas fa-gas-pump nav-icon"></i>
                 <span class="link-text">Service Stations</span>
             </a>
+            <a href="{{ route('admin.subsidiaries.index') }}"
+               class="sidebar-link {{ request()->routeIs('admin.subsidiaries.*') ? 'active' : '' }}">
+                <i class="bi bi-diagram-3 nav-icon"></i>
+                <span class="link-text">Subsidiaries</span>
+            </a>
+            <a href="{{ route('admin.subsidiary-categories.index') }}"
+               class="sidebar-link {{ request()->routeIs('admin.subsidiary-categories.*') ? 'active' : '' }}">
+                <i class="bi bi-folder2 nav-icon"></i>
+                <span class="link-text">Sub. Categories</span>
+            </a>
         </div>
 
         {{-- Budget Dropdown --}}
@@ -978,10 +988,10 @@
     {{-- Sidebar footer --}}
     <div style="padding:16px 20px; border-top:1px solid rgba(255,255,255,.08)">
         <div style="font-size:12px; color:rgba(255,255,255,.4)">
-            <i class="fas fa-user-circle me-1"></i>{{ Auth::user()->name }}
+            <i class="fas fa-user-circle me-1"></i>{{ Auth::user()?->name }}
         </div>
         <div style="font-size:11px; color:var(--gold); margin-top:2px">
-            <i class="fas fa-shield-alt me-1"></i>{{ ucfirst(str_replace('_',' ', Auth::user()->roles->first()?->name ?? '')) }}
+            <i class="fas fa-shield-alt me-1"></i>{{ ucfirst(str_replace('_',' ', Auth::user()?->roles->first()?->name ?? '')) }}
         </div>
     </div>
 </nav>
@@ -1053,9 +1063,9 @@
         <div class="dropdown">
             <a href="#" class="user-pill dropdown-toggle" data-bs-toggle="dropdown">
                 <div class="user-avatar">
-                    {{ strtoupper(substr(Auth::user()->name, 0, 2)) }}
+                    {{ strtoupper(substr(Auth::user()?->name ?? '', 0, 2)) }}
                 </div>
-                {{ explode(' ', Auth::user()->name)[0] }}
+                {{ explode(' ', Auth::user()?->name ?? '')[0] }}
                 <i class="fas fa-chevron-down ms-1" style="font-size:10px;color:var(--slate)"></i>
             </a>
             <ul class="dropdown-menu dropdown-menu-end shadow">

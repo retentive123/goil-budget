@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\BudgetVersion;
 use App\Models\BudgetPeriod;
 use App\Models\Department;
+use App\Models\Subsidiary;
+use App\Models\SubsidiaryCategory;
 use App\Models\AccountCategory;
 use App\Services\BudgetCalculationService;
 use App\Services\ApprovalService;
@@ -21,76 +23,114 @@ class AllBudgetsController extends Controller
     // ── Main listing ─────────────────────────────────────────
     public function index(Request $request)
     {
-        $periods     = BudgetPeriod::orderByDesc('year')->get();
-        $departments = Department::where('is_active', true)->with('zone')->orderBy('name')->get();
-        $categories  = AccountCategory::orderBy('name')->get();
+        $periods            = BudgetPeriod::orderByDesc('year')->get();
+        $departments        = Department::where('is_active', true)->with('zone')->orderBy('name')->get();
+        $subsidiaries       = Subsidiary::where('is_active', true)->with('category')->orderBy('name')->get();
+        $subsidiaryCategories = SubsidiaryCategory::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get();
+        $categories         = AccountCategory::orderBy('name')->get();
+
+        // Resolve entity-type filter (departments | subsidiaries | all)
+        $entityType = $request->entity_type ?? 'departments'; // 'departments' | 'subsidiaries' | 'all'
 
         // null = "All Periods" — never fall back to the active period
         $period = $request->period_id
             ? BudgetPeriod::find($request->period_id)
             : null;
 
-        $query = BudgetVersion::with('department', 'period', 'submittedBy', 'lineItems')
+        // Build query — scope to departments or subsidiaries depending on filter
+        $query = BudgetVersion::with('department', 'subsidiary.category', 'period', 'submittedBy', 'lineItems')
             ->when($period,                   fn($q) => $q->where('budget_period_id', $period->id))
-            ->when($request->department_id,  fn($q) => $q->where('department_id', $request->department_id))
             ->when($request->status,         fn($q) => $q->where('status', $request->status))
             ->when($request->version_number, fn($q) => $q->where('version_number', $request->version_number));
 
-        // Search by department name
-        if ($request->search) {
-            $query->whereHas('department', fn($q) =>
-                $q->where('name', 'like', "%{$request->search}%")
-                  ->orWhere('code', 'like', "%{$request->search}%")
-            );
+        if ($entityType === 'departments') {
+            $query->whereNotNull('department_id');
+            if ($request->department_id) $query->where('department_id', $request->department_id);
+        } elseif ($entityType === 'subsidiaries') {
+            $query->whereNotNull('subsidiary_id');
+            if ($request->subsidiary_id)         $query->where('subsidiary_id', $request->subsidiary_id);
+            if ($request->subsidiary_category_id) $query->whereHas('subsidiary', fn($q) => $q->where('subsidiary_category_id', $request->subsidiary_category_id));
         }
 
-        $budgets = $query->orderBy('department_id')->orderByDesc('version_number')->paginate(30)->withQueryString();
+        // Search by name
+        if ($request->search) {
+            $query->where(function ($q) use ($request) {
+                $q->whereHas('department', fn($q2) =>
+                    $q2->where('name', 'like', "%{$request->search}%")
+                       ->orWhere('code', 'like', "%{$request->search}%")
+                )->orWhereHas('subsidiary', fn($q2) =>
+                    $q2->where('name', 'like', "%{$request->search}%")
+                       ->orWhere('code', 'like', "%{$request->search}%")
+                );
+            });
+        }
+
+        $budgets = $query->orderByDesc('version_number')->paginate(30)->withQueryString();
 
         // Summary stats — scoped to selected period or all periods
         $allVersions = BudgetVersion::when($period, fn($q) => $q->where('budget_period_id', $period->id))->get();
         $totalDepts  = $departments->count();
+        $totalSubs   = $subsidiaries->count();
 
         $stats = [
-            'total_depts'   => $totalDepts,
-            'approved'      => $allVersions->where('status','approved')->unique('department_id')->count(),
-            'in_review'     => $allVersions->whereIn('status',['submitted','under_review'])->unique('department_id')->count(),
-            'rejected'      => $allVersions->where('status','rejected')->unique('department_id')->count(),
-            'draft'         => $allVersions->where('status','draft')->unique('department_id')->count(),
-            'not_started'   => max(0, $totalDepts - $allVersions->unique('department_id')->count()),
-            // ✅ Use effectiveTotal() here
-            'total_value'   => $allVersions->where('status','approved')
-                ->sum(fn($v) => $v->effectiveTotal()),
+            'total_depts'       => $totalDepts,
+            'total_subsidiaries'=> $totalSubs,
+            'approved'          => $allVersions->where('status','approved')->count(),
+            'in_review'         => $allVersions->whereIn('status',['submitted','under_review'])->count(),
+            'rejected'          => $allVersions->where('status','rejected')->count(),
+            'draft'             => $allVersions->where('status','draft')->count(),
+            'not_started_depts' => max(0, $totalDepts  - $allVersions->whereNotNull('department_id')->unique('department_id')->count()),
+            'not_started_subs'  => max(0, $totalSubs   - $allVersions->whereNotNull('subsidiary_id')->unique('subsidiary_id')->count()),
+            'total_value'       => $allVersions->where('status','approved')->sum(fn($v) => $v->effectiveTotal()),
         ];
 
-        // Pre-compute actuals per department for the matrix view (one query, no N+1).
-        // When no period is selected ("All Periods"), actuals are not shown (0).
+        // Pre-compute actuals per department (no N+1)
         $actualsByDept = $period
             ? \App\Models\BudgetActual::where('budget_period_id', $period->id)
-                ->where('status', 'confirmed')
+                ->where('status', 'confirmed')->whereNotNull('department_id')
                 ->selectRaw('department_id, SUM(amount) as total')
-                ->groupBy('department_id')
-                ->pluck('total', 'department_id')
+                ->groupBy('department_id')->pluck('total', 'department_id')
             : collect();
 
-        // Group latest version per department for the matrix view
-        $deptMatrix = $departments->map(function ($dept) use ($period, $allVersions, $actualsByDept) {
-            $versions = $allVersions->where('department_id', $dept->id)
-                                    ->sortByDesc('version_number');
-            $latest   = $versions->first();
+        // Pre-compute actuals per subsidiary
+        $actualsBySub = $period
+            ? \App\Models\BudgetActual::where('budget_period_id', $period->id)
+                ->where('status', 'confirmed')->whereNotNull('subsidiary_id')
+                ->selectRaw('subsidiary_id, SUM(amount) as total')
+                ->groupBy('subsidiary_id')->pluck('total', 'subsidiary_id')
+            : collect();
 
+        // Department matrix rows
+        $deptMatrix = $departments->map(function ($dept) use ($allVersions, $actualsByDept) {
+            $versions = $allVersions->where('department_id', $dept->id)->sortByDesc('version_number');
+            $latest   = $versions->first();
             return [
                 'dept'     => $dept,
+                'type'     => 'department',
                 'versions' => $versions,
                 'latest'   => $latest,
-                // ✅ Use effectiveTotal() here
                 'total'    => $latest ? $latest->effectiveTotal() : 0,
                 'actual'   => (float) ($actualsByDept->get($dept->id) ?? 0),
             ];
         });
 
+        // Subsidiary matrix rows
+        $subMatrix = $subsidiaries->map(function ($sub) use ($allVersions, $actualsBySub) {
+            $versions = $allVersions->where('subsidiary_id', $sub->id)->sortByDesc('version_number');
+            $latest   = $versions->first();
+            return [
+                'dept'     => $sub,
+                'type'     => 'subsidiary',
+                'versions' => $versions,
+                'latest'   => $latest,
+                'total'    => $latest ? $latest->effectiveTotal() : 0,
+                'actual'   => (float) ($actualsBySub->get($sub->id) ?? 0),
+            ];
+        });
+
         return view('budgets.all.index', compact(
-            'budgets', 'periods', 'departments', 'period',
-            'stats', 'deptMatrix', 'categories'
+            'budgets', 'periods', 'departments', 'subsidiaries', 'subsidiaryCategories',
+            'period', 'stats', 'deptMatrix', 'subMatrix', 'categories', 'entityType'
         ));
     }
 

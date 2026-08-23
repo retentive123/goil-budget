@@ -323,6 +323,16 @@
                                    style="background:#E2E8F0;border-radius:10px;
                                           padding:1px 7px;margin-left:3px">{{ $stationRows->count() }}</span>
         </button>
+        @if(isset($subMatrix) && $subMatrix->count() > 0)
+        <button id="mTab_subsidiaries" onclick="switchMatrixTab('subsidiaries')"
+                class="btn btn-sm btn-outline-secondary"
+                style="border-radius:8px;font-size:12px">
+            <i class="bi bi-diagram-3 me-1"></i>
+            Subsidiaries <span id="subBadge"
+                               style="background:#E2E8F0;border-radius:10px;
+                                      padding:1px 7px;margin-left:3px">{{ $subMatrix->count() }}</span>
+        </button>
+        @endif
         <div class="ms-auto d-flex align-items-center gap-2">
             <label style="font-size:12px;color:var(--slate);white-space:nowrap">Show:</label>
             <select id="matrixPageSize" onchange="onPageSizeChange(this.value)"
@@ -414,6 +424,48 @@
         <div id="mInfo_stations" class="text-center mt-1"
              style="font-size:11px;color:var(--slate)"></div>
     </div>
+
+    {{-- ── Subsidiaries panel ── --}}
+    @if(isset($subMatrix) && $subMatrix->count() > 0)
+    <div id="mPanel_subsidiaries" style="display:none">
+        <div class="chart-card p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--slate)">
+                        <tr>
+                            <th style="min-width:180px;padding:12px 16px">Subsidiary</th>
+                            <th>Type</th>
+                            <th>Latest Status</th>
+                            <th class="text-end">Budget (GHS)</th>
+                            <th class="text-end">Actual (GHS)</th>
+                            <th style="min-width:130px">Utilisation</th>
+                            <th class="text-center">Ver.</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="mBody_subsidiaries">
+                        @forelse($subMatrix as $row)
+                        @php
+                            $sub     = $row['dept'];   // same key shape, entity is a Subsidiary
+                            $latest  = $row['latest'];
+                            $total   = $row['total'];
+                            $actual  = $row['actual'];
+                            $utilPct = $total > 0 ? round(($actual/$total)*100,1) : 0;
+                            $status  = $latest?->status ?? 'not_started';
+                        @endphp
+                        @include('budgets.all._matrix_row_sub', compact('sub','latest','total','actual','utilPct','status','row'))
+                        @empty
+                        <tr><td colspan="8" class="text-center text-muted py-4">No subsidiaries found.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div id="mPager_subsidiaries" class="d-flex gap-1 justify-content-center mt-3 flex-wrap"></div>
+        <div id="mInfo_subsidiaries" class="text-center mt-1"
+             style="font-size:11px;color:var(--slate)"></div>
+    </div>
+    @endif
 </div>
 
 <script>
@@ -432,13 +484,16 @@ function showView(view) {
 }
 
 // ── Matrix pagination state ──────────────────────────────────────────
-const mState = { tab: 'depts', page: { depts: 1, stations: 1 }, ps: 15 };
+const mAllTabs  = ['depts','stations','subsidiaries'];
+const mState    = { tab: 'depts', page: { depts: 1, stations: 1, subsidiaries: 1 }, ps: 15 };
 
 function switchMatrixTab(tab) {
     mState.tab = tab;
-    ['depts','stations'].forEach(t => {
-        document.getElementById('mPanel_'+t).style.display = t===tab ? '' : 'none';
+    mAllTabs.forEach(t => {
+        const panel = document.getElementById('mPanel_'+t);
+        if (panel) panel.style.display = t===tab ? '' : 'none';
         const btn = document.getElementById('mTab_'+t);
+        if (!btn) return;
         if (t === tab) {
             btn.style.background = '#1B2A4A'; btn.style.color = '#fff';
             btn.className = 'btn btn-sm';
@@ -453,8 +508,7 @@ function switchMatrixTab(tab) {
 
 function onPageSizeChange(val) {
     mState.ps = parseInt(val) || 0; // 0 = show all
-    mState.page.depts    = 1;
-    mState.page.stations = 1;
+    mAllTabs.forEach(t => mState.page[t] = 1);
     renderMatrix();
 }
 
@@ -466,7 +520,8 @@ function goMatrixPage(tab, page) {
 }
 
 function renderMatrix() {
-    ['depts','stations'].forEach(tab => {
+    mAllTabs.forEach(tab => {
+        if (!document.getElementById('mBody_'+tab)) return; // panel not rendered (no data)
         const rows      = Array.from(document.querySelectorAll('#mBody_'+tab+' tr'));
         const total     = rows.length;
         const ps        = mState.ps;

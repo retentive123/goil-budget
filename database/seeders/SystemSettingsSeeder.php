@@ -79,6 +79,14 @@ class SystemSettingsSeeder extends Seeder
                 'group'       => 'budget',
             ],
             [
+                'key'         => 'allow_revision_of_revision',
+                'value'       => '0',
+                'type'        => 'boolean',
+                'label'       => 'Allow Re-Revision of Approved Revision',
+                'description' => 'Allow departments to revise a budget that is itself an already-approved revision. When disabled, only the original approved budget can be revised.',
+                'group'       => 'budget',
+            ],
+            [
                 'key'         => 'budget_entry_deadline_days',
                 'value'       => '30',
                 'type'        => 'integer',

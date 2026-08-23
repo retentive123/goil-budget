@@ -14,6 +14,7 @@ class BudgetActual extends Model
         'budget_line_item_id',
         'budget_period_id',
         'department_id',
+        'subsidiary_id',
         'account_code_id',
         'month',
         'year',

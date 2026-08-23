@@ -119,13 +119,37 @@
                         </div>
                     </div>
 
-                    {{-- Department & Role --}}
+                    {{-- Entity (Dept / Subsidiary) & Role --}}
                     <div class="mb-4">
                         <h6 class="fw-semibold mb-3" style="color: #1B2A4A; font-size: 13px;">
-                            <i class="fas fa-building" style="color: #E65C00;"></i> Department & Role
+                            <i class="fas fa-building" style="color: #E65C00;"></i> Entity &amp; Role
                         </h6>
+
+                        @php $isSub = filled(old('subsidiary_id', $user->subsidiary_id)); @endphp
+
+                        {{-- Entity type toggle --}}
+                        <div class="mb-3">
+                            <div class="d-flex gap-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="entity_type"
+                                           id="et_dept_edit" value="department"
+                                           {{ $isSub ? '' : 'checked' }}
+                                           onchange="onEntityTypeChange(this.value)">
+                                    <label class="form-check-label" for="et_dept_edit">Department / Station</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="entity_type"
+                                           id="et_sub_edit" value="subsidiary"
+                                           {{ $isSub ? 'checked' : '' }}
+                                           onchange="onEntityTypeChange(this.value)">
+                                    <label class="form-check-label" for="et_sub_edit">Subsidiary</label>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="row g-3">
-                            <div class="col-md-6">
+                            {{-- Department picker --}}
+                            <div class="col-md-6" id="deptField" {{ $isSub ? 'style=display:none' : '' }}>
                                 <label class="form-label fw-semibold" style="color: #1B2A4A; font-size: 13px;">
                                     <i class="fas fa-building" style="color: #E65C00;"></i> Dept / Station
                                 </label>
@@ -133,6 +157,30 @@
                                     'selectedId' => old('department_id', $user->department_id),
                                     'inputName'  => 'department_id',
                                 ])
+                            </div>
+
+                            {{-- Subsidiary picker --}}
+                            <div class="col-md-6" id="subField" {{ $isSub ? '' : 'style=display:none' }}>
+                                <label class="form-label fw-semibold" style="color: #1B2A4A; font-size: 13px;">
+                                    <i class="bi bi-diagram-3" style="color: #E65C00;"></i> Subsidiary
+                                </label>
+                                <select name="subsidiary_id"
+                                        class="form-select @error('subsidiary_id') is-invalid @enderror"
+                                        id="subsidiarySelect"
+                                        style="border-radius: 10px; border-color: #E2E8F0; padding: 10px 14px;">
+                                    <option value="">— Select subsidiary —</option>
+                                    @foreach($subsidiaries->groupBy('category.name') as $catName => $subs)
+                                        <optgroup label="{{ $catName ?? 'Uncategorised' }}">
+                                            @foreach($subs as $sub)
+                                                <option value="{{ $sub->id }}"
+                                                    {{ old('subsidiary_id', $user->subsidiary_id) == $sub->id ? 'selected' : '' }}>
+                                                    {{ $sub->name }} ({{ $sub->code }})
+                                                </option>
+                                            @endforeach
+                                        </optgroup>
+                                    @endforeach
+                                </select>
+                                @error('subsidiary_id')<div class="invalid-feedback d-block mt-1">{{ $message }}</div>@enderror
                             </div>
 
                             <div class="col-md-6">
@@ -353,5 +401,24 @@
         font-weight: 600;
     }
 </style>
+
+<script>
+// Mutual exclusion between department and subsidiary
+function onEntityTypeChange(value) {
+    const deptField = document.getElementById('deptField');
+    const subField  = document.getElementById('subField');
+    if (value === 'subsidiary') {
+        deptField.style.display = 'none';
+        subField.style.display  = '';
+        const deptSelect = deptField.querySelector('select');
+        if (deptSelect) deptSelect.value = '';
+    } else {
+        deptField.style.display = '';
+        subField.style.display  = 'none';
+        const subSelect = document.getElementById('subsidiarySelect');
+        if (subSelect) subSelect.value = '';
+    }
+}
+</script>
 
 @endsection

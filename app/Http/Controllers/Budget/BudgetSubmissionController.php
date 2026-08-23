@@ -21,9 +21,7 @@ class BudgetSubmissionController extends Controller
 
     public function confirm(BudgetVersion $budgetVersion)
     {
-        if ($budgetVersion->department_id !== auth()->user()->department_id) {
-            abort(403);
-        }
+        $this->authorizeVersionAccess($budgetVersion);
 
         if (!$budgetVersion->isEditable()) {
             return redirect()->route('budget.show', $budgetVersion)
@@ -31,7 +29,7 @@ class BudgetSubmissionController extends Controller
         }
 
         $grandTotals = $this->calculator->grandTotals($budgetVersion);
-        $budgetVersion->load('period', 'department', 'lineItems.accountCode.category');
+        $budgetVersion->load('period', 'department', 'subsidiary', 'lineItems.accountCode.category');
 
         $period     = $budgetVersion->period;
         $prevPeriod = \App\Models\BudgetPeriod::where('year', $period->year - 1)
@@ -46,9 +44,7 @@ class BudgetSubmissionController extends Controller
 
     public function submit(Request $request, BudgetVersion $budgetVersion)
     {
-        if ($budgetVersion->department_id !== auth()->user()->department_id) {
-            abort(403);
-        }
+        $this->authorizeVersionAccess($budgetVersion);
 
         if (!$budgetVersion->isEditable()) {
             return redirect()->route('budget.show', $budgetVersion)
@@ -106,5 +102,62 @@ class BudgetSubmissionController extends Controller
 
         return redirect()->route('budget.index')
             ->with('success', "Budget v{$budgetVersion->version_number} submitted successfully. Your department head has been notified.");
+    }
+
+    /**
+     * Reopen a rejected budget version so it can be edited and resubmitted.
+     * Sets status back to draft and redirects to the entry form.
+     */
+    public function reopen(BudgetVersion $budgetVersion)
+    {
+        $this->authorizeVersionAccess($budgetVersion);
+
+        abort_unless(
+            $budgetVersion->status === BudgetVersion::STATUS_REJECTED,
+            403,
+            'Only rejected budgets can be reopened.'
+        );
+
+        DB::transaction(function () use ($budgetVersion) {
+            // Clear previous approval decisions so the version goes through
+            // a full fresh approval cycle on resubmission (avoids unique-key
+            // violation on approval_decisions.ad_version_stage_unique).
+            $budgetVersion->approvalDecisions()->delete();
+
+            $budgetVersion->update(['status' => BudgetVersion::STATUS_DRAFT]);
+
+            AuditLogger::record(
+                'budget_reopened',
+                'budget_version',
+                'updated',
+                ['subject_label' => "v{$budgetVersion->version_number} — {$budgetVersion->ownerName()}"]
+            );
+        });
+
+        return redirect()
+            ->route('budget.show', $budgetVersion)
+            ->with('success',
+                "Version {$budgetVersion->version_number} reopened for editing. " .
+                "Update the figures and resubmit for approval."
+            );
+    }
+
+    /**
+     * Abort 403 unless the authenticated user owns this budget version.
+     * Finance / admin roles bypass this check.
+     */
+    private function authorizeVersionAccess(BudgetVersion $version): void
+    {
+        $user = auth()->user();
+
+        if ($user->hasAnyRole(['finance_reviewer', 'gceo', 'board', 'bdu_admin', 'super_admin'])) {
+            return;
+        }
+
+        if ($user->isSubsidiaryUser()) {
+            abort_unless((int) $version->subsidiary_id === (int) $user->subsidiary_id, 403);
+        } else {
+            abort_unless((int) $version->department_id === (int) $user->department_id, 403);
+        }
     }
 }

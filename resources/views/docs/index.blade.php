@@ -196,6 +196,8 @@
       <a class="docs-nav-link" href="#admin-users">Users</a>
       <a class="docs-nav-link" href="#admin-zones">Zones <span style="font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;background:#C9A84C;color:#1B2A4A;padding:1px 5px;border-radius:3px;margin-left:4px;">New</span></a>
       <a class="docs-nav-link" href="#admin-service-stations">Service Stations <span style="font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;background:#C9A84C;color:#1B2A4A;padding:1px 5px;border-radius:3px;margin-left:4px;">New</span></a>
+      <a class="docs-nav-link" href="#admin-subsidiary-categories">Subsidiary Categories <span style="font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;background:#C9A84C;color:#1B2A4A;padding:1px 5px;border-radius:3px;margin-left:4px;">New</span></a>
+      <a class="docs-nav-link" href="#admin-subsidiaries">Subsidiaries <span style="font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;background:#C9A84C;color:#1B2A4A;padding:1px 5px;border-radius:3px;margin-left:4px;">New</span></a>
       <a class="docs-nav-link" href="#admin-departments">Departments &amp; Codes</a>
       <a class="docs-nav-link" href="#admin-periods">Budget Periods</a>
       <a class="docs-nav-link" href="#admin-approval-stages">Approval Stages</a>
@@ -239,8 +241,10 @@
           <table class="doc-table">
             <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
             <tbody>
-              <tr><td><strong>Zone</strong></td><td>A geographic or operational grouping that contains departments and/or service stations. Used to organise the entity hierarchy and group filters in reports.</td></tr>
+              <tr><td><strong>Zone</strong></td><td>A geographic or operational grouping that contains service stations. Used to organise the entity hierarchy and group filters in reports.</td></tr>
               <tr><td><strong>Service Station</strong></td><td>A retail or operational site that participates in the budget cycle. Grouped under a zone and follows the same budgeting workflow as a department.</td></tr>
+              <tr><td><strong>Subsidiary Category</strong></td><td>A named grouping of subsidiaries (e.g. "Lubricants", "Aviation"). Used to organise the subsidiary list and group filters in reports.</td></tr>
+              <tr><td><strong>Subsidiary</strong></td><td>A separate legal entity or business unit that participates in the budget cycle under its own account codes. Grouped under a subsidiary category. Follows the same entry, approval, and actuals workflow as departments and service stations.</td></tr>
               <tr><td><strong>Budget Period</strong></td><td>A named fiscal year or sub-period (e.g. "FY 2026"). Only one period may be open at a time.</td></tr>
               <tr><td><strong>Budget Version</strong></td><td>A department's submission for a period. Up to 4 versions allowed per department; rejected budgets create a new version.</td></tr>
               <tr><td><strong>Line Item</strong></td><td>A single account code entry with Q1–Q4 amounts.</td></tr>
@@ -737,6 +741,84 @@
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+    <hr class="docs-divider">
+
+    {{-- Subsidiary Categories ─────────────────────────────── --}}
+    <div class="doc-section" id="admin-subsidiary-categories">
+      <div class="doc-eyebrow">Admin Guide</div>
+      <div class="doc-title">Subsidiary Categories</div>
+      <div class="doc-lead">Subsidiary Categories are named groupings that organise subsidiaries into logical clusters (e.g. Lubricants, Aviation, Marine). They appear as group headings in report filters and the user entity selector.</div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Entity hierarchy</div>
+        <div style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:18px 22px;margin:14px 0 20px;font-size:13px;line-height:1.8">
+          <div><strong style="color:#1B2A4A">Organisation</strong></div>
+          <div style="padding-left:24px"><span style="color:#94A3B8;font-size:12px">├─</span> <strong style="color:#1B2A4A">Department</strong> <span style="font-size:12px;color:#64748B">— head-office departments</span></div>
+          <div style="padding-left:24px"><span style="color:#94A3B8;font-size:12px">├─</span> <strong style="color:#1B2A4A">Zone → Service Station</strong> <span style="font-size:12px;color:#64748B">— retail/fuel sites</span></div>
+          <div style="padding-left:24px"><span style="color:#94A3B8;font-size:12px">└─</span> <strong style="color:#1B2A4A">Subsidiary Category</strong> <span style="font-size:12px;color:#64748B">— e.g. Lubricants Division</span></div>
+          <div style="padding-left:52px"><span style="color:#94A3B8;font-size:12px">├─</span> <strong style="color:#1B2A4A">Subsidiary</strong> <span style="font-size:12px;color:#64748B">— separate legal entity under this category</span></div>
+          <div style="padding-left:52px"><span style="color:#94A3B8;font-size:12px">└─</span> <strong style="color:#1B2A4A">Subsidiary</strong> <span style="font-size:12px;color:#64748B">— another entity</span></div>
+        </div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Managing subsidiary categories</div>
+        <p>Go to <strong>Admin → Subsidiary Categories</strong>. Each category has a <strong>Name</strong>, an optional <strong>Description</strong>, a <strong>Sort Order</strong> (controls the order in dropdowns), and an <strong>Active</strong> toggle. Inactive categories are hidden from filters but their subsidiaries retain all historical data.</p>
+        <div class="doc-warning">A subsidiary category cannot be deleted while it has subsidiaries assigned to it. Reassign or remove those subsidiaries first.</div>
+      </div>
+    </div>
+    <hr class="docs-divider">
+
+    {{-- Subsidiaries ────────────────────────────────────────── --}}
+    <div class="doc-section" id="admin-subsidiaries">
+      <div class="doc-eyebrow">Admin Guide</div>
+      <div class="doc-title">Subsidiaries</div>
+      <div class="doc-lead">Subsidiaries are separate legal entities or business units that participate in the budget cycle on equal footing with departments and service stations. Each subsidiary belongs to a subsidiary category and has its own assigned account codes, budget versions, and actuals.</div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Managing subsidiaries</div>
+        <p>Go to <strong>Admin → Subsidiaries</strong>. Available controls:</p>
+        <ul>
+          <li><strong>Search</strong> — filter by name or code.</li>
+          <li><strong>Category filter</strong> — narrow by subsidiary category.</li>
+          <li><strong>Status filter</strong> — active or inactive subsidiaries.</li>
+        </ul>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Creating a subsidiary</div>
+        <p>Click <em>Add Subsidiary</em>. Required fields: <strong>Subsidiary Category</strong>, <strong>Code</strong> (alphanumeric with hyphens/underscores, unique), and <strong>Name</strong>. Once created, assign account codes from the <em>Account Codes</em> tab on the subsidiary detail page.</p>
+        <div class="doc-note">The code must be unique across all subsidiaries and may only contain letters, numbers, hyphens, and underscores (e.g. <code>GOIL-LUB-01</code>).</div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Assigning account codes</div>
+        <p>Go to <strong>Admin → Subsidiaries → [Subsidiary] → Account Codes</strong>. Use the sync interface to select which codes the subsidiary can budget for. An <em>Export CSV</em> button downloads the current code assignment for audit or sharing.</p>
+        <div class="doc-tip">Only active account codes are shown in the assignment interface. Inactive codes remain linked but do not appear in budget entry forms.</div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">How subsidiaries appear across the system</div>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>Surface</th><th>Behaviour</th></tr></thead>
+            <tbody>
+              <tr><td>Report filters</td><td>Subsidiaries appear below departments and service stations, grouped by subsidiary category. Each category is an optgroup heading in the searchable dropdown.</td></tr>
+              <tr><td>User entity selector</td><td>Same grouped layout — departments first, then stations by zone, then subsidiaries by category. Fully searchable.</td></tr>
+              <tr><td>All Budgets</td><td>Subsidiaries appear in their own tab alongside Departments and Service Stations.</td></tr>
+              <tr><td>Budget entry &amp; approval</td><td>Subsidiary users experience the same form, P&amp;L view, and submit / approval workflow as department users. The system uses <code>subsidiary_id</code> on <code>BudgetVersion</code> to scope the record.</td></tr>
+              <tr><td>Actuals</td><td>Actuals are recorded against the subsidiary's line items and follow the same draft → confirm two-user workflow.</td></tr>
+              <tr><td>Account code CSV export</td><td>Available from the Account Codes tab on the subsidiary detail page — lists all assigned codes with category, status, and description.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Deleting a subsidiary</div>
+        <p>A subsidiary can only be deleted if it has no users and no budget versions on record. If either condition applies, reassign or remove those records first.</p>
       </div>
     </div>
     <hr class="docs-divider">

@@ -2,12 +2,16 @@
 @section('title', 'Record Actuals — ' . \App\Models\BudgetActual::MONTHS[$month] . ' ' . $year)
 @section('content')
 @php
-    $isConfirmed = \App\Models\BudgetActual::where('department_id', $department->id)
+    $isConfirmed = \App\Models\BudgetActual::when($subsidiary ?? null, fn($q) => $q->where('subsidiary_id', $subsidiary->id))
+        ->when($department ?? null, fn($q) => $q->where('department_id', $department->id))
         ->where('budget_period_id', $period->id)
         ->where('month', $month)
         ->where('year',  $year)
         ->where('status','confirmed')
         ->exists();
+    // Entity display name for breadcrumbs / headings
+    $entityName = ($subsidiary ?? null)?->name ?? ($department ?? null)?->name ?? '—';
+    $entityId   = ($subsidiary ?? null) ? null : ($department ?? null)?->id;
 @endphp
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -16,16 +20,16 @@
             Record Actuals — {{ \App\Models\BudgetActual::MONTHS[$month] }} {{ $year }}
         </h5>
         <p class="text-muted small mb-0">
-            <a href="{{ route('actuals.index', ['period_id'=>$period->id,'department_id'=>$department->id]) }}"
+            <a href="{{ route('actuals.index', ['period_id'=>$period->id,'department_id'=>$department?->id]) }}"
                class="text-muted">Actuals</a>
-            / {{ $department->name }} / {{ \App\Models\BudgetActual::MONTHS[$month] }}
+            / {{ $entityName }} / {{ \App\Models\BudgetActual::MONTHS[$month] }}
         </p>
     </div>
 
     {{-- Month navigator + save status --}}
     <div class="d-flex gap-2 align-items-center">
         @if($month > 1)
-        <a href="{{ route('actuals.entry', ['period_id'=>$period->id,'department_id'=>$department->id,'month'=>$month-1,'year'=>$year]) }}"
+        <a href="{{ route('actuals.entry', ['period_id'=>$period->id,'department_id'=>$department?->id,'subsidiary_id'=>$subsidiary?->id,'month'=>$month-1,'year'=>$year]) }}"
            class="btn btn-sm btn-outline-secondary">← Prev</a>
         @endif
 
@@ -34,7 +38,7 @@
         </span>
 
         @if($month < 12)
-        <a href="{{ route('actuals.entry', ['period_id'=>$period->id,'department_id'=>$department->id,'month'=>$month+1,'year'=>$year]) }}"
+        <a href="{{ route('actuals.entry', ['period_id'=>$period->id,'department_id'=>$department?->id,'subsidiary_id'=>$subsidiary?->id,'month'=>$month+1,'year'=>$year]) }}"
            class="btn btn-sm btn-outline-secondary">Next →</a>
         @endif
 
@@ -105,6 +109,7 @@
     </table>
 
     <div class="d-flex gap-2">
+        @if($department)
         <a href="{{ route('supplementary.create', [
                 'period_id'     => $period->id,
                 'department_id' => $department->id,
@@ -113,9 +118,10 @@
            style="background:#991B1B;color:#fff;border-radius:8px;padding:8px 18px">
             <i class="fas fa-plus-circle"></i> Request Supplementary Budget
         </a>
+        @endif
         <a href="{{ route('actuals.index', [
                 'period_id'     => $period->id,
-                'department_id' => $department->id,
+                'department_id' => $department?->id,
             ]) }}"
            class="btn btn-sm btn-outline-secondary"
            style="border-radius:8px">
@@ -141,6 +147,7 @@
                 @endforeach
             </select>
         </div>
+        @if($department)
         @can('view all budgets')
         <div class="col-md-3">
             <label class="form-label small fw-semibold mb-1">Department</label>
@@ -155,6 +162,7 @@
             </select>
         </div>
         @endcan
+        @endif
         <input type="hidden" name="month" value="{{ $month }}">
         <input type="hidden" name="year"  value="{{ $year }}">
     </div>
@@ -226,7 +234,10 @@
 <form method="POST" action="{{ route('actuals.store') }}" id="actualForm">
     @csrf
     <input type="hidden" name="period_id"     value="{{ $period->id }}">
-    <input type="hidden" name="department_id" value="{{ $department->id }}">
+    <input type="hidden" name="department_id" value="{{ $department?->id }}">
+    @if($subsidiary ?? null)
+    <input type="hidden" name="subsidiary_id" value="{{ $subsidiary->id }}">
+    @endif
     <input type="hidden" name="month"         value="{{ $month }}">
     <input type="hidden" name="year"          value="{{ $year }}">
 
@@ -460,7 +471,7 @@
         </button>
         @endcan
 
-        <a href="{{ route('actuals.index', ['period_id'=>$period->id,'department_id'=>$department->id]) }}"
+        <a href="{{ route('actuals.index', ['period_id'=>$period->id,'department_id'=>$department?->id]) }}"
            class="btn btn-outline-secondary"
            style="border-radius:8px;padding:10px 24px">
             <i class="fas fa-times"></i> Cancel
@@ -474,21 +485,25 @@
 <form method="POST" action="{{ route('actuals.confirm') }}" id="confirmForm">
     @csrf
     <input type="hidden" name="period_id"     value="{{ $period->id }}">
-    <input type="hidden" name="department_id" value="{{ $department->id }}">
+    <input type="hidden" name="department_id" value="{{ $department?->id }}">
+    @if($subsidiary ?? null)
+    <input type="hidden" name="subsidiary_id" value="{{ $subsidiary->id }}">
+    @endif
     <input type="hidden" name="month"         value="{{ $month }}">
     <input type="hidden" name="year"          value="{{ $year }}">
 </form>
 @endcan
 
 <script>
-const AUTOSAVE_URL = "{{ route('actuals.autosave') }}";
-const STORE_URL    = "{{ route('actuals.store') }}";
-const CSRF         = "{{ csrf_token() }}";
-const PERIOD_ID    = {{ $period->id }};
-const DEPT_ID      = {{ $department->id }};
-const MONTH        = {{ $month }};
-const YEAR         = {{ $year }};
-const IS_CONFIRMED = {{ $isConfirmed ? 'true' : 'false' }};
+const AUTOSAVE_URL  = "{{ route('actuals.autosave') }}";
+const STORE_URL     = "{{ route('actuals.store') }}";
+const CSRF          = "{{ csrf_token() }}";
+const PERIOD_ID     = {{ $period->id }};
+const DEPT_ID       = {{ $department?->id ?? 'null' }};
+const SUBSIDIARY_ID = {{ ($subsidiary ?? null)?->id ?? 'null' }};
+const MONTH         = {{ $month }};
+const YEAR          = {{ $year }};
+const IS_CONFIRMED  = {{ $isConfirmed ? 'true' : 'false' }};
 
 let autoSaveTimer = null;
 let isSaving      = false;
@@ -567,6 +582,7 @@ async function saveActuals() {
             body: JSON.stringify({
                 period_id:     PERIOD_ID,
                 department_id: DEPT_ID,
+                subsidiary_id: SUBSIDIARY_ID,
                 month:         MONTH,
                 year:          YEAR,
                 actuals:       collectActuals(),
@@ -755,6 +771,7 @@ function confirmMonth() {
                 body: JSON.stringify({
                     period_id:     PERIOD_ID,
                     department_id: DEPT_ID,
+                    subsidiary_id: SUBSIDIARY_ID,
                     month:         MONTH,
                     year:          YEAR,
                     actuals:       collectActuals(),

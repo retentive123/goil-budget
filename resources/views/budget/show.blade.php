@@ -6,9 +6,12 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h5 class="fw-bold mb-0">
-            {{ $budgetVersion->department->name }}
-            @if($budgetVersion->department->isServiceStation())
+            {{ $budgetVersion->ownerName() }}
+            @if($budgetVersion->department?->isServiceStation())
                 <span class="badge ms-1" style="background:#EFF6FF;color:#1D4ED8;font-size:10px;font-weight:600;">Station</span>
+            @endif
+            @if($budgetVersion->subsidiary)
+                <span class="badge ms-1" style="background:#EDE9FE;color:#5B21B6;font-size:10px;font-weight:600;">Subsidiary</span>
             @endif
             — {{ $budgetVersion->period->name }}
             <span class="badge bg-goil-orange ms-1">v{{ $budgetVersion->version_number }}</span>
@@ -25,6 +28,18 @@
                     default        => 'secondary'
                 }
             }}">{{ ucfirst(str_replace('_',' ',$budgetVersion->status)) }}</span>
+            @if($budgetVersion->is_revision)
+            <span class="badge ms-1" style="background:#7C3AED;color:#fff;font-size:10px">
+                <i class="bi bi-pencil-square me-1"></i>Revision
+            </span>
+            @if($budgetVersion->originalVersion)
+            <span class="text-muted" style="font-size:11px">
+                — revised from
+                <a href="{{ route('budgets.show', $budgetVersion->originalVersion) }}"
+                   class="text-muted">v{{ $budgetVersion->originalVersion->version_number }}</a>
+            </span>
+            @endif
+            @endif
             &nbsp;
             @if($calcMode !== 'none')
                 <span class="badge" style="background:#7C3AED;font-size:10px;color:#fff;">
@@ -59,9 +74,21 @@
         @if($budgetVersion->isEditable())
         <span id="save-status" class="text-muted small"></span>
         <button id="save-btn" class="btn btn-outline-primary btn-sm" onclick="saveBudget()">Save</button>
-        <a href="{{ route('budget.confirm', $budgetVersion) }}" class="btn bg-goil-orange btn-sm">
+        <a href="{{ route('budget.confirm', $budgetVersion) }}"
+           id="submit-btn"
+           class="btn bg-goil-orange btn-sm">
             Submit for Approval →
         </a>
+        @endif
+        @if($budgetVersion->status === 'approved' &&
+            (!$budgetVersion->is_revision || \App\Models\SystemSetting::get('allow_revision_of_revision', false)))
+        @can('submit budget')
+        <a href="{{ route('budgets.revise.create', $budgetVersion) }}"
+           class="btn btn-sm btn-outline-warning"
+           title="{{ $budgetVersion->is_revision ? 'Create a further revision of this approved revision' : 'Create a mid-year revision of this approved budget' }}">
+            <i class="bi bi-pencil-square me-1"></i>{{ $budgetVersion->is_revision ? 'Revise Again' : 'Revise Budget' }}
+        </a>
+        @endcan
         @endif
     </div>
 </div>
@@ -858,6 +885,35 @@
             if (firstInput) liveUpdate(firstInput);
         });
     }
+
+    // ── Save before navigating to submit confirmation ──
+    // The submit link is a plain <a>, so clicking it navigates away before the
+    // 3-second auto-save timer fires.  Intercept it: save first, then redirect.
+    document.getElementById('submit-btn')?.addEventListener('click', async function (e) {
+        e.preventDefault();
+        const href   = this.href;
+        const status = document.getElementById('save-status');
+        const btn    = this;
+
+        btn.textContent = 'Saving…';
+        btn.style.opacity = '.6';
+        btn.style.pointerEvents = 'none';
+
+        clearTimeout(autoSaveTimer); // cancel any pending auto-save — we're doing it now
+        await saveBudget();
+
+        if (status && status.textContent.startsWith('Save failed')) {
+            // Save failed — warn but still let them proceed
+            if (!confirm('Auto-save encountered an error. Proceed to submit anyway?\n\nClick Cancel to stay and retry saving.')) {
+                btn.textContent = 'Submit for Approval →';
+                btn.style.opacity = '';
+                btn.style.pointerEvents = '';
+                return;
+            }
+        }
+
+        window.location.href = href;
+    });
 </script>
 @endif
 

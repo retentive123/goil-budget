@@ -40,5 +40,20 @@
             ])
         </div>
         @endif
+        {{-- Basis toggle lives in its own pill — it's a standalone navigation
+             control that applies immediately without the Apply button --}}
+        <div class="col-auto ms-auto">
+            <div style="display:flex;align-items:center;gap:10px;
+                        background:#F1F5F9;border:1px solid #CBD5E1;
+                        border-radius:10px;padding:6px 12px">
+                <span style="font-size:11px;font-weight:600;color:#64748B;
+                              white-space:nowrap;letter-spacing:.4px;text-transform:uppercase">
+                    View&nbsp;as
+                </span>
+                <div style="width:1px;height:20px;background:#CBD5E1"></div>
+                @include('reports._basis_toggle')
+            </div>
+        </div>
     </div>
+    <input type="hidden" name="budget_basis" value="{{ $basis ?? 'original' }}">
 </form>

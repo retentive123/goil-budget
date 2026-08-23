@@ -19,6 +19,7 @@ use App\Http\Controllers\Admin\BudgetPeriodController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\SystemSettingController;
 use App\Http\Controllers\Budget\BudgetEntryController;
+use App\Http\Controllers\Budget\BudgetRevisionController;
 use App\Http\Controllers\Budget\BudgetSubmissionController;
 use App\Http\Controllers\Approval\ApprovalController;
 use App\Http\Controllers\Reports\ReportController;
@@ -28,6 +29,8 @@ use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Actuals\ActualController;
 use App\Http\Controllers\Admin\ApprovalStageController;
+use App\Http\Controllers\Admin\SubsidiaryCategoryController;
+use App\Http\Controllers\Admin\SubsidiaryController;
 use App\Http\Controllers\ImportExportController;
 use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Auth\TwoFactorController;
@@ -77,6 +80,15 @@ Route::middleware('auth')->group(function () {
         Route::get('departments/{department}/account-codes',        [DepartmentController::class, 'accountCodes'])->name('departments.account-codes');
         Route::post('departments/{department}/account-codes',       [DepartmentController::class, 'syncAccountCodes'])->name('departments.sync-account-codes');
         Route::get('departments/{department}/account-codes/export', [DepartmentController::class, 'exportAccountCodes'])->name('departments.export-account-codes');
+
+        // Subsidiary Categories
+        Route::resource('subsidiary-categories', SubsidiaryCategoryController::class)->except('show');
+
+        // Subsidiaries
+        Route::resource('subsidiaries', SubsidiaryController::class);
+        Route::get('subsidiaries/{subsidiary}/account-codes',        [SubsidiaryController::class, 'accountCodes'])->name('subsidiaries.account-codes');
+        Route::post('subsidiaries/{subsidiary}/account-codes',       [SubsidiaryController::class, 'syncAccountCodes'])->name('subsidiaries.sync-account-codes');
+        Route::get('subsidiaries/{subsidiary}/account-codes/export', [SubsidiaryController::class, 'exportAccountCodes'])->name('subsidiaries.export-account-codes');
 
         // Zones
         Route::resource('zones', ZoneController::class);
@@ -193,6 +205,16 @@ Route::middleware('auth')->group(function () {
         Route::post('/{budgetVersion}/save',       [BudgetEntryController::class, 'save'])->name('save');
         Route::post('/{budgetVersion}/submit',     [BudgetSubmissionController::class, 'submit'])->name('submit');
         Route::get('/{budgetVersion}/confirm',     [BudgetSubmissionController::class, 'confirm'])->name('confirm');
+        Route::post('/{budgetVersion}/reopen',     [BudgetSubmissionController::class, 'reopen'])->name('reopen');
+        // Mid-year budget revision
+        Route::get('/{budgetVersion}/revise',      [BudgetRevisionController::class, 'create'])->name('revise.create');
+        Route::post('/{budgetVersion}/revise',     [BudgetRevisionController::class, 'store'])->name('revise.store');
+    });
+
+    // Public-facing revision route alias (used in show.blade.php's @can('submit budget') check)
+    Route::middleware('auth')->group(function () {
+        Route::get('/budgets/{budgetVersion}/revise',  [BudgetRevisionController::class, 'create'])->name('budgets.revise.create');
+        Route::post('/budgets/{budgetVersion}/revise', [BudgetRevisionController::class, 'store'])->name('budgets.revise.store');
     });
 
 
@@ -251,6 +273,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/virement',        [ReportController::class, 'virement'])->name('virement');
     Route::get('/flexed',          [ReportController::class, 'flexed'])->name('flexed');
     Route::get('/approved',        [ReportController::class, 'approved'])->name('approved');
+    Route::get('/revised',         [ReportController::class, 'revised'])->name('revised');
     Route::get('/financial',       [ReportController::class, 'financialStatement'])->name('financial');
     Route::get('/capex',           [ReportController::class, 'capex'])->name('capex');
 
