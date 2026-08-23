@@ -1007,6 +1007,21 @@
 
     <div class="topbar-right">
 
+        {{-- Global Search trigger --}}
+        <button id="searchTriggerBtn" onclick="openSearch()"
+                title="Search (Ctrl+K)"
+                style="display:flex;align-items:center;gap:8px;
+                       background:#F1F5F9;border:1px solid #E2E8F0;
+                       border-radius:8px;padding:6px 12px;cursor:pointer;
+                       font-size:13px;color:#64748B;white-space:nowrap;
+                       transition:background .15s,border-color .15s">
+            <i class="fas fa-search" style="font-size:13px"></i>
+            <span class="search-trigger-label">Search…</span>
+            <kbd style="background:#E2E8F0;border-radius:4px;padding:1px 5px;
+                        font-size:10px;font-family:inherit;color:#94A3B8;
+                        margin-left:4px">Ctrl K</kbd>
+        </button>
+
         {{-- Notifications --}}
         <div class="dropdown">
             <button class="notif-btn dropdown-toggle"
@@ -1093,6 +1108,80 @@
         </div>
     </div>
 </header>
+
+{{-- ── Global Search Modal ── --}}
+<div id="searchOverlay" style="display:none;position:fixed;inset:0;z-index:9999;
+     background:rgba(15,23,42,.55);backdrop-filter:blur(4px);
+     animation:searchFadeIn .12s ease" onclick="closeSearch(event)">
+
+    <div id="searchBox" style="position:absolute;top:80px;left:50%;transform:translateX(-50%);
+         width:min(640px, calc(100vw - 32px));background:#fff;border-radius:14px;
+         box-shadow:0 24px 64px rgba(0,0,0,.22),0 0 0 1px rgba(0,0,0,.06);
+         overflow:hidden;display:flex;flex-direction:column;max-height:calc(100vh - 120px)">
+
+        {{-- Search input --}}
+        <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;
+                    border-bottom:1px solid #F1F5F9">
+            <i class="fas fa-search" style="color:#94A3B8;font-size:15px;flex-shrink:0"></i>
+            <input id="searchInput" type="text" placeholder="Search departments, codes, users…"
+                   autocomplete="off" spellcheck="false"
+                   style="flex:1;border:none;outline:none;font-size:15px;
+                          color:#1B2A4A;background:transparent;font-family:inherit"
+                   oninput="onSearchInput(this.value)"
+                   onkeydown="onSearchKeydown(event)">
+            <button onclick="closeSearchDirect()"
+                    style="background:none;border:none;cursor:pointer;padding:2px 6px;
+                           color:#94A3B8;font-size:11px;letter-spacing:.4px;
+                           border:1px solid #E2E8F0;border-radius:5px">ESC</button>
+        </div>
+
+        {{-- Results area --}}
+        <div id="searchResults" style="overflow-y:auto;max-height:calc(100vh - 210px)">
+            {{-- Populated by JS --}}
+            <div id="searchEmpty" style="padding:48px 20px;text-align:center;color:#94A3B8">
+                <i class="fas fa-search" style="font-size:28px;opacity:.4;display:block;margin-bottom:10px"></i>
+                <div style="font-size:14px">Type at least 2 characters to search</div>
+            </div>
+        </div>
+
+        {{-- Footer --}}
+        <div style="border-top:1px solid #F1F5F9;padding:8px 14px;
+                    display:flex;gap:16px;font-size:11px;color:#CBD5E1">
+            <span><kbd style="background:#F1F5F9;border-radius:3px;padding:1px 5px;color:#94A3B8">↑↓</kbd> navigate</span>
+            <span><kbd style="background:#F1F5F9;border-radius:3px;padding:1px 5px;color:#94A3B8">↵</kbd> open</span>
+            <span><kbd style="background:#F1F5F9;border-radius:3px;padding:1px 5px;color:#94A3B8">Esc</kbd> close</span>
+            <span id="searchCount" style="margin-left:auto"></span>
+        </div>
+    </div>
+</div>
+
+<style>
+@keyframes searchFadeIn { from { opacity:0 } to { opacity:1 } }
+.search-result-item {
+    display:flex;align-items:center;gap:12px;padding:10px 16px;
+    text-decoration:none;color:#1B2A4A;cursor:pointer;
+    border-left:2px solid transparent;transition:background .1s,border-color .1s;
+}
+.search-result-item:hover,
+.search-result-item.active {
+    background:#F8FAFC;border-left-color:var(--item-color, #1B2A4A);
+}
+.search-result-item.active { background:#F1F5F9; }
+.search-group-label {
+    padding:8px 16px 4px;font-size:10px;font-weight:700;letter-spacing:.7px;
+    text-transform:uppercase;color:#94A3B8;
+}
+.search-group-label:not(:first-child) { border-top:1px solid #F1F5F9; margin-top:4px; }
+.search-item-icon {
+    width:30px;height:30px;border-radius:8px;display:flex;align-items:center;
+    justify-content:center;font-size:12px;flex-shrink:0;color:#fff;
+}
+@media(max-width:600px) {
+    .search-trigger-label, #searchTriggerBtn kbd { display:none; }
+    #searchTriggerBtn { padding:6px 10px; }
+    #searchBox { top:60px; }
+}
+</style>
 
 {{-- ── Main content ── --}}
 <main id="main">
@@ -1227,5 +1316,314 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 @stack('scripts')
+
+{{-- ── Search: nav item registry (permission-scoped, generated server-side) ── --}}
+<script>
+window.NAV_ITEMS = [
+    // ── Main ─────────────────────────────────────────────
+    { label:'Dashboard',            keywords:['home','overview','main'],               icon:'fas fa-th-large',             section:'Main',            url:'{{ route('dashboard') }}' },
+    @can('create budget')
+    { label:'My Budget',            keywords:['budget','my budget','entry','draft'],    icon:'fas fa-file-invoice',          section:'Main',            url:'{{ route('budget.index') }}' },
+    { label:'Actuals',              keywords:['actuals','actual','entry','monthly'],    icon:'fas fa-gift',                  section:'Main',            url:'{{ route('actuals.index') }}' },
+    @endcan
+    @can('view all budgets')
+    { label:'All Budgets',          keywords:['all budgets','budgets','overview'],      icon:'fas fa-briefcase',             section:'Main',            url:'{{ route('budgets.index') }}' },
+    @endcan
+    @can('approve budget')
+    { label:'Approvals',            keywords:['approve','approval','pending','review'], icon:'fas fa-check-circle',          section:'Main',            url:'{{ route('approvals.index') }}' },
+    @endcan
+    @canany(['request supplementary budget','approve supplementary budget'])
+    { label:'Supplementary Budget', keywords:['supplementary','sup','extra','budget'],  icon:'bi bi-node-plus',              section:'Main',            url:'{{ route('supplementary.index') }}' },
+    @endcanany
+    @canany(['request virement','approve virement'])
+    { label:'Virements',            keywords:['virement','transfer','reallocation'],    icon:'fas fa-exchange-alt',          section:'Main',            url:'{{ route('virements.index') }}' },
+    @endcanany
+    @can('grant deadline override')
+    { label:'Deadlines',            keywords:['deadline','override','extension'],       icon:'bi bi-calendar-date',          section:'Main',            url:'{{ route('admin.deadline-overrides.index') }}' },
+    @endcan
+
+    // ── Reports ───────────────────────────────────────────
+    @can('view reports')
+    { label:'Reports Home',         keywords:['reports','analytics','summary'],         icon:'fas fa-chart-pie',             section:'Reports',         url:'{{ route('reports.index') }}' },
+    { label:'Executive Summary',    keywords:['executive','summary','report'],          icon:'fas fa-file-alt',              section:'Reports',         url:'{{ route('reports.executive') }}' },
+    { label:'By Department',        keywords:['department','dept','report'],            icon:'fas fa-building',              section:'Reports',         url:'{{ route('reports.department') }}' },
+    { label:'Code Explorer',        keywords:['code','explorer','account','report'],    icon:'fas fa-hashtag',               section:'Reports',         url:'{{ route('reports.code-explorer') }}' },
+    { label:'Year-on-Year',         keywords:['year on year','yoy','comparison'],       icon:'fas fa-calendar-alt',          section:'Reports',         url:'{{ route('reports.yoy') }}' },
+    { label:'Dept Comparison',      keywords:['department','comparison','report'],      icon:'fas fa-balance-scale',         section:'Reports',         url:'{{ route('reports.dept-comparison') }}' },
+    { label:'Variance Report',      keywords:['variance','report','over under'],        icon:'fas fa-arrow-down',            section:'Reports',         url:'{{ route('reports.variance') }}' },
+    { label:'Utilisation Report',   keywords:['utilisation','utilization','report'],    icon:'fas fa-arrow-up',              section:'Reports',         url:'{{ route('reports.utilisation') }}' },
+    { label:'Financial Statements', keywords:['financial','pnl','income','balance'],   icon:'fas fa-file-invoice-dollar',   section:'Reports',         url:'{{ route('reports.financial') }}' },
+    { label:'Capital Expenditure',  keywords:['capex','capital','expenditure','report'],icon:'fas fa-hard-hat',              section:'Reports',         url:'{{ route('reports.capex') }}' },
+    @endcan
+
+    // ── Administration ────────────────────────────────────
+    @can('manage users')
+    { label:'All Users',            keywords:['users','people','staff','admin'],        icon:'fas fa-users',                 section:'Administration',  url:'{{ route('admin.users.index') }}' },
+    { label:'Roles',                keywords:['roles','permissions','access'],          icon:'fas fa-user-tag',              section:'Administration',  url:'{{ route('admin.roles.index') }}' },
+    { label:'Zones',                keywords:['zones','zone','region'],                 icon:'fas fa-map-marker-alt',        section:'Administration',  url:'{{ route('admin.zones.index') }}' },
+    { label:'Departments',          keywords:['departments','department','dept'],        icon:'fas fa-building',              section:'Administration',  url:'{{ route('admin.departments.index') }}' },
+    { label:'Service Stations',     keywords:['service station','station','pump'],      icon:'fas fa-gas-pump',              section:'Administration',  url:'{{ route('admin.service-stations.index') }}' },
+    { label:'Subsidiaries',         keywords:['subsidiary','subsidiaries','entity'],    icon:'fas fa-diagram-project',       section:'Administration',  url:'{{ route('admin.subsidiaries.index') }}' },
+    { label:'Subsidiary Categories',keywords:['subsidiary','category','categories'],    icon:'bi bi-folder2',                section:'Administration',  url:'{{ route('admin.subsidiary-categories.index') }}' },
+    { label:'Account Sub-Categories',keywords:['sub-category','subcategory','account'],icon:'fas fa-layer-group',           section:'Administration',  url:'{{ route('admin.account-sub-categories.index') }}' },
+    { label:'P&L Layout',           keywords:['pnl','income statement','layout','pl'], icon:'fas fa-sliders-h',             section:'Administration',  url:'{{ route('admin.income-statement-configs.index') }}' },
+    { label:'Balance Sheet Layout', keywords:['balance sheet','bs','layout'],           icon:'fas fa-balance-scale',         section:'Administration',  url:'{{ route('admin.balance-sheet-configs.index') }}' },
+    { label:'CapEx Layout',         keywords:['capex','capital','layout'],              icon:'fas fa-hard-hat',              section:'Administration',  url:'{{ route('admin.capex-configs.index') }}' },
+    { label:'Ex-pump Templates',    keywords:['expump','ex-pump','fuel','price'],       icon:'fas fa-gas-pump',              section:'Administration',  url:'{{ route('admin.expump-templates.index') }}' },
+    { label:'Account Categories',   keywords:['category','categories','account'],       icon:'fas fa-folder',                section:'Administration',  url:'{{ route('admin.account-categories.index') }}' },
+    { label:'Account Codes',        keywords:['codes','account','codes'],               icon:'fas fa-hashtag',               section:'Administration',  url:'{{ route('admin.account-codes.index') }}' },
+    { label:'Budget Periods',       keywords:['period','year','budget period'],         icon:'fas fa-calendar-alt',          section:'Administration',  url:'{{ route('admin.budget-periods.index') }}' },
+    { label:'Approval Stages',      keywords:['approval','stage','workflow'],           icon:'fas fa-unlock',                section:'Administration',  url:'{{ route('admin.approval-stages.index') }}' },
+    @endcan
+    @can('view audit log')
+    { label:'Audit Log',            keywords:['audit','log','history','trail'],         icon:'fas fa-clipboard-list',        section:'Administration',  url:'{{ route('admin.audit-log.index') }}' },
+    @endcan
+    @can('manage system settings')
+    { label:'System Settings',      keywords:['settings','system','configuration'],     icon:'fas fa-sliders-h',             section:'Administration',  url:'{{ route('admin.settings.index') }}' },
+    { label:'Backups',              keywords:['backup','backups','database'],           icon:'bi bi-database-add',           section:'Administration',  url:'{{ route('admin.backups.index') }}' },
+    @endcan
+
+    // ── Help ──────────────────────────────────────────────
+    { label:'Documentation',        keywords:['docs','documentation','help','guide'],   icon:'fas fa-book-open',             section:'Help',            url:'{{ route('docs.index') }}' },
+    { label:'Change Password',      keywords:['password','change','security'],          icon:'fas fa-key',                   section:'Help',            url:'{{ route('password.change') }}' },
+    { label:'Two-Factor Auth',      keywords:['2fa','two factor','security','otp'],     icon:'fas fa-shield-alt',            section:'Help',            url:'{{ route('2fa.setup') }}' },
+];
+</script>
+
+<script>
+// ── Global Search ─────────────────────────────────────────────────────────────
+const SEARCH_URL = '{{ route('search') }}';
+let searchTimer        = null;
+let activeIndex        = -1;
+let allItems           = [];   // flat ordered list of { url } for keyboard nav
+let currentNavResults  = [];   // matched nav items (instant)
+let currentEntityGroups = [];  // AJAX entity groups (debounced)
+let pendingQuery       = '';   // tracks the query for the in-flight AJAX call
+
+function openSearch() {
+    document.getElementById('searchOverlay').style.display = 'block';
+    document.getElementById('searchInput').value = '';
+    currentNavResults   = [];
+    currentEntityGroups = [];
+    pendingQuery        = '';
+    showEmptyState();
+    setTimeout(() => document.getElementById('searchInput').focus(), 50);
+}
+
+function showEmptyState() {
+    document.getElementById('searchResults').innerHTML =
+        '<div style="padding:48px 20px;text-align:center;color:#94A3B8">' +
+        '<i class="fas fa-search" style="font-size:28px;opacity:.4;display:block;margin-bottom:10px"></i>' +
+        '<div style="font-size:14px">Search pages, departments, codes, users…</div></div>';
+    document.getElementById('searchCount').textContent = '';
+    activeIndex = -1;
+    allItems    = [];
+}
+
+function closeSearch(e) {
+    if (e && document.getElementById('searchBox').contains(e.target)) return;
+    closeSearchDirect();
+}
+
+function closeSearchDirect() {
+    document.getElementById('searchOverlay').style.display = 'none';
+    clearTimeout(searchTimer);
+}
+
+// Ctrl+K / Cmd+K shortcut
+document.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        if (document.getElementById('searchOverlay').style.display === 'none') {
+            openSearch();
+        } else {
+            closeSearchDirect();
+        }
+    }
+    if (e.key === 'Escape') closeSearchDirect();
+});
+
+// ── Nav item matching (client-side, instant) ──────────────────────────────────
+function filterNavItems(q) {
+    const ql = q.toLowerCase();
+    return (window.NAV_ITEMS || []).filter(function (item) {
+        if (item.label.toLowerCase().includes(ql)) return true;
+        return (item.keywords || []).some(k => k.toLowerCase().includes(ql));
+    }).slice(0, 6).map(function (item) {
+        return {
+            title:    item.label,
+            subtitle: item.section,
+            url:      item.url,
+            icon:     item.icon,
+            badge:    null,
+        };
+    });
+}
+
+function onSearchInput(val) {
+    clearTimeout(searchTimer);
+    activeIndex = -1;
+
+    if (val.length < 2) {
+        currentNavResults   = [];
+        currentEntityGroups = [];
+        showEmptyState();
+        return;
+    }
+
+    // Instant nav results
+    currentNavResults = filterNavItems(val);
+    renderCombined(val);
+
+    // Debounced entity search
+    pendingQuery = val;
+    searchTimer = setTimeout(() => runSearch(val), 220);
+}
+
+function runSearch(q) {
+    fetch(SEARCH_URL + '?q=' + encodeURIComponent(q), {
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(function (data) {
+        // Ignore stale responses if the user has typed something new
+        if (q !== pendingQuery) return;
+        currentEntityGroups = data.groups || [];
+        renderCombined(q);
+    })
+    .catch(function () {
+        if (q !== pendingQuery) return;
+        // Keep nav results visible; append an error note
+        const errGroup = {
+            label: 'Error', icon: 'fas fa-exclamation-circle', color: '#EF4444',
+            items: [{ title: 'Entity search failed', subtitle: 'Check your connection', url: '', icon: 'fas fa-exclamation-circle', badge: null }]
+        };
+        currentEntityGroups = [errGroup];
+        renderCombined(q);
+    });
+}
+
+// ── Combined render ───────────────────────────────────────────────────────────
+function renderCombined(q) {
+    const groups = [];
+
+    if (currentNavResults.length) {
+        groups.push({
+            label: 'Navigation',
+            icon:  'fas fa-compass',
+            color: '#1B2A4A',
+            items: currentNavResults,
+        });
+    }
+
+    currentEntityGroups.forEach(function (g) { groups.push(g); });
+
+    if (groups.length === 0) {
+        document.getElementById('searchResults').innerHTML =
+            '<div style="padding:48px 20px;text-align:center;color:#94A3B8">' +
+            '<i class="fas fa-search" style="font-size:28px;opacity:.3;display:block;margin-bottom:10px"></i>' +
+            '<div style="font-size:14px">No results for <strong style="color:#64748B">"' + escHtml(q) + '"</strong></div></div>';
+        document.getElementById('searchCount').textContent = '';
+        activeIndex = -1;
+        allItems = [];
+        return;
+    }
+
+    let html = '';
+    const newItems = [];
+
+    groups.forEach(function (group) {
+        html += '<div class="search-group-label">' +
+                '<i class="' + escHtml(group.icon) + ' me-1"></i>' + escHtml(group.label) +
+                '</div>';
+
+        group.items.forEach(function (item) {
+            const hasLink = item.url && item.url !== '#';
+            const tag  = hasLink ? 'a' : 'div';
+            const href = hasLink ? ' href="' + escHtml(item.url) + '"' : '';
+            const badge = item.badge
+                ? '<span style="margin-left:auto;font-size:10px;font-weight:600;' +
+                  'padding:1px 7px;border-radius:99px;background:' + escHtml(item.badge_color || '#94A3B8') + '22;' +
+                  'color:' + escHtml(item.badge_color || '#94A3B8') + '">' + escHtml(item.badge) + '</span>'
+                : '';
+            const idx = newItems.length;
+
+            html += '<' + tag + href +
+                    ' class="search-result-item" style="--item-color:' + escHtml(group.color) + '"' +
+                    ' data-idx="' + idx + '"' +
+                    ' onmouseenter="setActive(' + idx + ')"' +
+                    ' onclick="itemClicked(event, \'' + escJs(hasLink ? item.url : '') + '\')">' +
+                    '<div class="search-item-icon" style="background:' + escHtml(group.color) + '">' +
+                    '<i class="' + escHtml(item.icon) + '"></i></div>' +
+                    '<div style="min-width:0;flex:1">' +
+                    '<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
+                    highlight(escHtml(item.title || ''), q) + '</div>' +
+                    '<div style="font-size:11px;color:#94A3B8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
+                    highlight(escHtml(item.subtitle || ''), q) + '</div></div>' +
+                    badge +
+                    '</' + tag + '>';
+
+            newItems.push({ url: hasLink ? item.url : '' });
+        });
+    });
+
+    allItems = newItems;
+    document.getElementById('searchResults').innerHTML = html;
+
+    const total = newItems.length;
+    document.getElementById('searchCount').textContent = total + (total === 1 ? ' result' : ' results');
+}
+
+function setActive(idx) {
+    document.querySelectorAll('.search-result-item').forEach(el => el.classList.remove('active'));
+    activeIndex = idx;
+    const el = document.querySelector('.search-result-item[data-idx="' + idx + '"]');
+    if (el) el.classList.add('active');
+}
+
+function onSearchKeydown(e) {
+    const items = document.querySelectorAll('.search-result-item');
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeIndex = Math.min(activeIndex + 1, items.length - 1);
+        setActive(activeIndex);
+        items[activeIndex]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeIndex = Math.max(activeIndex - 1, 0);
+        setActive(activeIndex);
+        items[activeIndex]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (activeIndex >= 0 && allItems[activeIndex]?.url) {
+            window.location.href = allItems[activeIndex].url;
+        }
+    } else if (e.key === 'Escape') {
+        closeSearchDirect();
+    }
+}
+
+function itemClicked(e, url) {
+    if (!url) e.preventDefault();
+    else closeSearchDirect();
+}
+
+function highlight(text, q) {
+    if (!q) return text;
+    const safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return text.replace(new RegExp('(' + safe + ')', 'gi'),
+        '<mark style="background:#FEF08A;border-radius:2px;padding:0 1px">$1</mark>');
+}
+
+function escHtml(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+           .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function escJs(s) {
+    // Escape for use inside a JS string literal (single-quote delimited)
+    return String(s ?? '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+}
+</script>
 </body>
 </html>
