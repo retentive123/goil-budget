@@ -48,8 +48,13 @@
             <input type="number" name="retry" value="60" min="10" max="600"
                    class="form-control form-control-sm" style="max-width:120px">
         </div>
-        <button type="submit" class="btn btn-sm btn-danger"
-                onclick="return confirm('This will block all regular users from accessing the system. Continue?')">
+        <button type="button" class="btn btn-sm btn-danger"
+                onclick="swConfirmAction(this, {
+                    title: 'Enable Maintenance Mode?',
+                    text: 'All regular users will be blocked from accessing the system until you disable it.',
+                    confirmButtonText: 'Yes, enable',
+                    confirmButtonColor: '#EF4444'
+                })">
             Enable Maintenance Mode
         </button>
     </form>

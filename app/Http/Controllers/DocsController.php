@@ -8,4 +8,9 @@ class DocsController extends Controller
     {
         return view('docs.index');
     }
+
+    public function sageIntegration()
+    {
+        return view('docs.sage-integration');
+    }
 }

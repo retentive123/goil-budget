@@ -77,13 +77,65 @@
 </div>
 @endif
 
-<div class="d-flex gap-2">
+<div class="d-flex gap-2 mb-4">
     <a href="{{ route('admin.subsidiaries.account-codes', $subsidiary) }}" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-hash me-1"></i>Manage Account Codes
     </a>
     <a href="{{ route('admin.subsidiaries.export-account-codes', $subsidiary) }}" class="btn btn-outline-success btn-sm">
         <i class="bi bi-download me-1"></i>Export Codes
     </a>
+</div>
+
+{{-- Assigned Account Codes ────────────────────────── --}}
+<div class="chart-card">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="fw-semibold" style="font-size:14px">
+            <i class="fas fa-hashtag me-1" style="color:#E65C00"></i>
+            Assigned Account Codes
+            <span class="badge ms-2" style="background:#F1F5F9;color:#64748B;font-size:11px">
+                {{ $assignedCodes->count() }}
+            </span>
+        </div>
+        @if($assignedCodes->isNotEmpty())
+        <a href="{{ route('admin.subsidiaries.account-codes', $subsidiary) }}"
+           class="btn btn-sm btn-outline-secondary" style="font-size:12px">
+            Edit assignments
+        </a>
+        @endif
+    </div>
+
+    @if($assignedCodes->isEmpty())
+        <div class="text-center py-4 text-muted" style="font-size:13px">
+            <i class="fas fa-hashtag" style="font-size:28px;opacity:.2;display:block;margin-bottom:8px"></i>
+            No account codes assigned yet.
+            <a href="{{ route('admin.subsidiaries.account-codes', $subsidiary) }}" class="d-block mt-2">
+                Assign codes →
+            </a>
+        </div>
+    @else
+        @foreach($assignedCodes->groupBy(fn($c) => $c->category->name ?? 'Uncategorised') as $catName => $codes)
+        <div class="mb-3">
+            <div class="text-uppercase fw-semibold mb-2"
+                 style="font-size:10px;letter-spacing:.7px;color:#94A3B8;border-bottom:1px solid #F1F5F9;padding-bottom:4px">
+                {{ $catName }}
+                <span style="font-weight:400;color:#CBD5E1">({{ $codes->count() }})</span>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                @foreach($codes as $code)
+                <span style="display:inline-flex;align-items:center;gap:6px;
+                             padding:4px 10px;border-radius:6px;
+                             background:#F8FAFC;border:1px solid #E2E8F0;font-size:12px">
+                    <code style="font-size:11px;color:#E65C00;background:transparent;padding:0">{{ $code->code }}</code>
+                    <span style="color:#475569">{{ $code->name }}</span>
+                    @unless($code->is_active)
+                    <span style="font-size:10px;color:#EF4444">inactive</span>
+                    @endunless
+                </span>
+                @endforeach
+            </div>
+        </div>
+        @endforeach
+    @endif
 </div>
 
 @endsection

@@ -39,7 +39,7 @@
             </select>
         </div>
         <div class="col-md-3">
-            <label class="form-label small fw-semibold mb-1">Dept / Station</label>
+            <label class="form-label small fw-semibold mb-1">Dept / Entity</label>
             @include('reports._dept_filter', [
                 'selectedId' => request('department_id'),
                 'selectId'   => 'rptYoyDeptSel',

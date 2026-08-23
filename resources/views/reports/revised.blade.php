@@ -28,13 +28,14 @@
             </select>
         </div>
         <div class="col-md-3">
-            <label class="form-label small fw-semibold mb-1">Department</label>
+            <label class="form-label small fw-semibold mb-1">Dept / Entity</label>
             @include('reports._dept_filter', [
                 'filterName' => 'department_id',
                 'selectedId' => request('department_id'),
                 'allowEmpty' => true,
-                'emptyLabel' => 'All Departments',
+                'emptyLabel' => 'All Entities',
                 'autoSubmit' => true,
+                'selectId'   => 'rptRevisedDeptSel',
             ])
         </div>
         <div class="col-md-2">
@@ -62,7 +63,7 @@
     <p class="fw-semibold mb-1" style="color:var(--navy)">No Revised Budgets</p>
     <p class="text-muted small">
         No approved budget revisions exist for <strong>{{ $period->name }}</strong>
-        @if($department) / {{ $department->name }} @endif yet.<br>
+        @if($department) / {{ $department->name }}@elseif(!empty($subsidiary)) / {{ $subsidiary->name }}@endif yet.<br>
         Revisions are created from an approved budget's detail page.
     </p>
 </div>

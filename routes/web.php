@@ -54,6 +54,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/docs', [DocsController::class, 'index'])->name('docs.index');
+    Route::get('/docs/sage-integration', [DocsController::class, 'sageIntegration'])->name('docs.sage-integration');
     Route::get('/search', [\App\Http\Controllers\SearchController::class, 'search'])->name('search');
     Route::get('/password/change',  [PasswordController::class, 'showChangeForm'])->name('password.change');
     Route::post('/password/change', [PasswordController::class, 'update'])->name('password.update');
@@ -277,6 +278,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/revised',         [ReportController::class, 'revised'])->name('revised');
     Route::get('/financial',       [ReportController::class, 'financialStatement'])->name('financial');
     Route::get('/capex',           [ReportController::class, 'capex'])->name('capex');
+    Route::get('/subsidiary',      [ReportController::class, 'subsidiaryReport'])->name('subsidiary');
 
     Route::middleware('permission:export reports')->group(function () {
         Route::get('/export/approved',    [ReportController::class, 'exportApproved'])->name('export.approved');

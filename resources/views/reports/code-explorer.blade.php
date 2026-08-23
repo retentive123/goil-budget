@@ -93,9 +93,10 @@
         <div class="col-12 col-md-2">
             <label class="form-label small fw-semibold mb-1">Dept / Station</label>
             @include('reports._dept_filter', [
-                'selectedId' => request('department_id'),
-                'autoSubmit' => true,
-                'selectId'   => 'rptCodeExplDeptSel',
+                'selectedId'          => request('department_id'),
+                'autoSubmit'          => true,
+                'selectId'            => 'rptCodeExplDeptSel',
+                'includeSubsidiaries' => false,
             ])
         </div>
         @endif

@@ -30,7 +30,7 @@
             </select>
         </div>
         <div class="col-md-2">
-            <label class="form-label small fw-semibold mb-1">Dept / Station</label>
+            <label class="form-label small fw-semibold mb-1">Dept / Entity</label>
             @include('reports._dept_filter', [
                 'selectedId' => request('department_id'),
                 'emptyLabel' => 'All',
@@ -107,7 +107,10 @@
 
 @if(empty($varianceData))
 <div class="chart-card text-center py-5 text-muted">
-    No data matching the selected filters.
+    No data matching the selected filters
+    @if(!empty($department)) for <strong>{{ $department->name }}</strong>
+    @elseif(!empty($subsidiary)) for <strong>{{ $subsidiary->name }}</strong>
+    @endif.
 </div>
 @else
 

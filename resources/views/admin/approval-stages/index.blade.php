@@ -178,11 +178,11 @@
 
                             @if(($stageBudgetCounts[$stage->id] ?? 0) === 0)
                             <form method="POST"
-                                  action="{{ route('admin.approval-stages.destroy', $stage) }}">
+                                  action="{{ route('admin.approval-stages.destroy', $stage) }}"
+                                  data-confirm-name="{{ $stage->name }}">
                                 @csrf @method('DELETE')
                                 <button class="btn btn-sm btn-outline-danger"
-                                        style="font-size:12px;padding:3px 10px"
-                                        onclick="return confirm('Delete stage \'{{ $stage->name }}\'?\n\nThis cannot be undone.')">
+                                        style="font-size:12px;padding:3px 10px">
                                     Delete
                                 </button>
                             </form>

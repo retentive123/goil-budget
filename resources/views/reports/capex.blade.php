@@ -28,7 +28,7 @@
             </select>
         </div>
         <div class="col-md-3">
-            <label class="form-label small fw-semibold mb-1">Dept / Station</label>
+            <label class="form-label small fw-semibold mb-1">Dept / Entity</label>
             @include('reports._dept_filter', [
                 'selectedId' => request('department_id'),
                 'selectId'   => 'rptCapexDeptSel',
@@ -46,7 +46,9 @@
 @if(!$period)
 <div class="chart-card text-center py-5 text-muted">
     <i class="fas fa-hard-hat fa-2x mb-3 opacity-25"></i>
-    <p class="mb-1">No Capital Expenditure budget data for this period.</p>
+    <p class="mb-1">No Capital Expenditure budget data
+        @if(!empty($subsidiary)) for <strong>{{ $subsidiary->name }}</strong>@elseif($deptId && !empty($departments->firstWhere('id', $deptId))) for <strong>{{ $departments->firstWhere('id', $deptId)->name }}</strong>@endif
+        for this period.</p>
     <p class="small">Add account categories with type <strong>Capital Expenditure</strong> to populate this report.</p>
 </div>
 
@@ -369,7 +371,9 @@ function ccxExport() {
 @elseif(!$capex || empty($capex['sections']))
 <div class="chart-card text-center py-5 text-muted">
     <i class="fas fa-hard-hat fa-2x mb-3 opacity-25"></i>
-    <p class="mb-1">No Capital Expenditure budget data for this period.</p>
+    <p class="mb-1">No Capital Expenditure budget data
+        @if(!empty($subsidiary)) for <strong>{{ $subsidiary->name }}</strong>@elseif($deptId && !empty($departments->firstWhere('id', $deptId))) for <strong>{{ $departments->firstWhere('id', $deptId)->name }}</strong>@endif
+        for this period.</p>
     <p class="small">Add account categories with type <strong>Capital Expenditure</strong> to populate this report.</p>
 </div>
 @else

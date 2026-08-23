@@ -119,7 +119,7 @@
                                 <i class="bi bi-pencil"></i>
                             </a>
                             <form method="POST" action="{{ route('admin.subsidiaries.destroy', $sub) }}"
-                                  onsubmit="return confirm('Delete {{ $sub->name }}?')">
+                                  data-confirm-name="{{ $sub->name }}">
                                 @csrf @method('DELETE')
                                 <button type="submit" class="btn btn-sm btn-outline-danger" style="font-size:11px;padding:2px 8px">
                                     <i class="bi bi-trash3"></i>

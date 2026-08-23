@@ -45,9 +45,14 @@ $_statusKey = ($info['has_override'] && $override?->isValid()) ? 'extended'
             <form method="POST"
                   action="{{ route('admin.deadline-overrides.revoke', $override) }}">
                 @csrf
-                <button class="btn btn-sm btn-outline-danger"
+                <button type="button" class="btn btn-sm btn-outline-danger"
                         style="font-size:11px;padding:2px 8px"
-                        onclick="return confirm('Revoke override for {{ addslashes($dept->name) }}?')">
+                        onclick="swConfirmAction(this, {
+                            title: 'Revoke extension for &quot;{{ addslashes($dept->name) }}&quot;?',
+                            text: 'The department will return to the standard deadline.',
+                            confirmButtonText: 'Yes, revoke',
+                            confirmButtonColor: '#EF4444'
+                        })">
                     Revoke
                 </button>
             </form>

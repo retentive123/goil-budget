@@ -65,8 +65,9 @@ class SubsidiaryController extends Controller
     public function show(Subsidiary $subsidiary)
     {
         $subsidiary->loadCount('accountCodes', 'users', 'budgetVersions');
-        $subsidiary->load('category');
-        return view('admin.subsidiaries.show', compact('subsidiary'));
+        $subsidiary->load(['category', 'accountCodes.category']);
+        $assignedCodes = $subsidiary->accountCodes()->with('category')->orderBy('account_codes.code')->get();
+        return view('admin.subsidiaries.show', compact('subsidiary', 'assignedCodes'));
     }
 
     public function edit(Subsidiary $subsidiary)
@@ -129,7 +130,7 @@ class SubsidiaryController extends Controller
 
         $subsidiary->accountCodes()->sync($request->account_codes ?? []);
 
-        return redirect()->route('admin.subsidiaries.index')
+        return redirect()->route('admin.subsidiaries.account-codes', $subsidiary)
             ->with('success', "Account codes updated for {$subsidiary->name}.");
     }
 

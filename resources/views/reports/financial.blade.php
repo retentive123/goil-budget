@@ -9,14 +9,23 @@
             <a href="{{ route('reports.index') }}" class="text-muted">Reports</a>
             / Financial Statements
             @if($period) · <span class="fw-semibold">{{ $period->name }}</span> @endif
+            @php
+                $subLabel = null;
+                if (!empty($subsidiaryId)) {
+                    $subLabel = ($subsidiaries ?? collect())->firstWhere('id', $subsidiaryId)?->name;
+                } elseif (!empty($subCatId)) {
+                    $subLabel = ($subCategories ?? collect())->firstWhere('id', $subCatId)?->name . ' (all subsidiaries)';
+                }
+            @endphp
+            @if($subLabel) · <span class="fw-semibold" style="color:#C9A84C">{{ $subLabel }}</span> @endif
         </p>
     </div>
 </div>
 
 {{-- Filters --}}
-<form method="GET" class="chart-card mb-4">
+<form method="GET" class="chart-card mb-4" id="financialFilterForm">
     <div class="row g-2 align-items-end">
-        <div class="col-md-3">
+        <div class="col-md-2">
             <label class="form-label small fw-semibold mb-1">Period</label>
             <select name="period_id" class="form-select form-select-sm">
                 @foreach($periods as $p)
@@ -27,12 +36,43 @@
                 @endforeach
             </select>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <label class="form-label small fw-semibold mb-1">Dept / Station</label>
             @include('reports._dept_filter', [
-                'selectedId' => request('department_id'),
-                'selectId'   => 'rptFinancialDeptSel',
+                'selectedId'          => request('department_id'),
+                'selectId'            => 'rptFinancialDeptSel',
+                'includeSubsidiaries' => false,
             ])
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold mb-1">
+                Subs. Category
+                <span class="text-muted fw-normal" style="font-size:10px">or</span>
+            </label>
+            <select name="subsidiary_category_id" id="finSubCatSel"
+                    class="form-select form-select-sm"
+                    onchange="finCascadeSubsidiaries()">
+                <option value="">— All —</option>
+                @foreach($subCategories ?? [] as $sc)
+                    <option value="{{ $sc->id }}"
+                        {{ request('subsidiary_category_id') == $sc->id ? 'selected' : '' }}>
+                        {{ $sc->name }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold mb-1">Subsidiary</label>
+            <select name="subsidiary_id" id="finSubSel" class="form-select form-select-sm">
+                <option value="">— All —</option>
+                @foreach($subsidiaries ?? [] as $sub)
+                    <option value="{{ $sub->id }}"
+                            data-cat="{{ $sub->subsidiary_category_id }}"
+                        {{ request('subsidiary_id') == $sub->id ? 'selected' : '' }}>
+                        {{ $sub->name }}
+                    </option>
+                @endforeach
+            </select>
         </div>
         <div class="col-auto">
             <div style="display:flex;align-items:center;gap:10px;
@@ -46,15 +86,47 @@
                 @include('reports._basis_toggle')
             </div>
         </div>
-        <div class="col-md-2">
-            <button type="submit" class="btn btn-sm w-100"
-                    style="background:var(--navy);color:#fff;border-radius:8px">
+        <div class="col-auto">
+            <button type="submit" class="btn btn-sm"
+                    style="background:var(--navy);color:#fff;border-radius:8px;padding:6px 16px">
                 Apply
             </button>
         </div>
     </div>
     <input type="hidden" name="budget_basis" value="{{ $basis ?? 'original' }}">
 </form>
+
+@push('scripts')
+<script>
+function finCascadeSubsidiaries() {
+    var catId = document.getElementById('finSubCatSel').value;
+    var sel   = document.getElementById('finSubSel');
+    Array.from(sel.options).forEach(function(opt) {
+        if (!opt.value) return;
+        opt.style.display = (!catId || opt.dataset.cat === catId) ? '' : 'none';
+    });
+    if (catId && sel.value && sel.options[sel.selectedIndex]?.dataset.cat !== catId) {
+        sel.value = '';
+    }
+}
+finCascadeSubsidiaries();
+
+// Dept and subsidiary are mutually exclusive — clear subsidiary when dept chosen and vice versa
+document.getElementById('rptFinancialDeptSel')?.addEventListener('change', function() {
+    if (this.value) {
+        document.getElementById('finSubCatSel').value = '';
+        document.getElementById('finSubSel').value    = '';
+    }
+});
+document.getElementById('finSubSel')?.addEventListener('change', function() {
+    if (this.value) {
+        // TomSelect may wrap the dept select — try to clear via TomSelect instance if present
+        var ts = document.getElementById('rptFinancialDeptSel')?._tomSelect;
+        if (ts) ts.clear(); else document.getElementById('rptFinancialDeptSel').value = '';
+    }
+});
+</script>
+@endpush
 
 @if(!$period || !$pnl)
 <div class="chart-card text-center py-5 text-muted">

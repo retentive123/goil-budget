@@ -231,5 +231,26 @@
         </div>
     </div>
 
+    {{-- Subsidiary Budget Report --}}
+    <div class="col-md-4">
+        <div class="chart-card h-100 position-relative">
+            <div style="font-size:14px;font-weight:700;color:#1B2A4A;margin-bottom:8px">
+                <i class="bi bi-building me-1" style="color:#C9A84C"></i>
+                Subsidiary Report
+            </div>
+            <span class="badge position-absolute top-0 end-0 m-2"
+                  style="background:#FEF3C7;color:#92400E;font-size:10px">New</span>
+            <p class="small text-muted">
+                Approved budgets submitted by subsidiary entities.
+                Filter by category or individual subsidiary.
+            </p>
+            <a href="{{ route('reports.subsidiary') }}"
+               class="btn btn-sm"
+               style="background:#C9A84C;color:#1B2A4A;border-radius:8px;font-weight:600">
+                Open Report →
+            </a>
+        </div>
+    </div>
+
 </div>
 @endsection

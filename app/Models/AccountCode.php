@@ -35,6 +35,13 @@ class AccountCode extends Model
                     ->withTimestamps();
     }
 
+    public function subsidiaries()
+    {
+        return $this->belongsToMany(Subsidiary::class, 'subsidiary_account_codes')
+                    ->withPivot('is_active')
+                    ->withTimestamps();
+    }
+
     public function lineItems()
     {
         return $this->hasMany(BudgetLineItem::class);

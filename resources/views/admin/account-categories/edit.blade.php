@@ -264,7 +264,7 @@
                         <form method="POST"
                               action="{{ route('admin.account-categories.destroy', $accountCategory) }}"
                               class="ms-auto"
-                              onsubmit="return confirm('Delete this category?')">
+                              data-confirm-name="{{ $accountCategory->name }}">
                             @csrf @method('DELETE')
                             <button type="submit" class="btn px-4 py-2 fw-semibold"
                                     style="background: #FEE2E2; color: #991B1B; border-radius: 10px; border: 1px solid #FCA5A5; transition: all 0.3s ease;">

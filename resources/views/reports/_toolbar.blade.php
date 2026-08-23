@@ -34,9 +34,10 @@
         <div class="col-md-3">
             <label class="form-label small fw-semibold mb-1">Dept / Station</label>
             @include('reports._dept_filter', [
-                'selectedId' => request('department_id'),
-                'autoSubmit' => true,
-                'selectId'   => 'rptToolbarDeptSel',
+                'selectedId'          => request('department_id'),
+                'autoSubmit'          => true,
+                'selectId'            => 'rptToolbarDeptSel',
+                'includeSubsidiaries' => false,
             ])
         </div>
         @endif

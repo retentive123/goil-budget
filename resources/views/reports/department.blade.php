@@ -33,10 +33,12 @@
         <div class="col-md-3">
             <label class="form-label small fw-semibold mb-1">Dept / Station</label>
             @include('reports._dept_filter', [
-                'selectedId' => request('department_id', $department?->id),
-                'allowEmpty' => false,
-                'autoSubmit' => true,
-                'selectId'   => 'rptDeptDrillSel',
+                'selectedId'          => request('department_id'),
+                'allowEmpty'          => true,
+                'emptyLabel'          => 'Select department…',
+                'autoSubmit'          => true,
+                'selectId'            => 'rptDeptDrillSel',
+                'includeSubsidiaries' => false,
             ])
         </div>
         <div class="col-md-3">
@@ -67,9 +69,15 @@
     <input type="hidden" name="budget_basis" value="{{ $basis ?? 'original' }}">
 </form>
 
-@if(!$version)
+@if(!$department)
 <div class="chart-card text-center py-5 text-muted">
-    No approved budget found for {{ $department?->name }} in {{ $period?->name }}.
+    <i class="bi bi-arrow-left-circle" style="font-size:36px;display:block;margin-bottom:10px;color:#CBD5E1"></i>
+    Select a department or service station above to view its approved budget.
+</div>
+@elseif(!$version)
+<div class="chart-card text-center py-5 text-muted">
+    No approved budget found for <strong>{{ $department->name }}</strong>
+    @if($period) in {{ $period->name }}@endif.
 </div>
 @else
 

@@ -206,7 +206,7 @@
                                     <form method="POST"
                                           action="{{ route('admin.departments.destroy', $dept) }}"
                                           class="d-inline"
-                                          onsubmit="return confirmDelete('{{ $dept->name }}')">
+                                          data-confirm-name="{{ $dept->name }}">
                                         @csrf @method('DELETE')
                                         <button class="btn btn-sm btn-outline-danger"
                                                 style="border-radius: 6px; font-size: 11px; padding: 2px 8px;"
@@ -280,10 +280,6 @@
 </div>
 
 <script>
-function confirmDelete(deptName) {
-    return confirm(`Are you sure you want to delete the department "${deptName}"?\n\nThis action cannot be undone.`);
-}
-</script>
 
 <style>
     .stat-card {

@@ -216,6 +216,15 @@
       <a class="docs-nav-link" href="#settings-ref">Settings Reference</a>
     </div>
 
+    <div class="docs-nav-group">
+      <span class="docs-nav-label">Integrations</span>
+      <a class="docs-nav-link" href="{{ route('docs.sage-integration') }}">
+        <i class="fas fa-plug me-1" style="font-size:11px;color:#C9A84C"></i>
+        Sage ERP
+        <span style="font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;background:#C9A84C;color:#1B2A4A;padding:1px 5px;border-radius:3px;margin-left:4px;">New</span>
+      </a>
+    </div>
+
   </aside>
 
   {{-- ── Content ── --}}
@@ -258,6 +267,35 @@
       </div>
 
     </div>
+
+    {{-- Integrations card ────────────────────────────────── --}}
+    <div class="doc-sub" id="integrations">
+      <div class="doc-sub-title">Integrations</div>
+      <a href="{{ route('docs.sage-integration') }}"
+         style="display:flex;align-items:center;gap:16px;
+                padding:16px 18px;border:1px solid #E2E8F0;border-radius:10px;
+                text-decoration:none;background:#fff;transition:border-color .15s,box-shadow .15s;
+                max-width:480px"
+         onmouseover="this.style.borderColor='#C9A84C';this.style.boxShadow='0 2px 8px rgba(0,0,0,.06)'"
+         onmouseout="this.style.borderColor='#E2E8F0';this.style.boxShadow='none'">
+        <div style="width:44px;height:44px;border-radius:10px;background:#1B2A4A;
+                    display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <i class="fas fa-plug" style="color:#C9A84C;font-size:18px"></i>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:#1B2A4A;margin-bottom:3px">
+            Sage ERP Integration
+            <span style="font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+                         background:#C9A84C;color:#1B2A4A;padding:1px 6px;border-radius:3px;margin-left:6px">New</span>
+          </div>
+          <div style="font-size:13px;color:#64748B;line-height:1.45">
+            Requirements checklist for connecting GOIL Budget to Sage — what to gather from the Sage admins before development begins.
+          </div>
+        </div>
+        <i class="fas fa-chevron-right" style="color:#CBD5E1;font-size:12px;margin-left:auto;flex-shrink:0"></i>
+      </a>
+    </div>
+
     <hr class="docs-divider">
 
     {{-- Roles ──────────────────────────────────────────── --}}

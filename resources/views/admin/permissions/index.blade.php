@@ -73,10 +73,10 @@
                             <td>
                                 @if($perm->roles_count === 0)
                                 <form method="POST"
-                                      action="{{ route('admin.permissions.destroy', $perm) }}">
+                                      action="{{ route('admin.permissions.destroy', $perm) }}"
+                                      data-confirm-name="{{ $perm->name }}">
                                     @csrf @method('DELETE')
-                                    <button class="btn btn-sm btn-outline-danger"
-                                            onclick="return confirm('Delete permission: {{ $perm->name }}?')">
+                                    <button class="btn btn-sm btn-outline-danger">
                                         Delete
                                     </button>
                                 </form>

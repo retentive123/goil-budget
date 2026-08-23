@@ -21,6 +21,8 @@ use App\Models\IncomeStatementConfig;
 use App\Models\BalanceSheetConfig;
 use App\Models\CapexConfig;
 use App\Services\AuditLogger;
+use App\Models\Subsidiary;
+use App\Models\SubsidiaryCategory;
 
 class ReportController extends Controller
 {
@@ -145,15 +147,24 @@ public function department(Request $request)
 
     $department  = $request->department_id
         ? Department::find($request->department_id)
-        : $departments->first();
+        : null;
 
-    if (!$department || !$period) {
+    $basis = request('budget_basis', 'original');
+
+    if (!$period) {
         return view('reports.department', compact(
-            'periods','departments','categories'
-        ) + ['period'=>$period,'department'=>$department,'version'=>null]);
+            'periods','departments','categories','basis'
+        ) + ['period'=>$period,'department'=>$department,'version'=>null,'revisionCount'=>0]);
     }
 
-    $basis      = request('budget_basis', 'original');
+    if (!$department) {
+        // No department chosen yet — prompt the user to pick one
+        $revisionCount = $this->revisionCount($period);
+        return view('reports.department', compact(
+            'periods','departments','categories','basis','period','revisionCount'
+        ) + ['department'=>null,'version'=>null]);
+    }
+
     $versionIds = $this->effectiveVersionIds($period, $basis, $department->id);
 
     $version = BudgetVersion::with('lineItems.accountCode.category')
@@ -345,13 +356,15 @@ if ($version) {
         $periodA = $periodAId ? BudgetPeriod::find($periodAId) : null;
         $periodB = $periodBId ? BudgetPeriod::find($periodBId) : null;
 
-        $department = $request->department_id
+        $subsidiaryId = $request->integer('subsidiary_id') ?: null;
+        $subsidiary   = $subsidiaryId ? Subsidiary::find($subsidiaryId) : null;
+        $department   = (!$subsidiaryId && $request->department_id)
             ? Department::find($request->department_id)
             : null;
 
         $basis = request('budget_basis', 'original');
 
-        $comparison = $this->buildYoYComparison($periodA, $periodB, $department, $basis);
+        $comparison = $this->buildYoYComparison($periodA, $periodB, $department, $basis, $subsidiaryId);
 
         $comparisonData = $comparison;
         if (!empty($comparisonData)) {
@@ -362,7 +375,9 @@ if ($version) {
 
         return view('reports.yoy', compact(
             'periods','departments',
-            'periodA','periodB','department','comparison',
+            'periodA','periodB',
+            'department', 'subsidiary', 'subsidiaryId',
+            'comparison',
             'basis', 'revisionCount'
         ));
     }
@@ -428,7 +443,10 @@ public function deptComparison(Request $request)
     $periods     = BudgetPeriod::orderByDesc('year')->get();
     $departments = $this->reportDepartments();
 
-    $department = $request->department_id
+    $subsidiaryId = $request->integer('subsidiary_id') ?: null;
+    $subsidiary   = $subsidiaryId ? Subsidiary::find($subsidiaryId) : null;
+
+    $department = (!$subsidiaryId && $request->department_id)
         ? Department::find($request->department_id)
         : null;
 
@@ -436,7 +454,7 @@ public function deptComparison(Request $request)
     $varianceFilter = $request->variance_filter ?? 'all'; // all, over, under
 
     $basis      = request('budget_basis', 'original');
-    $versionIds = $this->effectiveVersionIds($period, $basis, $department?->id);
+    $versionIds = $this->effectiveVersionIds($period, $basis, $department?->id, $subsidiaryId);
 
     $versions = BudgetVersion::with('department','lineItems.accountCode.category')
         ->whereIn('id', $versionIds)
@@ -543,7 +561,7 @@ public function deptComparison(Request $request)
 
     return view('reports.variance', compact(
         'period', 'periods', 'departments',
-        'department',
+        'department', 'subsidiary', 'subsidiaryId',
         'varianceData',
         'summary',
         'typeSummary', 'catSummary', 'deptSummary',
@@ -604,6 +622,8 @@ public function deptComparison(Request $request)
         $periods     = BudgetPeriod::orderByDesc('year')->get();
         $departments = $this->reportDepartments();
 
+        $subsidiaryId = $request->integer('subsidiary_id') ?: null;
+
         $virements = Virement::with(
                 'department',
                 'fromLineItem.accountCode.category',
@@ -611,7 +631,9 @@ public function deptComparison(Request $request)
                 'requestedBy','approvedBy'
             )
             ->when($period,                  fn($q) => $q->where('budget_period_id', $period->id))
-            ->when($request->department_id,  fn($q) => $q->where('department_id', $request->department_id))
+            ->when(!$subsidiaryId && $request->department_id,
+                                             fn($q) => $q->where('department_id', $request->department_id))
+            ->when($subsidiaryId,            fn($q) => $q->where('subsidiary_id', $subsidiaryId))
             ->when($request->status,         fn($q) => $q->where('status', $request->status))
             ->orderByDesc('created_at')
             ->get();
@@ -625,8 +647,12 @@ public function deptComparison(Request $request)
             'value'    => $virements->where('status','approved')->sum('amount'),
         ];
 
+        $subsidiary = $subsidiaryId ? Subsidiary::find($subsidiaryId) : null;
+
         return view('reports.virement', compact(
-            'period','periods','departments','virements','stats'
+            'period','periods','departments',
+            'subsidiary', 'subsidiaryId',
+            'virements','stats'
         ));
     }
 
@@ -638,12 +664,14 @@ public function deptComparison(Request $request)
         $departments = $this->reportDepartments();
 
         $activityLevel = (float) $request->get('activity_level', 100);
-        $department    = $request->department_id
+        $subsidiaryId  = $request->integer('subsidiary_id') ?: null;
+        $subsidiary    = $subsidiaryId ? Subsidiary::find($subsidiaryId) : null;
+        $department    = (!$subsidiaryId && $request->department_id)
             ? Department::find($request->department_id)
             : null;
 
         $basis      = request('budget_basis', 'original');
-        $versionIds = $this->effectiveVersionIds($period, $basis, $department?->id);
+        $versionIds = $this->effectiveVersionIds($period, $basis, $department?->id, $subsidiaryId);
 
         $versions = BudgetVersion::with('department','lineItems.accountCode.category')
             ->whereIn('id', $versionIds)
@@ -655,7 +683,8 @@ public function deptComparison(Request $request)
 
         return view('reports.flexed', compact(
             'period','periods','departments',
-            'department','flexed','activityLevel',
+            'department', 'subsidiary', 'subsidiaryId',
+            'flexed','activityLevel',
             'basis', 'revisionCount'
         ));
     }
@@ -667,12 +696,14 @@ public function deptComparison(Request $request)
         $periods     = BudgetPeriod::orderByDesc('year')->get();
         $departments = $this->reportDepartments();
 
-        $department = $request->department_id
+        $subsidiaryId = $request->integer('subsidiary_id') ?: null;
+        $subsidiary   = $subsidiaryId ? Subsidiary::find($subsidiaryId) : null;
+        $department   = (!$subsidiaryId && $request->department_id)
             ? Department::find($request->department_id)
             : null;
 
         $basis      = request('budget_basis', 'original');
-        $versionIds = $this->effectiveVersionIds($period, $basis, $department?->id);
+        $versionIds = $this->effectiveVersionIds($period, $basis, $department?->id, $subsidiaryId);
 
         $versions = BudgetVersion::with('department','lineItems.accountCode.category')
             ->whereIn('id', $versionIds)
@@ -683,7 +714,9 @@ public function deptComparison(Request $request)
         $revisionCount = $this->revisionCount($period);
 
         return view('reports.approved', compact(
-            'period','periods','departments','department','versions','data',
+            'period','periods','departments',
+            'department', 'subsidiary', 'subsidiaryId',
+            'versions','data',
             'basis', 'revisionCount'
         ));
     }
@@ -695,13 +728,15 @@ public function deptComparison(Request $request)
         $periods     = BudgetPeriod::orderByDesc('year')->get();
         $departments = $this->reportDepartments();
 
-        $department = $request->department_id
+        $subsidiaryId = $request->integer('subsidiary_id') ?: null;
+        $subsidiary   = $subsidiaryId ? Subsidiary::find($subsidiaryId) : null;
+        $department   = (!$subsidiaryId && $request->department_id)
             ? Department::find($request->department_id)
             : null;
 
         if (!$period) {
             return view('reports.revised', compact('periods','departments') + [
-                'period' => null, 'department' => null,
+                'period' => null, 'department' => null, 'subsidiary' => null, 'subsidiaryId' => null,
                 'data' => [], 'originalVersions' => collect(),
                 'revisedVersions' => collect(), 'revisionCount' => 0, 'actualsData' => [],
             ]);
@@ -712,7 +747,8 @@ public function deptComparison(Request $request)
             ->where('budget_period_id', $period->id)
             ->where('is_revision', false)
             ->where('status', 'approved')
-            ->when($department, fn($q) => $q->where('department_id', $department->id))
+            ->when($department,    fn($q) => $q->where('department_id',  $department->id))
+            ->when($subsidiaryId,  fn($q) => $q->where('subsidiary_id',  $subsidiaryId))
             ->get();
 
         // Latest approved REVISION version per dept (highest version_number wins)
@@ -725,7 +761,8 @@ public function deptComparison(Request $request)
             ->where('budget_period_id', $period->id)
             ->where('is_revision', true)
             ->where('status', 'approved')
-            ->when($department, fn($q) => $q->where('department_id', $department->id))
+            ->when($department,   fn($q) => $q->where('department_id', $department->id))
+            ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
             ->orderByDesc('version_number')
             ->get()
             ->unique('department_id'); // keep only latest revision per dept
@@ -738,7 +775,8 @@ public function deptComparison(Request $request)
 
         // Actuals by account code for this period
         $actualsData = \App\Models\BudgetActual::where('budget_period_id', $period->id)
-            ->when($department, fn($q) => $q->where('department_id', $department->id))
+            ->when($department,   fn($q) => $q->where('department_id',  $department->id))
+            ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
             ->where('status', 'confirmed')
             ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
             ->selectRaw('account_codes.code as ac, SUM(budget_actuals.amount) as total')
@@ -798,7 +836,8 @@ public function deptComparison(Request $request)
         }
 
         return view('reports.revised', compact(
-            'period','periods','departments','department',
+            'period','periods','departments',
+            'department', 'subsidiary', 'subsidiaryId',
             'originalVersions','revisedVersions','revisionCount',
             'data','actualsData'
         ));
@@ -807,10 +846,24 @@ public function deptComparison(Request $request)
     // â”€â”€ Financial Statement (P&L / Cash Flow / Balance Sheet) â”€â”€
     public function financialStatement(Request $request)
     {
-        $period      = $this->resolvePeriod($request);
-        $periods     = BudgetPeriod::orderByDesc('year')->orderByDesc('id')->get();
-        $departments = $this->reportDepartments();
-        $deptId      = $request->integer('department_id') ?: null;
+        $period       = $this->resolvePeriod($request);
+        $periods      = BudgetPeriod::orderByDesc('year')->orderByDesc('id')->get();
+        $departments  = $this->reportDepartments();
+        $deptId       = $request->integer('department_id') ?: null;
+        $subsidiaryId = $request->integer('subsidiary_id') ?: null;
+        $subCatId     = $request->integer('subsidiary_category_id') ?: null;
+
+        // When a category is selected but no specific subsidiary, include all subsidiaries in that category
+        if ($subCatId && !$subsidiaryId) {
+            // The version query will filter via whereHas on subsidiary category
+        }
+
+        // Load subsidiaries and categories for the filter UI
+        $subsidiaries     = Subsidiary::where('is_active', true)->with('category')->orderBy('name')->get();
+        $subCategories    = SubsidiaryCategory::where('is_active', true)->orderBy('name')->get();
+
+        // If dept is selected, clear subsidiary; they're mutually exclusive
+        if ($deptId) { $subsidiaryId = null; $subCatId = null; }
 
         if (!$period) {
             return view('reports.financial', [
@@ -818,17 +871,37 @@ public function deptComparison(Request $request)
                 'prevPeriod'          => null,
                 'periods'             => $periods,
                 'departments'         => $departments,
+                'subsidiaries'        => $subsidiaries,
+                'subCategories'       => $subCategories,
                 'deptId'              => null,
+                'subsidiaryId'        => null,
+                'subCatId'            => null,
                 'pnl'                 => null,
                 'cashflow'            => null,
                 'balanceSheet'        => null,
                 'activeConfig'        => null,
                 'configuredStatement' => null,
+                'activeBsConfig'           => null,
+                'configuredBalanceSheet'   => null,
             ]);
         }
 
         $basis      = request('budget_basis', 'original');
-        $versionIds = $this->effectiveVersionIds($period, $basis, $deptId ?: null);
+        $versionIds = $this->effectiveVersionIds($period, $basis, $deptId, $subsidiaryId);
+
+        // If a subsidiary category was chosen (but no specific subsidiary), collect version IDs for all
+        // subsidiaries in that category and union them
+        if ($subCatId && !$subsidiaryId) {
+            $catSubIds = Subsidiary::where('subsidiary_category_id', $subCatId)->pluck('id');
+            $catVersionIds = [];
+            foreach ($catSubIds as $sid) {
+                $catVersionIds = array_merge(
+                    $catVersionIds,
+                    $this->effectiveVersionIds($period, $basis, null, $sid)
+                );
+            }
+            $versionIds = array_unique($catVersionIds);
+        }
 
         $versions = BudgetVersion::whereIn('id', $versionIds)->get();
 
@@ -838,7 +911,7 @@ public function deptComparison(Request $request)
             ?? BudgetPeriod::where('id', '<', $period->id)
                 ->orderByDesc('year')->orderByDesc('id')->first();
 
-        $activeConfig = IncomeStatementConfig::where('is_active', true)
+        $activeConfig   = IncomeStatementConfig::where('is_active', true)
             ->with('lines.subCategory', 'lines.csBase')
             ->first();
 
@@ -846,24 +919,32 @@ public function deptComparison(Request $request)
 
         $revisionCount = $this->revisionCount($period);
 
+        // For category-level filtering, pass null as subsidiaryId so actuals are summed across all
+        // subsidiaries in the category (the versions are already pre-filtered above)
+        $effectiveSubId = ($subCatId && !$subsidiaryId) ? null : $subsidiaryId;
+
         return view('reports.financial', [
             'period'               => $period,
             'prevPeriod'           => $prevPeriod,
             'periods'              => $periods,
             'departments'          => $departments,
+            'subsidiaries'         => $subsidiaries,
+            'subCategories'        => $subCategories,
             'deptId'               => $deptId,
+            'subsidiaryId'         => $subsidiaryId,
+            'subCatId'             => $subCatId,
             'basis'                => $basis,
             'revisionCount'        => $revisionCount,
-            'pnl'                  => $this->buildPnlData($versions, $period, $deptId, $prevPeriod),
-            'cashflow'             => $this->buildCashFlowData($versions, $period, $deptId),
-            'balanceSheet'         => $this->buildBalanceSheetData($versions, $period, $deptId, $prevPeriod),
+            'pnl'                  => $this->buildPnlData($versions, $period, $deptId, $prevPeriod, $effectiveSubId),
+            'cashflow'             => $this->buildCashFlowData($versions, $period, $deptId, $effectiveSubId),
+            'balanceSheet'         => $this->buildBalanceSheetData($versions, $period, $deptId, $prevPeriod, $effectiveSubId),
             'activeConfig'         => $activeConfig,
             'configuredStatement'  => $activeConfig
-                ? $this->buildConfiguredStatement($activeConfig, $versions, $period, $deptId, $prevPeriod)
+                ? $this->buildConfiguredStatement($activeConfig, $versions, $period, $deptId, $prevPeriod, $effectiveSubId)
                 : null,
             'activeBsConfig'           => $activeBsConfig,
             'configuredBalanceSheet'   => $activeBsConfig
-                ? $this->buildConfiguredBalanceSheet($activeBsConfig, $versions, $period, $deptId, $prevPeriod)
+                ? $this->buildConfiguredBalanceSheet($activeBsConfig, $versions, $period, $deptId, $prevPeriod, $effectiveSubId)
                 : null,
         ]);
     }
@@ -950,6 +1031,116 @@ public function codeExplorerExport(Request $request)
         return $pdf->download("goil-{$type}-{$period?->year}.pdf");
     }
 
+    // ── Subsidiary Budget Report ───────────────────────────────────────────
+    public function subsidiaryReport(Request $request)
+    {
+        $period     = $this->resolvePeriod($request);
+        $periods    = BudgetPeriod::orderByDesc('year')->get();
+        $categories = SubsidiaryCategory::where('is_active', true)->orderBy('name')->get();
+
+        $subsidiaries = Subsidiary::where('is_active', true)
+            ->with('category')
+            ->orderBy('name')
+            ->get();
+
+        $subsidiaryId = $request->subsidiary_id ? (int) $request->subsidiary_id : null;
+        $categoryId   = $request->category_id   ? (int) $request->category_id   : null;
+
+        $subsidiary = $subsidiaryId ? Subsidiary::find($subsidiaryId) : null;
+        $category   = $categoryId   ? SubsidiaryCategory::find($categoryId)  : null;
+
+        $basis = $request->input('budget_basis', 'original');
+
+        $versionsQuery = BudgetVersion::with([
+                'subsidiary.category',
+                'lineItems.accountCode.category',
+            ])
+            ->whereNotNull('subsidiary_id')
+            ->where('status', 'approved')
+            ->where('is_revision', false);
+
+        if ($period) {
+            $versionsQuery->where('budget_period_id', $period->id);
+        }
+
+        if ($subsidiaryId) {
+            $versionsQuery->where('subsidiary_id', $subsidiaryId);
+        }
+
+        if ($categoryId) {
+            $versionsQuery->whereHas('subsidiary', fn($sq) =>
+                $sq->where('subsidiary_category_id', $categoryId)
+            );
+        }
+
+        $versions = $versionsQuery->get();
+
+        // For "revised" basis, swap in latest approved revision where one exists
+        if ($basis === 'revised') {
+            $revisions = BudgetVersion::with([
+                    'subsidiary.category',
+                    'lineItems.accountCode.category',
+                ])
+                ->whereNotNull('subsidiary_id')
+                ->where('status', 'approved')
+                ->where('is_revision', true)
+                ->when($period,       fn($q) => $q->where('budget_period_id', $period->id))
+                ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
+                ->when($categoryId,   fn($q) => $q->whereHas('subsidiary', fn($sq) =>
+                    $sq->where('subsidiary_category_id', $categoryId)
+                ))
+                ->orderByDesc('version_number')
+                ->get()
+                ->unique('subsidiary_id');
+
+            $revisionMap = $revisions->keyBy('subsidiary_id');
+            $versions = $versions->map(fn($v) =>
+                $revisionMap->has($v->subsidiary_id) ? $revisionMap->get($v->subsidiary_id) : $v
+            );
+        }
+
+        $rows = $versions->map(function ($v) {
+            $items = $v->lineItems->map(function ($li) {
+                return [
+                    'code'     => $li->accountCode->code ?? '—',
+                    'name'     => $li->accountCode->name ?? '—',
+                    'category' => $li->accountCode->category->name ?? '—',
+                    'q1'       => (float)($li->q1_amount ?? 0),
+                    'q2'       => (float)($li->q2_amount ?? 0),
+                    'q3'       => (float)($li->q3_amount ?? 0),
+                    'q4'       => (float)($li->q4_amount ?? 0),
+                    'total'    => (float)($li->total_amount ?? 0),
+                ];
+            })->sortBy('code')->values();
+
+            return [
+                'subsidiary' => $v->subsidiary,
+                'version'    => $v,
+                'items'      => $items,
+                'totals'     => [
+                    'q1'    => $items->sum('q1'),
+                    'q2'    => $items->sum('q2'),
+                    'q3'    => $items->sum('q3'),
+                    'q4'    => $items->sum('q4'),
+                    'total' => $items->sum('total'),
+                ],
+            ];
+        })->sortBy(fn($r) => $r['subsidiary']?->name ?? '')->values();
+
+        $grandTotals = [
+            'q1'    => $rows->sum(fn($r) => $r['totals']['q1']),
+            'q2'    => $rows->sum(fn($r) => $r['totals']['q2']),
+            'q3'    => $rows->sum(fn($r) => $r['totals']['q3']),
+            'q4'    => $rows->sum(fn($r) => $r['totals']['q4']),
+            'total' => $rows->sum(fn($r) => $r['totals']['total']),
+        ];
+
+        return view('reports.subsidiary', compact(
+            'period', 'periods', 'subsidiaries', 'categories',
+            'subsidiary', 'category', 'basis', 'rows', 'grandTotals'
+        ));
+    }
+
     // â”€â”€ Private helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private function reportDepartments(): \Illuminate\Database\Eloquent\Collection
@@ -1014,12 +1205,13 @@ private function buildYoYComparison(
     ?BudgetPeriod $periodA,
     ?BudgetPeriod $periodB,
     ?Department   $department,
-    string        $basis = 'original'
+    string        $basis = 'original',
+    ?int          $subsidiaryId = null
 ): array {
     if (!$periodA || !$periodB) return [];
 
-    $idsA = $this->effectiveVersionIds($periodA, $basis, $department?->id);
-    $idsB = $this->effectiveVersionIds($periodB, $basis, $department?->id);
+    $idsA = $this->effectiveVersionIds($periodA, $basis, $department?->id, $subsidiaryId);
+    $idsB = $this->effectiveVersionIds($periodB, $basis, $department?->id, $subsidiaryId);
 
     $getVersionItems = function (array $ids) {
         if (empty($ids)) return collect();
@@ -1513,11 +1705,12 @@ private function buildCodeExplorerData(Request $request, string $basis = 'origin
 }
 
 // â”€â”€ P&L builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-private function buildPnlData($versions, $period, ?int $deptId, ?BudgetPeriod $prevPeriod = null): array
+private function buildPnlData($versions, $period, ?int $deptId, ?BudgetPeriod $prevPeriod = null, ?int $subsidiaryId = null): array
 {
     // Current-year confirmed actuals by account code
     $actualsByCode = \App\Models\BudgetActual::where('budget_period_id', $period->id)
-        ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+        ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+        ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
         ->where('status', 'confirmed')
         ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
         ->selectRaw('account_codes.code as ac, SUM(budget_actuals.amount) as total')
@@ -1531,7 +1724,8 @@ private function buildPnlData($versions, $period, ?int $deptId, ?BudgetPeriod $p
 
     if ($prevPeriod) {
         $prevActualsByCode = \App\Models\BudgetActual::where('budget_period_id', $prevPeriod->id)
-            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+            ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
             ->where('status', 'confirmed')
             ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
             ->selectRaw('account_codes.code as ac, SUM(budget_actuals.amount) as total')
@@ -1542,7 +1736,8 @@ private function buildPnlData($versions, $period, ?int $deptId, ?BudgetPeriod $p
         $prevVersions = BudgetVersion::where('budget_period_id', $prevPeriod->id)
             ->where('status', 'approved')
             ->where('is_revision', false)
-            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+            ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
             ->get();
 
         foreach ($prevVersions as $pv) {
@@ -1560,7 +1755,8 @@ private function buildPnlData($versions, $period, ?int $deptId, ?BudgetPeriod $p
     $activePnlCodes = \App\Models\AccountCode::with('category')
         ->where('is_active', true)
         ->whereHas('category', fn($q) => $q->whereIn('budget_type', ['revenue', 'expense', 'both']))
-        ->when($deptId, fn($q) => $q->whereHas('departments', fn($d) => $d->where('departments.id', $deptId)))
+        ->when($deptId,       fn($q) => $q->whereHas('departments',   fn($d) => $d->where('departments.id', $deptId)))
+        ->when($subsidiaryId, fn($q) => $q->whereHas('subsidiaries',  fn($d) => $d->where('subsidiaries.id', $subsidiaryId)))
         ->orderBy('code')
         ->get();
 
@@ -1731,7 +1927,8 @@ private function buildConfiguredStatement(
     $versions,
     BudgetPeriod $period,
     ?int $deptId,
-    ?BudgetPeriod $prevPeriod = null
+    ?BudgetPeriod $prevPeriod = null,
+    ?int $subsidiaryId = null
 ): array {
     // Effective budget amounts by sub_category_id from approved versions
     $budgetBySubCat = [];
@@ -1746,7 +1943,8 @@ private function buildConfiguredStatement(
 
     // YTD confirmed actuals by sub_category_id
     $actualsBySubCat = \App\Models\BudgetActual::where('budget_period_id', $period->id)
-        ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+        ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+        ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
         ->where('status', 'confirmed')
         ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
         ->join('account_categories', 'account_codes.account_category_id', '=', 'account_categories.id')
@@ -1763,7 +1961,8 @@ private function buildConfiguredStatement(
         $prevVersions = BudgetVersion::where('budget_period_id', $prevPeriod->id)
             ->where('status', 'approved')
             ->where('is_revision', false)
-            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+            ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
             ->get();
 
         foreach ($prevVersions as $pv) {
@@ -1776,7 +1975,8 @@ private function buildConfiguredStatement(
         }
 
         $prevActualsBySubCat = \App\Models\BudgetActual::where('budget_period_id', $prevPeriod->id)
-            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+            ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
             ->where('status', 'confirmed')
             ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
             ->join('account_categories', 'account_codes.account_category_id', '=', 'account_categories.id')
@@ -1951,7 +2151,8 @@ private function buildConfiguredBalanceSheet(
     $versions,
     BudgetPeriod $period,
     ?int $deptId,
-    ?BudgetPeriod $prevPeriod = null
+    ?BudgetPeriod $prevPeriod = null,
+    ?int $subsidiaryId = null
 ): array {
     // Budget by sub_category_id
     $budgetBySubCat = [];
@@ -1966,7 +2167,8 @@ private function buildConfiguredBalanceSheet(
 
     // YTD actuals
     $actualsBySubCat = \App\Models\BudgetActual::where('budget_period_id', $period->id)
-        ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+        ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+        ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
         ->where('status', 'confirmed')
         ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
         ->join('account_categories', 'account_codes.account_category_id', '=', 'account_categories.id')
@@ -1982,7 +2184,8 @@ private function buildConfiguredBalanceSheet(
         $prevVersions = BudgetVersion::where('budget_period_id', $prevPeriod->id)
             ->where('status', 'approved')
             ->where('is_revision', false)
-            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+            ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
             ->get();
         foreach ($prevVersions as $pv) {
             foreach ($pv->lineItems()->with('accountCode.category')->get() as $item) {
@@ -1993,7 +2196,8 @@ private function buildConfiguredBalanceSheet(
             }
         }
         $prevActualsBySubCat = \App\Models\BudgetActual::where('budget_period_id', $prevPeriod->id)
-            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+            ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
             ->where('status', 'confirmed')
             ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
             ->join('account_categories', 'account_codes.account_category_id', '=', 'account_categories.id')
@@ -2079,7 +2283,7 @@ private function buildConfiguredBalanceSheet(
 }
 
 // â”€â”€ Cash-flow builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-private function buildCashFlowData($versions, $period, ?int $deptId): array
+private function buildCashFlowData($versions, $period, ?int $deptId, ?int $subsidiaryId = null): array
 {
     // Quarterly budget by type (revenue / expense)
     $qBudget = ['revenue' => [1=>0,2=>0,3=>0,4=>0], 'expense' => [1=>0,2=>0,3=>0,4=>0]];
@@ -2099,7 +2303,8 @@ private function buildCashFlowData($versions, $period, ?int $deptId): array
 
     // Monthly confirmed actuals grouped by month and category type
     $monthlyActuals = \App\Models\BudgetActual::where('budget_period_id', $period->id)
-        ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+        ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+        ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
         ->where('status', 'confirmed')
         ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
         ->join('account_categories', 'account_codes.account_category_id', '=', 'account_categories.id')
@@ -2169,14 +2374,15 @@ private function buildCashFlowData($versions, $period, ?int $deptId): array
 }
 
 // â”€â”€ Balance Sheet data builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-private function buildBalanceSheetData($versions, $period, ?int $deptId, ?BudgetPeriod $prevPeriod = null): array
+private function buildBalanceSheetData($versions, $period, ?int $deptId, ?BudgetPeriod $prevPeriod = null, ?int $subsidiaryId = null): array
 {
     $actualsByCode     = [];
     $prevActualsByCode = [];
     $prevBudgetByCode  = [];
 
     $actualsByCode = \App\Models\BudgetActual::where('budget_period_id', $period->id)
-        ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+        ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+        ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
         ->where('status', 'confirmed')
         ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
         ->selectRaw('account_codes.code as ac, SUM(budget_actuals.amount) as total')
@@ -2186,7 +2392,8 @@ private function buildBalanceSheetData($versions, $period, ?int $deptId, ?Budget
 
     if ($prevPeriod) {
         $prevActualsByCode = \App\Models\BudgetActual::where('budget_period_id', $prevPeriod->id)
-            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+            ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
             ->where('status', 'confirmed')
             ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
             ->selectRaw('account_codes.code as ac, SUM(budget_actuals.amount) as total')
@@ -2197,7 +2404,8 @@ private function buildBalanceSheetData($versions, $period, ?int $deptId, ?Budget
         $prevVersions = BudgetVersion::where('budget_period_id', $prevPeriod->id)
             ->where('status', 'approved')
             ->where('is_revision', false)
-            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+            ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
             ->get();
         foreach ($prevVersions as $pv) {
             foreach ($pv->lineItems()->with('accountCode')->get() as $item) {
@@ -2212,7 +2420,8 @@ private function buildBalanceSheetData($versions, $period, ?int $deptId, ?Budget
     $activeBalanceCodes = \App\Models\AccountCode::with('category')
         ->where('is_active', true)
         ->whereHas('category', fn($q) => $q->whereIn('budget_type', ['assets', 'liabilities']))
-        ->when($deptId, fn($q) => $q->whereHas('departments', fn($d) => $d->where('departments.id', $deptId)))
+        ->when($deptId,       fn($q) => $q->whereHas('departments',  fn($d) => $d->where('departments.id', $deptId)))
+        ->when($subsidiaryId, fn($q) => $q->whereHas('subsidiaries', fn($d) => $d->where('subsidiaries.id', $subsidiaryId)))
         ->orderBy('code')
         ->get();
 
@@ -2343,14 +2552,15 @@ private function buildBalanceSheetData($versions, $period, ?int $deptId, ?Budget
 }
 
 // â”€â”€ CapEx data builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-private function buildCapexData($versions, $period, ?int $deptId, ?BudgetPeriod $prevPeriod = null): array
+private function buildCapexData($versions, $period, ?int $deptId, ?BudgetPeriod $prevPeriod = null, ?int $subsidiaryId = null): array
 {
     $actualsByCode     = [];
     $prevActualsByCode = [];
     $prevBudgetByCode  = [];
 
     $actualsByCode = \App\Models\BudgetActual::where('budget_period_id', $period->id)
-        ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+        ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+        ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
         ->where('status', 'confirmed')
         ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
         ->selectRaw('account_codes.code as ac, SUM(budget_actuals.amount) as total')
@@ -2360,7 +2570,8 @@ private function buildCapexData($versions, $period, ?int $deptId, ?BudgetPeriod 
 
     if ($prevPeriod) {
         $prevActualsByCode = \App\Models\BudgetActual::where('budget_period_id', $prevPeriod->id)
-            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+            ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
             ->where('status', 'confirmed')
             ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
             ->selectRaw('account_codes.code as ac, SUM(budget_actuals.amount) as total')
@@ -2371,7 +2582,8 @@ private function buildCapexData($versions, $period, ?int $deptId, ?BudgetPeriod 
         $prevVersions = BudgetVersion::where('budget_period_id', $prevPeriod->id)
             ->where('status', 'approved')
             ->where('is_revision', false)
-            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+            ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
             ->get();
         foreach ($prevVersions as $pv) {
             foreach ($pv->lineItems()->with('accountCode')->get() as $item) {
@@ -2470,15 +2682,18 @@ private function buildCapexData($versions, $period, ?int $deptId, ?BudgetPeriod 
 // â”€â”€ Public actions for new reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 public function capex(Request $request)
 {
-    $period      = $this->resolvePeriod($request);
-    $periods     = BudgetPeriod::orderByDesc('year')->orderByDesc('id')->get();
-    $departments = $this->reportDepartments();
-    $deptId      = $request->integer('department_id') ?: null;
+    $period       = $this->resolvePeriod($request);
+    $periods      = BudgetPeriod::orderByDesc('year')->orderByDesc('id')->get();
+    $departments  = $this->reportDepartments();
+    $subsidiaryId = $request->integer('subsidiary_id') ?: null;
+    $subsidiary   = $subsidiaryId ? Subsidiary::find($subsidiaryId) : null;
+    $deptId       = (!$subsidiaryId) ? ($request->integer('department_id') ?: null) : null;
 
     if (!$period) {
         return view('reports.capex', [
             'period' => null, 'periods' => $periods,
             'departments' => $departments, 'deptId' => null,
+            'subsidiary' => null, 'subsidiaryId' => null,
             'capex' => null, 'prevPeriod' => null,
             'configuredCapex' => null,
         ]);
@@ -2487,7 +2702,8 @@ public function capex(Request $request)
     $versions = BudgetVersion::where('budget_period_id', $period->id)
         ->where('status', 'approved')
         ->where('is_revision', false)
-        ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+        ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+        ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
         ->get();
 
     $prevPeriod = BudgetPeriod::where('year', $period->year - 1)
@@ -2498,12 +2714,14 @@ public function capex(Request $request)
     $activeCapexConfig = CapexConfig::where('is_active', true)->with('lines.subCategory')->first();
 
     return view('reports.capex', [
-        'period'         => $period,
-        'prevPeriod'     => $prevPeriod,
-        'periods'        => $periods,
-        'departments'    => $departments,
-        'deptId'         => $deptId,
-        'capex'          => $this->buildCapexData($versions, $period, $deptId, $prevPeriod),
+        'period'          => $period,
+        'prevPeriod'      => $prevPeriod,
+        'periods'         => $periods,
+        'departments'     => $departments,
+        'deptId'          => $deptId,
+        'subsidiary'      => $subsidiary,
+        'subsidiaryId'    => $subsidiaryId,
+        'capex'           => $this->buildCapexData($versions, $period, $deptId, $prevPeriod, $subsidiaryId),
         'configuredCapex' => $activeCapexConfig
             ? $this->buildConfiguredCapex($activeCapexConfig, $versions, $period, $deptId, $prevPeriod)
             : null,
@@ -2554,7 +2772,8 @@ private function buildConfiguredCapex(
             ->pluck('total', 'ac')->toArray();
 
         $prevActualsBySubCat = \App\Models\BudgetActual::where('budget_period_id', $prevPeriod->id)
-            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+            ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
             ->where('status', 'confirmed')
             ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
             ->join('account_categories', 'account_codes.account_category_id', '=', 'account_categories.id')
@@ -2731,7 +2950,7 @@ private function buildConfiguredCapex(
  *   'revised'  → approved revision per dept if one exists, else approved original.
  * Falls back to [] when $period is null.
  */
-private function effectiveVersionIds(?BudgetPeriod $period, string $basis, ?int $departmentId = null): array
+private function effectiveVersionIds(?BudgetPeriod $period, string $basis, ?int $departmentId = null, ?int $subsidiaryId = null): array
 {
     if (!$period) return [];
 
@@ -2739,13 +2958,32 @@ private function effectiveVersionIds(?BudgetPeriod $period, string $basis, ?int 
         ->where('status', 'approved')
         ->where('is_revision', false)
         ->when($departmentId, fn($q) => $q->where('department_id', $departmentId))
-        ->get(['id', 'department_id']);
+        ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
+        ->get(['id', 'department_id', 'subsidiary_id']);
 
     if ($basis !== 'revised') {
         return $originals->pluck('id')->toArray();
     }
 
-    // Latest approved revision per dept, keyed by department_id
+    // Subsidiary path — key revisions by subsidiary_id
+    if ($subsidiaryId) {
+        $revisions = BudgetVersion::where('budget_period_id', $period->id)
+            ->where('status', 'approved')
+            ->where('is_revision', true)
+            ->where('subsidiary_id', $subsidiaryId)
+            ->orderByDesc('version_number')
+            ->get(['id', 'subsidiary_id'])
+            ->unique('subsidiary_id')
+            ->keyBy('subsidiary_id');
+
+        return $originals->map(fn($orig) =>
+            $revisions->has($orig->subsidiary_id)
+                ? $revisions->get($orig->subsidiary_id)->id
+                : $orig->id
+        )->toArray();
+    }
+
+    // Department path — latest approved revision per dept, keyed by department_id
     $revisions = BudgetVersion::where('budget_period_id', $period->id)
         ->where('status', 'approved')
         ->where('is_revision', true)

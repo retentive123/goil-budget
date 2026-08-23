@@ -193,7 +193,7 @@
                                     <form method="POST"
                                           action="{{ route('admin.roles.destroy', $role) }}"
                                           class="d-inline"
-                                          onsubmit="return confirmDelete('{{ $role->name }}')">
+                                          data-confirm-name="{{ ucfirst(str_replace('_', ' ', $role->name)) }}">
                                         @csrf @method('DELETE')
                                         <button class="btn btn-sm btn-outline-danger"
                                                 style="border-radius: 6px; font-size: 11px; padding: 2px 8px;"
@@ -248,10 +248,6 @@
 </div>
 
 <script>
-function confirmDelete(roleName) {
-    return confirm(`Are you sure you want to delete the role "${roleName}"?\n\nThis action cannot be undone and will remove this role from all users.`);
-}
-</script>
 
 <style>
     .stat-card {

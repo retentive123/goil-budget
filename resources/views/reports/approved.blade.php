@@ -30,7 +30,7 @@
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label small fw-semibold mb-1">Dept / Station</label>
+                <label class="form-label small fw-semibold mb-1">Dept / Entity</label>
                 @include('reports._dept_filter', [
                     'selectedId' => request('department_id'),
                     'selectId'   => 'rptApprovedDeptSel',
@@ -57,7 +57,13 @@
 </form>
 
 @if($versions->isEmpty())
-    <div class="alert alert-info">No approved budgets found for this selection.</div>
+    <div class="alert alert-info">
+        No approved budgets found
+        @if(!empty($department)) for <strong>{{ $department->name }}</strong>
+        @elseif(!empty($subsidiary)) for <strong>{{ $subsidiary->name }}</strong>
+        @endif
+        @if($period) in {{ $period->name }}@endif.
+    </div>
 @else
 
 {{-- Grand totals --}}

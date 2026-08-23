@@ -827,6 +827,11 @@
                 <i class="fas fa-hard-hat nav-icon"></i>
                 <span class="link-text">Capital Expenditure</span>
             </a>
+            <a href="{{ route('reports.subsidiary') }}"
+               class="sidebar-link {{ request()->routeIs('reports.subsidiary') ? 'active' : '' }}">
+                <i class="bi bi-building nav-icon"></i>
+                <span class="link-text">Subsidiaries</span>
+            </a>
         </div>
         @endcan
         {{-- ════════════════════════════════════════════════ --}}
@@ -978,9 +983,14 @@
 
         <div class="nav-section-label">Help</div>
         <a href="{{ route('docs.index') }}"
-           class="sidebar-link {{ request()->routeIs('docs.*') ? 'active' : '' }}">
+           class="sidebar-link {{ request()->routeIs('docs.index') ? 'active' : '' }}">
             <i class="fas fa-book-open nav-icon"></i>
             <span class="link-text">Documentation</span>
+        </a>
+        <a href="{{ route('docs.sage-integration') }}"
+           class="sidebar-link {{ request()->routeIs('docs.sage-integration') ? 'active' : '' }}">
+            <i class="fas fa-plug nav-icon"></i>
+            <span class="link-text">Sage Integration</span>
         </a>
 
     </div>
@@ -1317,6 +1327,71 @@ document.addEventListener('DOMContentLoaded', function() {
 
 @stack('scripts')
 
+{{-- ── Global SweetAlert delete interceptor ── --}}
+<script>
+(function () {
+    // Capture-phase submit listener on DELETE forms.
+    // stopImmediatePropagation() prevents onsubmit="return confirm(...)" from also firing,
+    // so existing files do not need their onsubmit attributes removed.
+    document.addEventListener('submit', function (e) {
+        const form = e.target;
+        if (!form.querySelector('input[name="_method"][value="DELETE"]')) return;
+        if (form._swConfirmed) { delete form._swConfirmed; return; }
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const name  = form.dataset.confirmName || '';
+        const title = name ? 'Delete "' + name + '"?' : 'Confirm delete';
+        Swal.fire({
+            title: title,
+            text: 'This action cannot be undone.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, delete',
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#EF4444',
+            cancelButtonColor: '#64748B',
+            reverseButtons: true,
+            focusCancel: true,
+        }).then(function (result) {
+            if (result.isConfirmed) { form._swConfirmed = true; form.submit(); }
+        });
+    }, true);
+
+    // For onclick="..." buttons — change button to type="button" + call swConfirmDelete(this,'Name')
+    window.swConfirmDelete = function (btn, name, msg) {
+        const form = btn.closest('form');
+        if (!form) return;
+        Swal.fire({
+            title: name ? 'Delete "' + name + '"?' : 'Confirm delete',
+            text:  msg  || 'This action cannot be undone.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, delete',
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#EF4444',
+            cancelButtonColor: '#64748B',
+            reverseButtons: true,
+            focusCancel: true,
+        }).then(function (result) {
+            if (result.isConfirmed) { form._swConfirmed = true; form.submit(); }
+        });
+    };
+
+    // For dangerous non-delete actions (maintenance mode, revoke, etc.)
+    window.swConfirmAction = function (btn, opts) {
+        const form = btn.closest('form');
+        if (!form) return;
+        Swal.fire(Object.assign({
+            icon: 'warning', showCancelButton: true,
+            confirmButtonColor: '#F59E0B', cancelButtonColor: '#64748B',
+            reverseButtons: true, focusCancel: true,
+        }, opts)).then(function (result) {
+            if (result.isConfirmed) { form._swConfirmed = true; form.submit(); }
+        });
+    };
+})();
+</script>
+
 {{-- ── Search: nav item registry (permission-scoped, generated server-side) ── --}}
 <script>
 window.NAV_ITEMS = [
@@ -1354,6 +1429,7 @@ window.NAV_ITEMS = [
     { label:'Utilisation Report',   keywords:['utilisation','utilization','report'],    icon:'fas fa-arrow-up',              section:'Reports',         url:'{{ route('reports.utilisation') }}' },
     { label:'Financial Statements', keywords:['financial','pnl','income','balance'],   icon:'fas fa-file-invoice-dollar',   section:'Reports',         url:'{{ route('reports.financial') }}' },
     { label:'Capital Expenditure',  keywords:['capex','capital','expenditure','report'],icon:'fas fa-hard-hat',              section:'Reports',         url:'{{ route('reports.capex') }}' },
+    { label:'Subsidiary Report',   keywords:['subsidiary','subsidiaries','report','entity budget'],icon:'bi bi-building',      section:'Reports',         url:'{{ route('reports.subsidiary') }}' },
     @endcan
 
     // ── Administration ────────────────────────────────────
@@ -1385,6 +1461,7 @@ window.NAV_ITEMS = [
 
     // ── Help ──────────────────────────────────────────────
     { label:'Documentation',        keywords:['docs','documentation','help','guide'],   icon:'fas fa-book-open',             section:'Help',            url:'{{ route('docs.index') }}' },
+    { label:'Sage Integration',     keywords:['sage','integration','erp','api','connect','requirements'], icon:'fas fa-plug', section:'Help', url:'{{ route('docs.sage-integration') }}' },
     { label:'Change Password',      keywords:['password','change','security'],          icon:'fas fa-key',                   section:'Help',            url:'{{ route('password.change') }}' },
     { label:'Two-Factor Auth',      keywords:['2fa','two factor','security','otp'],     icon:'fas fa-shield-alt',            section:'Help',            url:'{{ route('2fa.setup') }}' },
 ];

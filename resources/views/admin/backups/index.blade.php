@@ -166,11 +166,11 @@
                             </a>
                             @endif
                             <form method="POST"
-                                  action="{{ route('admin.backups.destroy', $backup) }}">
+                                  action="{{ route('admin.backups.destroy', $backup) }}"
+                                  data-confirm-name="{{ $backup->filename }}">
                                 @csrf @method('DELETE')
                                 <button class="btn btn-sm btn-outline-danger"
-                                        style="font-size:11px;padding:2px 10px"
-                                        onclick="return confirm('Delete this backup?')">
+                                        style="font-size:11px;padding:2px 10px">
                                     Delete
                                 </button>
                             </form>
