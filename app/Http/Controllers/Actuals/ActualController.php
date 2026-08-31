@@ -38,26 +38,74 @@ class ActualController extends Controller
         $selectedMonth = (int) $request->get('month', now()->month);
         $selectedYear  = (int) $request->get('year',  now()->year);
 
+        $approvalFlow   = \App\Models\SystemSetting::get('actuals_approval_flow', 'simple');
         $monthlySummary = [];
-        if ($department && $period) {
-            for ($m = 1; $m <= 12; $m++) {
-                $total = BudgetActual::where('department_id', $department->id)
-                    ->where('budget_period_id', $period->id)
-                    ->where('month', $m)
-                    ->where('status', 'confirmed')
-                    ->sum('amount');
 
+        if ($department && $period) {
+            // Two batch queries instead of 12 individual ones
+            $confirmedTotals = BudgetActual::where('department_id',    $department->id)
+                ->where('budget_period_id', $period->id)
+                ->where('status', 'confirmed')
+                ->selectRaw('month, SUM(amount) as total')
+                ->groupBy('month')
+                ->pluck('total', 'month');
+
+            // Highest-priority status per month (confirmed > head_confirmed > submitted > draft)
+            $statusByMonth = BudgetActual::where('department_id',    $department->id)
+                ->where('budget_period_id', $period->id)
+                ->selectRaw("month, MAX(CASE status
+                    WHEN 'confirmed'      THEN 4
+                    WHEN 'head_confirmed' THEN 3
+                    WHEN 'submitted'      THEN 2
+                    ELSE 1 END) as priority")
+                ->groupBy('month')
+                ->get()
+                ->mapWithKeys(fn($r) => [$r->month => match((int) $r->priority) {
+                    4 => 'confirmed', 3 => 'head_confirmed', 2 => 'submitted', default => 'draft',
+                }]);
+
+            for ($m = 1; $m <= 12; $m++) {
+                $total  = (float) $confirmedTotals->get($m, 0);
+                $status = $statusByMonth->get($m);   // null = no rows at all
                 $monthlySummary[$m] = [
                     'name'     => BudgetActual::MONTHS[$m],
                     'total'    => $total,
-                    'has_data' => $total > 0,
+                    'has_data' => $status !== null,   // any row recorded
+                    'status'   => $status,
                 ];
+            }
+        }
+
+        // ── Pending actuals approval queue (multi-stage flow only) ──────────────
+        // Dept head sees: submitted months from their own department.
+        // Finance / admin see: head-confirmed months from every department.
+        $pendingApprovals = collect();
+        if ($approvalFlow === 'multi_stage' && $period) {
+            if ($user->hasAnyRole(['finance_reviewer', 'bdu_admin', 'super_admin'])) {
+                $pendingApprovals = BudgetActual::where('budget_period_id', $period->id)
+                    ->where('status', 'head_confirmed')
+                    ->with('department')
+                    ->select('department_id', 'subsidiary_id', 'budget_period_id', 'month', 'year')
+                    ->selectRaw('COUNT(*) as entry_count, SUM(amount) as total_amount')
+                    ->groupBy('department_id', 'subsidiary_id', 'budget_period_id', 'month', 'year')
+                    ->orderBy('year')->orderBy('month')
+                    ->get();
+            } elseif ($user->hasRole('department_head') && $user->department_id) {
+                $pendingApprovals = BudgetActual::where('budget_period_id', $period->id)
+                    ->where('status', 'submitted')
+                    ->where('department_id', $user->department_id)
+                    ->select('department_id', 'subsidiary_id', 'budget_period_id', 'month', 'year')
+                    ->selectRaw('COUNT(*) as entry_count, SUM(amount) as total_amount')
+                    ->groupBy('department_id', 'subsidiary_id', 'budget_period_id', 'month', 'year')
+                    ->orderBy('year')->orderBy('month')
+                    ->get();
             }
         }
 
         return view('actuals.index', compact(
             'period', 'periods', 'departments', 'department',
-            'selectedMonth', 'selectedYear', 'monthlySummary'
+            'selectedMonth', 'selectedYear', 'monthlySummary', 'approvalFlow',
+            'pendingApprovals'
         ));
     }
 
@@ -122,7 +170,27 @@ class ActualController extends Controller
             ->get()
             ->keyBy('budget_line_item_id');
 
+        // Group by category, then sort: revenue first, then expense, then others;
+        // alphabetical by category name within each type; account code order within each category.
         $byCategory = $version->lineItems->groupBy('accountCode.category.name');
+
+        $typePriority = [
+            'revenue'             => 0,
+            'both'                => 1,
+            'expense'             => 2,
+            'ex_pump_item'        => 3,
+            'capital_expenditure' => 4,
+            'assets'              => 5,
+            'liabilities'         => 6,
+        ];
+        $byCategory = $byCategory
+            ->sortBy(function ($items, $catName) use ($typePriority) {
+                $type = $items->first()?->accountCode?->category?->budget_type ?? 'expense';
+                return sprintf('%d_%s', $typePriority[$type] ?? 9, $catName);
+            })
+            ->map(fn($items) => $items->sortBy(
+                fn($item) => $item->accountCode?->code ?? $item->accountCode?->name ?? ''
+            ));
 
         // YTD confirmed actuals up to and including this month
         $ytdActuals = BudgetActual::when($subsidiary, fn($q) => $q->where('subsidiary_id', $subsidiary->id))
@@ -154,10 +222,21 @@ class ActualController extends Controller
         $periods     = BudgetPeriod::orderByDesc('year')->get();
         $departments = Department::where('is_active', true)->orderBy('name')->get();
 
+        // Derive the month's current status from any existing actual row.
+        // All rows in a month share the same status (they're updated in bulk),
+        // so first() is enough; fall back to null when no rows exist yet.
+        $monthStatus  = $existingActuals->max(fn($a) => BudgetActual::STATUS_PRIORITY[$a->status] ?? 1);
+        $monthStatus  = $monthStatus
+            ? array_search($monthStatus, BudgetActual::STATUS_PRIORITY)
+            : null;
+
+        $approvalFlow = \App\Models\SystemSetting::get('actuals_approval_flow', 'simple');
+
         return view('actuals.entry', compact(
             'period', 'periods', 'departments', 'department', 'subsidiary',
             'version', 'byCategory', 'existingActuals', 'ytdActuals',
-            'month', 'year', 'lineRemaining'
+            'month', 'year', 'lineRemaining',
+            'monthStatus', 'approvalFlow'
         ));
     }
 
@@ -390,7 +469,231 @@ class ActualController extends Controller
         ]);
     }
 
-    // Confirm (lock) a month's actuals
+    // ── Multi-stage approval helpers ─────────────────────────────────────────
+
+    /** Shared validation rules for all actuals workflow POST actions. */
+    private function workflowValidation(): array
+    {
+        return [
+            'period_id'     => ['required', 'exists:budget_periods,id'],
+            'department_id' => ['nullable', 'exists:departments,id'],
+            'subsidiary_id' => ['nullable', 'exists:subsidiaries,id'],
+            'month'         => ['required', 'integer', 'min:1', 'max:12'],
+            'year'          => ['required', 'integer', 'min:2000', 'max:2100'],
+        ];
+    }
+
+    /** Base query for all rows of a specific month/entity. */
+    private function monthQuery(Request $request)
+    {
+        return BudgetActual::when($request->department_id, fn($q) => $q->where('department_id', $request->department_id))
+            ->when($request->subsidiary_id, fn($q) => $q->where('subsidiary_id', $request->subsidiary_id))
+            ->where('budget_period_id', $request->period_id)
+            ->where('month', $request->month)
+            ->where('year',  $request->year);
+    }
+
+    /**
+     * Over-budget check on rows with a given status.
+     * Returns array of over-budget items (empty = all OK).
+     */
+    private function overBudgetCheckForStatus(Request $request, string $status): array
+    {
+        $rows      = $this->monthQuery($request)->where('status', $status)->with('lineItem.accountCode')->get();
+        $checkMode = \App\Models\SystemSetting::get('actuals_budget_check_mode', 'annual');
+        $items     = [];
+
+        foreach ($rows as $row) {
+            if (!$row->lineItem) continue;
+            $hit = $this->checkLineOverBudget($row->lineItem, (float) $row->amount, (int) $request->month, (int) $request->year, $checkMode);
+            if ($hit) $items[] = $hit;
+        }
+
+        return $items;
+    }
+
+    /**
+     * Dept user submits their draft entries for department head review.
+     * Multi-stage flow only.  draft → submitted.
+     */
+    public function submit(Request $request)
+    {
+        $request->validate($this->workflowValidation());
+        $this->assertDeptOwnership($request->department_id, $request->subsidiary_id);
+
+        if (\App\Models\SystemSetting::get('actuals_approval_flow', 'simple') !== 'multi_stage') {
+            return back()->with('error', 'Multi-stage approval is not enabled. Use Save & Confirm instead.');
+        }
+
+        $monthName = BudgetActual::MONTHS[(int) $request->month];
+
+        $count = $this->monthQuery($request)
+            ->where('status', 'draft')
+            ->update([
+                'status'       => 'submitted',
+                'submitted_by' => auth()->id(),
+                'submitted_at' => now(),
+            ]);
+
+        if ($count === 0) {
+            return back()->with('error', "No draft entries found for {$monthName}. Save entries first.");
+        }
+
+        return redirect()->route('actuals.entry', [
+            'period_id'     => $request->period_id,
+            'department_id' => $request->department_id,
+            'month'         => $request->month,
+            'year'          => $request->year,
+        ])->with('success', "{$count} {$monthName} entries submitted for department head review.");
+    }
+
+    /**
+     * Department head confirms submitted entries, forwarding them to Finance.
+     * Multi-stage flow only.  submitted → head_confirmed.
+     */
+    public function headConfirm(Request $request)
+    {
+        $request->validate($this->workflowValidation());
+        $this->assertDeptOwnership($request->department_id, $request->subsidiary_id);
+
+        if (\App\Models\SystemSetting::get('actuals_approval_flow', 'simple') !== 'multi_stage') {
+            return back()->with('error', 'Multi-stage approval is not enabled.');
+        }
+
+        $monthName = BudgetActual::MONTHS[(int) $request->month];
+
+        // Segregation of duties — head cannot confirm entries they themselves recorded.
+        // This is a hard block regardless of role, preventing privilege escalation.
+        $recorders = $this->monthQuery($request)->where('status', 'submitted')->pluck('recorded_by')->unique();
+        if ($recorders->contains(auth()->id())) {
+            return back()->with('error',
+                "You cannot confirm the {$monthName} actuals because you recorded one or more of the entries. " .
+                "A different approver must confirm them. (Segregation of duties)"
+            );
+        }
+
+        // Over-budget check before the head locks in
+        $overBudgetItems = $this->overBudgetCheckForStatus($request, 'submitted');
+        if (!empty($overBudgetItems)) {
+            return back()
+                ->with('over_budget_items', $overBudgetItems)
+                ->with('error', count($overBudgetItems) . " expense line(s) would exceed the budget for {$monthName}. "
+                    . "Ask the department to adjust entries or request a supplementary budget.");
+        }
+
+        $count = $this->monthQuery($request)
+            ->where('status', 'submitted')
+            ->update([
+                'status'             => 'head_confirmed',
+                'head_confirmed_by'  => auth()->id(),
+                'head_confirmed_at'  => now(),
+            ]);
+
+        if ($count === 0) {
+            return back()->with('error', "No submitted entries found for {$monthName}.");
+        }
+
+        return redirect()->route('actuals.entry', [
+            'period_id'     => $request->period_id,
+            'department_id' => $request->department_id,
+            'month'         => $request->month,
+            'year'          => $request->year,
+        ])->with('success', "{$monthName} entries confirmed. Awaiting Finance approval.");
+    }
+
+    /**
+     * Finance gives final approval — locks the month.
+     * Multi-stage flow only.  head_confirmed → confirmed.
+     */
+    public function approveActuals(Request $request)
+    {
+        $request->validate($this->workflowValidation());
+        $this->assertDeptOwnership($request->department_id, $request->subsidiary_id);
+
+        if (\App\Models\SystemSetting::get('actuals_approval_flow', 'simple') !== 'multi_stage') {
+            return back()->with('error', 'Multi-stage approval is not enabled.');
+        }
+
+        $monthName = BudgetActual::MONTHS[(int) $request->month];
+
+        // Segregation of duties — Finance cannot approve entries they recorded or submitted.
+        // Hard block regardless of role assignment, preventing self-approval via privilege escalation.
+        $selfInvolved = $this->monthQuery($request)
+            ->where('status', 'head_confirmed')
+            ->where(fn($q) => $q->where('recorded_by', auth()->id())
+                                ->orWhere('submitted_by', auth()->id()))
+            ->exists();
+
+        if ($selfInvolved) {
+            return back()->with('error',
+                "You cannot give final approval for {$monthName} because you recorded or submitted " .
+                "one or more of the entries. Another Finance user must approve them. (Segregation of duties)"
+            );
+        }
+
+        // Final over-budget check
+        $overBudgetItems = $this->overBudgetCheckForStatus($request, 'head_confirmed');
+        if (!empty($overBudgetItems)) {
+            return back()
+                ->with('over_budget_items', $overBudgetItems)
+                ->with('error', count($overBudgetItems) . " expense line(s) would exceed the budget for {$monthName}. "
+                    . "Reopen the month and ask the department to revise entries.");
+        }
+
+        $count = $this->monthQuery($request)
+            ->where('status', 'head_confirmed')
+            ->update([
+                'status'      => 'confirmed',
+                'approved_by' => auth()->id(),
+            ]);
+
+        if ($count === 0) {
+            return back()->with('error', "No head-confirmed entries found for {$monthName}.");
+        }
+
+        return redirect()->route('actuals.entry', [
+            'period_id'     => $request->period_id,
+            'department_id' => $request->department_id,
+            'month'         => $request->month,
+            'year'          => $request->year,
+        ])->with('success', "{$count} {$monthName} entries approved and locked.");
+    }
+
+    /**
+     * Finance reopens a confirmed month, resetting all rows back to draft
+     * so the department user can edit and resubmit.
+     * Works in both simple and multi-stage flows.
+     */
+    public function reopen(Request $request)
+    {
+        $request->validate($this->workflowValidation());
+
+        $monthName = BudgetActual::MONTHS[(int) $request->month];
+
+        $count = $this->monthQuery($request)
+            ->where('status', 'confirmed')
+            ->update([
+                'status'             => 'draft',
+                'approved_by'        => null,
+                'submitted_by'       => null,
+                'submitted_at'       => null,
+                'head_confirmed_by'  => null,
+                'head_confirmed_at'  => null,
+            ]);
+
+        if ($count === 0) {
+            return back()->with('error', "No confirmed entries found for {$monthName}.");
+        }
+
+        return redirect()->route('actuals.entry', [
+            'period_id'     => $request->period_id,
+            'department_id' => $request->department_id,
+            'month'         => $request->month,
+            'year'          => $request->year,
+        ])->with('success', "{$monthName} actuals reopened. The department can now edit and resubmit.");
+    }
+
+    // Confirm (lock) a month's actuals — simple flow
     public function confirm(Request $request)
     {
         $request->validate([
@@ -405,8 +708,12 @@ class ActualController extends Controller
 
         $monthName = BudgetActual::MONTHS[(int) $request->month];
 
-        // Segregation of duties — confirmer cannot have recorded any of these drafts
-        if (\App\Services\SegregationService::enabled()) {
+        // Segregation of duties — confirmer cannot have recorded any of these drafts.
+        // Exemption: department_user role is expected to record AND confirm their own
+        // entries in simple flow. Segregation for dept users is achieved via the
+        // multi-stage flow (user → head → finance) when that setting is enabled.
+        $user = auth()->user();
+        if (\App\Services\SegregationService::enabled() && !$user->hasRole('department_user')) {
             $recorders = BudgetActual::where('department_id',    $request->department_id)
                 ->where('budget_period_id', $request->period_id)
                 ->where('month',            $request->month)
@@ -415,7 +722,7 @@ class ActualController extends Controller
                 ->pluck('recorded_by')
                 ->unique();
 
-            if ($recorders->contains(auth()->id())) {
+            if ($recorders->contains($user->id)) {
                 return back()->with('error',
                     "You cannot confirm the {$monthName} actuals because you recorded " .
                     "one or more of the entries. A different user must confirm them. " .

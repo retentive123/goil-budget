@@ -65,6 +65,15 @@ class RolesAndPermissionsSeeder extends Seeder
 
             // Two-factor authentication
             'disable two factor',
+
+            // Actuals confirmation
+            'confirm actuals',
+
+            // Actuals multi-stage approval workflow
+            'submit actuals',         // dept user submits for head review
+            'head confirm actuals',   // dept head confirms submitted entries
+            'approve actuals',        // finance gives final sign-off
+            'reopen actuals',         // finance reopens a confirmed month
         ];
 
         foreach ($permissions as $permission) {
@@ -83,6 +92,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'request virement',
             'request supplementary budget',
             'view reports',
+            'confirm actuals',     // simple flow: confirm directly
+            'submit actuals',      // multi-stage flow: submit for head review
         ]);
 
         // 2. Department Head — reviews and forwards dept budget
@@ -98,6 +109,9 @@ class RolesAndPermissionsSeeder extends Seeder
             'request supplementary budget',
             'view reports',
             'export reports',
+            'confirm actuals',          // simple flow
+            'submit actuals',           // multi-stage: can also submit
+            'head confirm actuals',     // multi-stage: confirms dept submissions
         ]);
 
         // 3. Finance Reviewer — reviews all budgets, manages structure
@@ -115,6 +129,9 @@ class RolesAndPermissionsSeeder extends Seeder
             'grant deadline override',
             'view reports',
             'export reports',
+            'confirm actuals',          // simple flow
+            'approve actuals',          // multi-stage: finance final sign-off
+            'reopen actuals',           // reopen a confirmed month
         ]);
 
         // 4. GCEO / MD — management approval
@@ -154,6 +171,9 @@ class RolesAndPermissionsSeeder extends Seeder
             'export reports',
             'view audit log',
             'disable two factor',
+            'confirm actuals',
+            'approve actuals',
+            'reopen actuals',
         ]);
 
         // 7. Super Admin — unrestricted access

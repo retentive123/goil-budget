@@ -13,4 +13,9 @@ class DocsController extends Controller
     {
         return view('docs.sage-integration');
     }
+
+    public function processGuide()
+    {
+        return view('docs.process-guide');
+    }
 }

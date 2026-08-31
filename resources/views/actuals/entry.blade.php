@@ -2,13 +2,17 @@
 @section('title', 'Record Actuals — ' . \App\Models\BudgetActual::MONTHS[$month] . ' ' . $year)
 @section('content')
 @php
-    $isConfirmed = \App\Models\BudgetActual::when($subsidiary ?? null, fn($q) => $q->where('subsidiary_id', $subsidiary->id))
-        ->when($department ?? null, fn($q) => $q->where('department_id', $department->id))
-        ->where('budget_period_id', $period->id)
-        ->where('month', $month)
-        ->where('year',  $year)
-        ->where('status','confirmed')
-        ->exists();
+    // $monthStatus ('draft'|'submitted'|'head_confirmed'|'confirmed'|null) and
+    // $approvalFlow ('simple'|'multi_stage') are passed by the controller.
+    $isConfirmed = $monthStatus === 'confirmed';
+
+    // Form inputs are locked whenever the month is no longer in a pure draft state.
+    // Simple flow: locked only once fully confirmed.
+    // Multi-stage: locked the moment it leaves draft (submitted/head_confirmed/confirmed).
+    $formLocked = $approvalFlow === 'multi_stage'
+        ? ($monthStatus && $monthStatus !== 'draft')
+        : $isConfirmed;
+
     // Entity display name for breadcrumbs / headings
     $entityName = ($subsidiary ?? null)?->name ?? ($department ?? null)?->name ?? '—';
     $entityId   = ($subsidiary ?? null) ? null : ($department ?? null)?->id;
@@ -42,7 +46,7 @@
            class="btn btn-sm btn-outline-secondary">Next →</a>
         @endif
 
-        @if(!$isConfirmed)
+        @if(!$formLocked)
         <span id="save-status"
               style="font-size:11px;font-weight:600;padding:4px 14px;border-radius:20px;
                      border:1px solid transparent;transition:all .25s;min-width:130px;
@@ -222,11 +226,21 @@
     </div>
 </div>
 
-@if($isConfirmed)
-<div class="alert mb-4"
-     style="background:#D1FAE5;color:#065F46;border:none;border-radius:10px">
-    <i class="fas fa-check-circle"></i> This month's actuals have been confirmed and locked.
-    Contact Finance to make amendments.
+@if($monthStatus && $monthStatus !== 'draft')
+@php
+    $statusMeta = match($monthStatus) {
+        'submitted'      => ['bg'=>'#FEF3C7','color'=>'#92400E','icon'=>'fa-paper-plane',
+                             'msg'=>'Submitted for department head review. Entries are locked pending confirmation.'],
+        'head_confirmed' => ['bg'=>'#DBEAFE','color'=>'#1E40AF','icon'=>'fa-user-check',
+                             'msg'=>'Confirmed by department head. Awaiting Finance final approval.'],
+        default          => ['bg'=>'#D1FAE5','color'=>'#065F46','icon'=>'fa-check-circle',
+                             'msg'=>'Confirmed and locked. Contact Finance to reopen for amendments.'],
+    };
+@endphp
+<div class="alert mb-4 d-flex align-items-center gap-2"
+     style="background:{{ $statusMeta['bg'] }};color:{{ $statusMeta['color'] }};border:none;border-radius:10px">
+    <i class="fas {{ $statusMeta['icon'] }}"></i>
+    <span>{{ $statusMeta['msg'] }}</span>
 </div>
 @endif
 
@@ -403,7 +417,7 @@
                                        value="{{ $existing?->amount ?? '' }}"
                                        min="0" step="0.01"
                                        placeholder="0.00"
-                                       {{ $isConfirmed ? 'readonly' : '' }}
+                                       {{ $formLocked ? 'readonly' : '' }}
                                        oninput="updateTotals()">
                             </td>
                             <td>
@@ -412,7 +426,7 @@
                                        class="form-control form-control-sm"
                                        value="{{ $existing?->reference ?? '' }}"
                                        placeholder="Invoice/Voucher #"
-                                       {{ $isConfirmed ? 'readonly' : '' }}>
+                                       {{ $formLocked ? 'readonly' : '' }}>
                             </td>
                             <td>
                                 <input type="text"
@@ -420,7 +434,7 @@
                                        class="form-control form-control-sm"
                                        value="{{ $existing?->description ?? '' }}"
                                        placeholder="Optional note"
-                                       {{ $isConfirmed ? 'readonly' : '' }}>
+                                       {{ $formLocked ? 'readonly' : '' }}>
                             </td>
                         </tr>
                         @endforeach
@@ -454,22 +468,74 @@
     @endforeach
     </div>
 
-    @if(!$isConfirmed)
-    <div class="d-flex gap-2 align-items-center mt-4">
+    {{-- Action buttons — content depends on flow setting + month status --}}
+    <div class="d-flex gap-2 align-items-center flex-wrap mt-4">
+
+        @if(!$formLocked)
+        {{-- Save as Draft — always visible when form is editable --}}
         <button type="submit" id="save-btn" class="btn"
                 style="background:var(--navy);color:#fff;border-radius:8px;padding:10px 24px">
             <i class="fas fa-save"></i> Save as Draft
         </button>
+        @endif
 
-        {{-- Confirm button -- only for Finance/Admin --}}
-        @can('approve budget')
-        <button type="button"
-                onclick="confirmMonth()"
-                class="btn"
-                style="background:#10B981;color:#fff;border-radius:8px;padding:10px 24px">
-            <i class="fas fa-check-circle"></i> Save & Confirm Month
-        </button>
-        @endcan
+        @if($approvalFlow === 'simple')
+            {{-- ── Simple flow: one-step confirm ─────────────────────────────── --}}
+            @if(!$isConfirmed)
+            @can('confirm actuals')
+            <button type="button" onclick="confirmMonth()"
+                    class="btn"
+                    style="background:#10B981;color:#fff;border-radius:8px;padding:10px 24px">
+                <i class="fas fa-check-circle"></i> Save & Confirm Month
+            </button>
+            @endcan
+            @endif
+
+        @else
+            {{-- ── Multi-stage approval flow ──────────────────────────────────── --}}
+
+            @if(!$monthStatus || $monthStatus === 'draft')
+                {{-- Step 1: dept user saves + submits atomically --}}
+                @can('submit actuals')
+                <button type="button" onclick="saveAndSubmitForApproval()"
+                        class="btn"
+                        style="background:#3B82F6;color:#fff;border-radius:8px;padding:10px 24px">
+                    <i class="fas fa-paper-plane"></i> Save &amp; Submit for Approval
+                </button>
+                @endcan
+
+            @elseif($monthStatus === 'submitted')
+                {{-- Step 2: dept head confirms --}}
+                @can('head confirm actuals')
+                <button type="button" onclick="headConfirmMonth()"
+                        class="btn"
+                        style="background:#8B5CF6;color:#fff;border-radius:8px;padding:10px 24px">
+                    <i class="fas fa-user-check"></i> Confirm (Head Approval)
+                </button>
+                @endcan
+
+            @elseif($monthStatus === 'head_confirmed')
+                {{-- Step 3: finance gives final approval --}}
+                @can('approve actuals')
+                <button type="button" onclick="finalApprove()"
+                        class="btn"
+                        style="background:#10B981;color:#fff;border-radius:8px;padding:10px 24px">
+                    <i class="fas fa-check-double"></i> Final Approve
+                </button>
+                @endcan
+
+            @elseif($monthStatus === 'confirmed')
+                {{-- Reopen — Finance only --}}
+                @can('reopen actuals')
+                <button type="button" onclick="reopenMonth()"
+                        class="btn"
+                        style="background:#E65C00;color:#fff;border-radius:8px;padding:10px 24px">
+                    <i class="fas fa-lock-open"></i> Reopen Month
+                </button>
+                @endcan
+            @endif
+
+        @endif
 
         <a href="{{ route('actuals.index', ['period_id'=>$period->id,'department_id'=>$department?->id]) }}"
            class="btn btn-outline-secondary"
@@ -477,20 +543,44 @@
             <i class="fas fa-times"></i> Cancel
         </a>
     </div>
-    @endif
+
 </form>
 
-{{-- Hidden confirm form --}}
-@can('approve budget')
+{{-- Hidden workflow forms (all flows) --}}
+@php $wfBase = ['period_id'=>$period->id,'department_id'=>$department?->id,'subsidiary_id'=>($subsidiary??null)?->id,'month'=>$month,'year'=>$year]; @endphp
+
+@can('confirm actuals')
 <form method="POST" action="{{ route('actuals.confirm') }}" id="confirmForm">
     @csrf
-    <input type="hidden" name="period_id"     value="{{ $period->id }}">
-    <input type="hidden" name="department_id" value="{{ $department?->id }}">
-    @if($subsidiary ?? null)
-    <input type="hidden" name="subsidiary_id" value="{{ $subsidiary->id }}">
-    @endif
-    <input type="hidden" name="month"         value="{{ $month }}">
-    <input type="hidden" name="year"          value="{{ $year }}">
+    @foreach($wfBase as $k => $v) @if(!is_null($v)) <input type="hidden" name="{{ $k }}" value="{{ $v }}"> @endif @endforeach
+</form>
+@endcan
+
+@can('submit actuals')
+<form method="POST" action="{{ route('actuals.submit') }}" id="submitForm">
+    @csrf
+    @foreach($wfBase as $k => $v) @if(!is_null($v)) <input type="hidden" name="{{ $k }}" value="{{ $v }}"> @endif @endforeach
+</form>
+@endcan
+
+@can('head confirm actuals')
+<form method="POST" action="{{ route('actuals.head-confirm') }}" id="headConfirmForm">
+    @csrf
+    @foreach($wfBase as $k => $v) @if(!is_null($v)) <input type="hidden" name="{{ $k }}" value="{{ $v }}"> @endif @endforeach
+</form>
+@endcan
+
+@can('approve actuals')
+<form method="POST" action="{{ route('actuals.approve') }}" id="approveForm">
+    @csrf
+    @foreach($wfBase as $k => $v) @if(!is_null($v)) <input type="hidden" name="{{ $k }}" value="{{ $v }}"> @endif @endforeach
+</form>
+@endcan
+
+@can('reopen actuals')
+<form method="POST" action="{{ route('actuals.reopen') }}" id="reopenForm">
+    @csrf
+    @foreach($wfBase as $k => $v) @if(!is_null($v)) <input type="hidden" name="{{ $k }}" value="{{ $v }}"> @endif @endforeach
 </form>
 @endcan
 
@@ -503,7 +593,9 @@ const DEPT_ID       = {{ $department?->id ?? 'null' }};
 const SUBSIDIARY_ID = {{ ($subsidiary ?? null)?->id ?? 'null' }};
 const MONTH         = {{ $month }};
 const YEAR          = {{ $year }};
-const IS_CONFIRMED  = {{ $isConfirmed ? 'true' : 'false' }};
+const IS_CONFIRMED  = {{ $formLocked ? 'true' : 'false' }};
+const MONTH_STATUS  = "{{ $monthStatus ?? '' }}";
+const APPROVAL_FLOW = "{{ $approvalFlow }}";
 
 let autoSaveTimer = null;
 let isSaving      = false;
@@ -827,6 +919,133 @@ function confirmMonth() {
                 });
             });
         }
+    });
+}
+
+/* ── Multi-stage workflow actions ─────────────────────────────────────────── */
+
+function saveAndSubmitForApproval() {
+    Swal.fire({
+        title: 'Save & Submit for Approval?',
+        html: `<p style="color:#64748B;font-size:14px">
+            Your <strong>{{ \App\Models\BudgetActual::MONTHS[$month] }} {{ $year }}</strong>
+            entries will be <strong>saved then sent to your department head</strong> for review.
+            You will <strong>not</strong> be able to edit them until the head or Finance acts on them.</p>`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3B82F6',
+        confirmButtonText: 'Yes, Save & Submit',
+        cancelButtonText: 'Cancel',
+        reverseButtons: true,
+    }).then(result => {
+        if (!result.isConfirmed) return;
+
+        Swal.fire({
+            title: 'Saving…',
+            html: 'Saving entries then submitting for approval.',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading(),
+        });
+
+        fetch(STORE_URL, {
+            method:  'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': CSRF,
+                'Accept':       'application/json',
+            },
+            body: JSON.stringify({
+                period_id:     PERIOD_ID,
+                department_id: DEPT_ID,
+                subsidiary_id: SUBSIDIARY_ID,
+                month:         MONTH,
+                year:          YEAR,
+                actuals:       collectActuals(),
+            }),
+        })
+        .then(async res => {
+            const data = await res.json();
+
+            if (res.status === 422 && data.status === 'over_budget') {
+                const rows = (data.items || []).map(it =>
+                    `<li><strong>${it.code}</strong> ${it.name}: budget {{ currency() }} ${Number(it.budget).toLocaleString('en-GH',{minimumFractionDigits:2})} · projected {{ currency() }} ${Number(it.projected_total).toLocaleString('en-GH',{minimumFractionDigits:2})} <span style="color:#F43F5E">(+${Number(it.overrun).toLocaleString('en-GH',{minimumFractionDigits:2})})</span></li>`
+                ).join('');
+                Swal.fire({
+                    title: 'Submission Blocked — Over Budget',
+                    html: `<p style="color:#64748B;margin-bottom:12px">${data.items.length} expense line(s) exceed the approved budget. Fix the amounts or request a supplementary budget before submitting.</p><ul style="text-align:left;font-size:13px;padding-left:18px;color:#1E293B">${rows}</ul>`,
+                    icon: 'error',
+                    confirmButtonColor: '#1B2A4A',
+                    confirmButtonText: 'OK, I\'ll Review',
+                });
+                return;
+            }
+
+            if (!res.ok) {
+                Swal.fire({ title: 'Save Failed', text: data.message || 'Unexpected error.', icon: 'error', confirmButtonColor: '#1B2A4A' });
+                return;
+            }
+
+            // Entries saved — now submit for approval
+            document.getElementById('submitForm').submit();
+        })
+        .catch(() => {
+            Swal.fire({ title: 'Network Error', text: 'Could not reach the server. Check your connection and try again.', icon: 'error', confirmButtonColor: '#1B2A4A' });
+        });
+    });
+}
+
+function headConfirmMonth() {
+    Swal.fire({
+        title: 'Confirm & Forward to Finance?',
+        html: `<p style="color:#64748B;font-size:14px">
+            You are confirming that the <strong>{{ \App\Models\BudgetActual::MONTHS[$month] }} {{ $year }}</strong>
+            entries are correct and forwarding them to Finance for final approval.</p>`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#8B5CF6',
+        confirmButtonText: 'Yes, Confirm',
+        cancelButtonText: 'Cancel',
+        reverseButtons: true,
+    }).then(result => {
+        if (result.isConfirmed) document.getElementById('headConfirmForm').submit();
+    });
+}
+
+function finalApprove() {
+    Swal.fire({
+        title: 'Final Approval?',
+        html: `<p style="color:#64748B;font-size:14px">
+            You are giving Finance's final approval for
+            <strong>{{ \App\Models\BudgetActual::MONTHS[$month] }} {{ $year }}</strong>.
+            The month will be <strong>locked</strong> and counted in all reports.</p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#10B981',
+        confirmButtonText: 'Yes, Approve & Lock',
+        cancelButtonText: 'Cancel',
+        reverseButtons: true,
+    }).then(result => {
+        if (result.isConfirmed) document.getElementById('approveForm').submit();
+    });
+}
+
+function reopenMonth() {
+    Swal.fire({
+        title: 'Reopen Month?',
+        html: `<p style="color:#64748B;font-size:14px">
+            This will <strong>unlock</strong>
+            <strong>{{ \App\Models\BudgetActual::MONTHS[$month] }} {{ $year }}</strong>
+            and reset all entries to Draft so the department can edit and resubmit.</p>
+            <p style="color:#92400E;font-size:13px;margin-top:8px">
+            The month will be removed from confirmed totals until re-approved.</p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#E65C00',
+        confirmButtonText: 'Yes, Reopen',
+        cancelButtonText: 'Cancel',
+        reverseButtons: true,
+    }).then(result => {
+        if (result.isConfirmed) document.getElementById('reopenForm').submit();
     });
 }
 

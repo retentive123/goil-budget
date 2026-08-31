@@ -30,10 +30,11 @@
                                 align-items:center;justify-content:center;
                                 font-size:17px;color:#fff">
                         <i class="{{ match($group) {
-                            'general'       => 'bi bi-gear-fill',
+                            'general'       => 'bi bi-building-fill',
                             'budget'        => 'bi bi-clipboard2-fill',
                             'notifications' => 'bi bi-bell-fill',
                             'security'      => 'bi bi-shield-lock-fill',
+                            'backup'        => 'bi bi-archive-fill',
                             default         => 'bi bi-wrench-adjustable'
                         } }}"></i>
                     </div>
@@ -43,10 +44,11 @@
                         </div>
                         <div style="font-size:12px;color:var(--slate)">
                             {{ match($group) {
-                                'general'       => 'Application name, company, currency',
-                                'budget'        => 'Version limits, virement rules',
+                                'general'       => 'Application name, company, currency and fiscal year',
+                                'budget'        => 'Calculation mode, version limits, actuals check, virement rules',
                                 'notifications' => 'Email notification triggers',
                                 'security'      => 'Session, login, and SSO security settings',
+                                'backup'        => 'Scheduled backups, retention and notifications',
                                 default         => ''
                             } }}
                         </div>
@@ -60,9 +62,24 @@
                     @endif
                 </div>
 
+                @php $prevKey = null; @endphp
                 @foreach($groupSettings as $setting)
+
+                {{-- Visual sub-header: "Admin Controls" settings depend on calc mode --}}
+                @if($group === 'budget' && in_array($setting->key, ['admin_sets_rate', 'admin_sets_freq']) && $prevKey === 'line_item_calc_mode')
+                <div class="mb-3 mt-1 px-2 py-2"
+                     style="background:#F8FAFC;border-left:3px solid #C9A84C;border-radius:0 6px 6px 0;font-size:11px;color:#92400E;font-weight:600;letter-spacing:.3px">
+                    <i class="bi bi-arrow-return-right me-1"></i>
+                    APPLIES WHEN CALC MODE IS QTY × RATE OR QTY × RATE × FREQUENCY
+                </div>
+                @elseif($group === 'budget' && $prevKey === 'admin_sets_freq' && !in_array($setting->key, ['admin_sets_rate', 'admin_sets_freq']))
+                <div style="margin-bottom:4px"></div>
+                @endif
+
                 <div class="row align-items-start mb-4 pb-3"
-                     style="border-bottom:1px solid var(--border)">
+                     style="border-bottom:1px solid var(--border)"
+                     data-setting-key="{{ $setting->key }}">
+                @php $prevKey = $setting->key; @endphp
                     <div class="col-md-6">
                         <label class="form-label small fw-semibold mb-0"
                                for="setting_{{ $setting->key }}">
@@ -135,6 +152,27 @@
                             Affects all budget entry forms.
                             "Admin Controls Rate/Freq" settings below only apply
                             when this is not "Direct entry".
+                        </div>
+
+                        @elseif($setting->key === 'actuals_approval_flow')
+                        <select id="setting_{{ $setting->key }}"
+                                name="settings[{{ $setting->key }}]"
+                                class="form-select form-select-sm"
+                                style="max-width:300px"
+                                onchange="markDirty(this)">
+                            @foreach([
+                                'simple'      => 'Simple — one step, confirm directly',
+                                'multi_stage' => 'Multi-Stage — Dept User → Head → Finance',
+                            ] as $val => $lbl)
+                            <option value="{{ $val }}"
+                                {{ old("settings.{$setting->key}", $setting->value) === $val ? 'selected' : '' }}>
+                                {{ $lbl }}
+                            </option>
+                            @endforeach
+                        </select>
+                        <div style="font-size:11px;color:var(--slate);margin-top:4px">
+                            <strong>Simple:</strong> anyone with "confirm actuals" locks the month directly.<br>
+                            <strong>Multi-Stage:</strong> dept user submits → dept head confirms → finance gives final approval.
                         </div>
 
                         @elseif($setting->key === 'actuals_budget_check_mode')

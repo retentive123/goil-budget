@@ -23,13 +23,35 @@ class BudgetActual extends Model
         'reference',
         'recorded_by',
         'approved_by',
+        'submitted_by',
+        'submitted_at',
+        'head_confirmed_by',
+        'head_confirmed_at',
         'status',
     ];
 
     protected $casts = [
-        'amount' => 'float',
-        'month'  => 'integer',
-        'year'   => 'integer',
+        'amount'            => 'float',
+        'month'             => 'integer',
+        'year'              => 'integer',
+        'submitted_at'      => 'datetime',
+        'head_confirmed_at' => 'datetime',
+    ];
+
+    /** Human-readable labels for every possible status value. */
+    const STATUSES = [
+        'draft'          => 'Draft',
+        'submitted'      => 'Submitted',
+        'head_confirmed' => 'Head Confirmed',
+        'confirmed'      => 'Confirmed',
+    ];
+
+    /** Priority order used when deriving a single month status from many rows. */
+    const STATUS_PRIORITY = [
+        'draft'          => 1,
+        'submitted'      => 2,
+        'head_confirmed' => 3,
+        'confirmed'      => 4,
     ];
 
     const MONTHS = [

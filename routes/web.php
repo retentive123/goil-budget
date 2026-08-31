@@ -55,6 +55,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/docs', [DocsController::class, 'index'])->name('docs.index');
     Route::get('/docs/sage-integration', [DocsController::class, 'sageIntegration'])->name('docs.sage-integration');
+    Route::get('/docs/process-guide', [DocsController::class, 'processGuide'])->name('docs.process-guide');
     Route::get('/search', [\App\Http\Controllers\SearchController::class, 'search'])->name('search');
     Route::get('/password/change',  [PasswordController::class, 'showChangeForm'])->name('password.change');
     Route::post('/password/change', [PasswordController::class, 'update'])->name('password.update');
@@ -340,6 +341,20 @@ Route::middleware('auth')->group(function () {
             Route::post('/store',    [ActualController::class, 'store'])->name('store');
             Route::post('/autosave', [ActualController::class, 'autosave'])->name('autosave');
             Route::post('/confirm',  [ActualController::class, 'confirm'])->name('confirm');
+        });
+
+        // Multi-stage approval workflow routes
+        Route::middleware('permission:submit actuals')->group(function () {
+            Route::post('/submit', [ActualController::class, 'submit'])->name('submit');
+        });
+        Route::middleware('permission:head confirm actuals')->group(function () {
+            Route::post('/head-confirm', [ActualController::class, 'headConfirm'])->name('head-confirm');
+        });
+        Route::middleware('permission:approve actuals')->group(function () {
+            Route::post('/approve', [ActualController::class, 'approveActuals'])->name('approve');
+        });
+        Route::middleware('permission:reopen actuals')->group(function () {
+            Route::post('/reopen', [ActualController::class, 'reopen'])->name('reopen');
         });
     });
 

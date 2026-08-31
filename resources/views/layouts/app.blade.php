@@ -724,13 +724,13 @@
         </a>
         @endcan
 
-        @can('create budget')
+        @canany(['create budget', 'view all budgets', 'approve actuals', 'confirm actuals'])
         <a href="{{ route('actuals.index') }}"
         class="sidebar-link {{ request()->routeIs('actuals.*') ? 'active' : '' }}">
         <i class="fa-solid fa-gift nav-icon"></i>
             <span class="link-text">Actuals</span>
         </a>
-        @endcan
+        @endcanany
 
         @canany(['request supplementary budget', 'approve supplementary budget'])
         <a href="{{ route('supplementary.index') }}"
@@ -991,6 +991,11 @@
            class="sidebar-link {{ request()->routeIs('docs.sage-integration') ? 'active' : '' }}">
             <i class="fas fa-plug nav-icon"></i>
             <span class="link-text">Sage Integration</span>
+        </a>
+        <a href="{{ route('docs.process-guide') }}"
+           class="sidebar-link {{ request()->routeIs('docs.process-guide') ? 'active' : '' }}">
+            <i class="fas fa-route nav-icon"></i>
+            <span class="link-text">Process Guide</span>
         </a>
 
     </div>
@@ -1399,8 +1404,10 @@ window.NAV_ITEMS = [
     { label:'Dashboard',            keywords:['home','overview','main'],               icon:'fas fa-th-large',             section:'Main',            url:'{{ route('dashboard') }}' },
     @can('create budget')
     { label:'My Budget',            keywords:['budget','my budget','entry','draft'],    icon:'fas fa-file-invoice',          section:'Main',            url:'{{ route('budget.index') }}' },
-    { label:'Actuals',              keywords:['actuals','actual','entry','monthly'],    icon:'fas fa-gift',                  section:'Main',            url:'{{ route('actuals.index') }}' },
     @endcan
+    @canany(['create budget', 'view all budgets', 'approve actuals', 'confirm actuals'])
+    { label:'Actuals',              keywords:['actuals','actual','entry','monthly'],    icon:'fas fa-gift',                  section:'Main',            url:'{{ route('actuals.index') }}' },
+    @endcanany
     @can('view all budgets')
     { label:'All Budgets',          keywords:['all budgets','budgets','overview'],      icon:'fas fa-briefcase',             section:'Main',            url:'{{ route('budgets.index') }}' },
     @endcan
@@ -1461,7 +1468,8 @@ window.NAV_ITEMS = [
 
     // ── Help ──────────────────────────────────────────────
     { label:'Documentation',        keywords:['docs','documentation','help','guide'],   icon:'fas fa-book-open',             section:'Help',            url:'{{ route('docs.index') }}' },
-    { label:'Sage Integration',     keywords:['sage','integration','erp','api','connect','requirements'], icon:'fas fa-plug', section:'Help', url:'{{ route('docs.sage-integration') }}' },
+    { label:'Sage Integration',     keywords:['sage','integration','erp','api','connect','requirements'], icon:'fas fa-plug',  section:'Help', url:'{{ route('docs.sage-integration') }}' },
+    { label:'Process Guide',        keywords:['process','guide','how','workflow','steps','setup','actuals','approval','budget entry','reports','onboarding'], icon:'fas fa-route', section:'Help', url:'{{ route('docs.process-guide') }}' },
     { label:'Change Password',      keywords:['password','change','security'],          icon:'fas fa-key',                   section:'Help',            url:'{{ route('password.change') }}' },
     { label:'Two-Factor Auth',      keywords:['2fa','two factor','security','otp'],     icon:'fas fa-shield-alt',            section:'Help',            url:'{{ route('2fa.setup') }}' },
 ];
@@ -1701,6 +1709,18 @@ function escJs(s) {
     // Escape for use inside a JS string literal (single-quote delimited)
     return String(s ?? '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 }
+
+// Prevent mouse-wheel from accidentally changing number inputs.
+// The input must be focused first (i.e. the user clicked into it) before
+// wheel events change its value — so we simply blur on wheel, which lets
+// the page scroll normally while keeping whatever value was typed.
+document.addEventListener('wheel', function (e) {
+    if (document.activeElement &&
+        document.activeElement.type === 'number' &&
+        document.activeElement === e.target) {
+        document.activeElement.blur();
+    }
+}, { passive: true });
 </script>
 </body>
 </html>
