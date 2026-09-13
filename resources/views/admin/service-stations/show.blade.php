@@ -40,6 +40,11 @@
                class="btn btn-sm btn-outline-secondary" style="border-radius:8px;">
                 <i class="fas fa-hashtag me-1"></i>Account Codes
             </a>
+            <a href="{{ route('admin.service-stations.export-account-codes', $station) }}"
+               class="btn btn-sm btn-outline-success" style="border-radius:8px;"
+               title="Export assigned codes as CSV">
+                <i class="bi bi-download me-1"></i>Export CSV
+            </a>
             <a href="{{ route('admin.service-stations.edit', $station) }}"
                class="btn btn-sm" style="background:#E65C00;color:#fff;border-radius:8px;border:none;">
                 <i class="fas fa-pencil-alt me-1"></i>Edit

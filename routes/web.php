@@ -56,6 +56,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/docs', [DocsController::class, 'index'])->name('docs.index');
     Route::get('/docs/sage-integration', [DocsController::class, 'sageIntegration'])->name('docs.sage-integration');
     Route::get('/docs/process-guide', [DocsController::class, 'processGuide'])->name('docs.process-guide');
+    Route::get('/docs/deployment-guide', [DocsController::class, 'deploymentGuide'])->name('docs.deployment-guide');
     Route::get('/search', [\App\Http\Controllers\SearchController::class, 'search'])->name('search');
     Route::get('/password/change',  [PasswordController::class, 'showChangeForm'])->name('password.change');
     Route::post('/password/change', [PasswordController::class, 'update'])->name('password.update');
@@ -72,6 +73,9 @@ Route::middleware('auth')->group(function () {
     Route::middleware('permission:manage users')->prefix('admin')->name('admin.')->group(function () {
 
         // Users
+        Route::get('users/import',          [UserController::class, 'importForm'])->name('users.import');
+        Route::post('users/import',         [UserController::class, 'import'])->name('users.import.process');
+        Route::get('users/import/template', [UserController::class, 'importTemplate'])->name('users.import.template');
         Route::resource('users', UserController::class);
         Route::patch('users/{user}/toggle-active', [UserController::class, 'toggleActive'])->name('users.toggle-active');
         Route::post('users/{user}/assign-role',    [UserController::class, 'assignRole'])->name('users.assign-role');

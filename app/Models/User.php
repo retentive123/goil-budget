@@ -25,6 +25,7 @@ class User extends Authenticatable
         'is_active',
         'last_login_at',
         'password_changed_at',
+        'must_change_password',
         'two_factor_secret',
         'two_factor_enabled',
         'two_factor_confirmed_at',

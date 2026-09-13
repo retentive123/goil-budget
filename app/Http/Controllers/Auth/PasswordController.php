@@ -43,8 +43,9 @@ class PasswordController extends Controller
         }
 
         Auth::user()->update([
-            'password' => Hash::make($request->password),
-            'password_changed_at'=> now(),
+            'password'             => Hash::make($request->password),
+            'password_changed_at'  => now(),
+            'must_change_password' => false,  // clear the first-login flag
         ]);
 
         AuditLogger::passwordChanged(Auth::user());

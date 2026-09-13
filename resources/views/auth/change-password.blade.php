@@ -6,6 +6,21 @@
 <div class="row justify-content-center">
     <div class="col-lg-6 col-md-8">
 
+        {{-- Forced change banner --}}
+        @if(session('force_password_change') || Auth::user()->must_change_password)
+        <div class="alert d-flex align-items-start gap-3 mb-4"
+             style="background:#FFF7ED;border:1.5px solid #E65C00;border-radius:12px;color:#92400E;">
+            <i class="bi bi-exclamation-triangle-fill mt-1" style="font-size:20px;color:#E65C00;flex-shrink:0;"></i>
+            <div>
+                <div class="fw-bold mb-1">You must set a new password to continue</div>
+                <div class="small">
+                    Your account was created with a temporary password by an administrator.
+                    For security, please choose a personal password before using the system.
+                </div>
+            </div>
+        </div>
+        @endif
+
         {{-- Change Password Card --}}
         <div class="card border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
             {{-- Card Header with Icon --}}
@@ -133,10 +148,12 @@
                                 style="background: #E65C00; color: #fff; border-radius: 10px; padding: 10px 30px; font-weight: 600; transition: all 0.3s ease;">
                             <i class="bi bi-save"></i> Update Password
                         </button>
+                        @if(!Auth::user()->must_change_password)
                         <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary px-4"
                            style="border-radius: 10px; padding: 10px 30px;">
                             <i class="bi bi-x-circle"></i> Cancel
                         </a>
+                        @endif
                     </div>
                 </form>
             </div>

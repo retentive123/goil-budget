@@ -225,6 +225,14 @@
       </a>
     </div>
 
+    <div class="docs-nav-group">
+      <span class="docs-nav-label">IT Operations</span>
+      <a class="docs-nav-link" href="{{ route('docs.deployment-guide') }}">
+        <i class="fas fa-server me-1" style="font-size:11px;color:#C9A84C"></i>
+        Deployment Guide
+      </a>
+    </div>
+
   </aside>
 
   {{-- ── Content ── --}}
@@ -290,6 +298,31 @@
           </div>
           <div style="font-size:13px;color:#64748B;line-height:1.45">
             Requirements checklist for connecting GOIL Budget to Sage — what to gather from the Sage admins before development begins.
+          </div>
+        </div>
+        <i class="fas fa-chevron-right" style="color:#CBD5E1;font-size:12px;margin-left:auto;flex-shrink:0"></i>
+      </a>
+    </div>
+
+    <div class="doc-sub" id="it-operations">
+      <div class="doc-sub-title">IT Operations</div>
+      <a href="{{ route('docs.deployment-guide') }}"
+         style="display:flex;align-items:center;gap:16px;
+                padding:16px 18px;border:1px solid #E2E8F0;border-radius:10px;
+                text-decoration:none;background:#fff;transition:border-color .15s,box-shadow .15s;
+                max-width:480px"
+         onmouseover="this.style.borderColor='#C9A84C';this.style.boxShadow='0 2px 8px rgba(0,0,0,.06)'"
+         onmouseout="this.style.borderColor='#E2E8F0';this.style.boxShadow='none'">
+        <div style="width:44px;height:44px;border-radius:10px;background:#1B2A4A;
+                    display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <i class="fas fa-server" style="color:#C9A84C;font-size:18px"></i>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:#1B2A4A;margin-bottom:3px">
+            Deployment Guide
+          </div>
+          <div style="font-size:13px;color:#64748B;line-height:1.45">
+            Server requirements, installer walkthrough, IIS configuration, Task Scheduler setup, and update procedure for self-hosted installations.
           </div>
         </div>
         <i class="fas fa-chevron-right" style="color:#CBD5E1;font-size:12px;margin-left:auto;flex-shrink:0"></i>

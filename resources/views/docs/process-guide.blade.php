@@ -538,7 +538,7 @@ body[data-filter] .step.matched {
     <div class="phase-meta">
       <div class="phase-eyebrow" style="color:var(--user-c)">Annual — once per fiscal year</div>
       <div class="phase-name">Budget Entry</div>
-      <div class="phase-desc">Each department enters their planned figures for the year. Think of this as filling in your Excel template — but directly in the system, with totals calculated automatically.</div>
+      <div class="phase-desc">Each department/Service station/subsidiary enters their planned figures for the year. Think of this as filling in your Excel template — but directly in the system, with totals calculated automatically.</div>
       <div class="phase-roles"><span class="step-badge badge-user">Dept User</span></div>
     </div>
   </div>

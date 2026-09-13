@@ -47,5 +47,9 @@ class AppServiceProvider extends ServiceProvider
 
         // Bind 'serviceStation' route parameter to the Department model
         Route::bind('serviceStation', fn($value) => Department::serviceStations()->findOrFail($value));
+
+        if ($this->app->environment('production')) {
+            \Illuminate\Support\Facades\URL::forceScheme('https');
+        }
     }
 }

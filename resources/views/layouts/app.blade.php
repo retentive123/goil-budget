@@ -919,11 +919,7 @@
                 <i class="fas fa-hard-hat nav-icon"></i>
                 <span class="link-text">CapEx Layout</span>
             </a>
-            <a href="{{ route('admin.expump-templates.index') }}"
-               class="sidebar-link {{ request()->routeIs('admin.expump-templates.*') ? 'active' : '' }}">
-                <i class="fas fa-gas-pump nav-icon"></i>
-                <span class="link-text">Ex-pump</span>
-            </a>
+            {{-- Ex-pump hidden from menu (accessible via direct URL) --}}
             <a href="{{ route('admin.account-categories.index') }}"
                class="sidebar-link {{ request()->routeIs('admin.account-categories.*') ? 'active' : '' }}">
                 <i class="fas fa-folder nav-icon"></i>

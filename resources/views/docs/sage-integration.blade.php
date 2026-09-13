@@ -184,6 +184,8 @@
     <div class="docs-nav-group" style="margin-top:8px">
       <span class="docs-nav-label">Other Docs</span>
       <a class="docs-nav-link" href="{{ route('docs.index') }}">← System Documentation</a>
+      <a class="docs-nav-link" href="{{ route('docs.process-guide') }}">Process Guide</a>
+      <a class="docs-nav-link" href="{{ route('docs.deployment-guide') }}">Deployment Guide</a>
     </div>
   </aside>
 

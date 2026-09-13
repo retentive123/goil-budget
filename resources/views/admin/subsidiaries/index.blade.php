@@ -104,6 +104,11 @@
                     </td>
                     <td style="padding:12px 16px;text-align:right">
                         <div class="d-flex gap-1 justify-content-end">
+                            <a href="{{ route('admin.subsidiaries.show', $sub) }}"
+                               class="btn btn-sm btn-outline-secondary" title="View Subsidiary"
+                               style="font-size:11px;padding:2px 8px">
+                                <i class="bi bi-eye"></i>
+                            </a>
                             <a href="{{ route('admin.subsidiaries.account-codes', $sub) }}"
                                class="btn btn-sm btn-outline-secondary" title="Manage Account Codes"
                                style="font-size:11px;padding:2px 8px">

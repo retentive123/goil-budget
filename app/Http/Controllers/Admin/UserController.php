@@ -94,15 +94,16 @@ class UserController extends Controller
         $subsidiaryId = $validated['subsidiary_id'] ?? null;
 
         $user = User::create([
-            'name'               => $validated['name'],
-            'email'              => $validated['email'],
-            'employee_id'        => $validated['employee_id'] ?? null,
-            'phone'              => $validated['phone'] ?? null,
-            'department_id'      => $departmentId,
-            'subsidiary_id'      => $subsidiaryId,
-            'password'           => Hash::make($validated['password']),
-            'is_active'          => true,
-            'two_factor_enabled' => (bool) ($validated['two_factor_enabled'] ?? false),
+            'name'                 => $validated['name'],
+            'email'                => $validated['email'],
+            'employee_id'          => $validated['employee_id'] ?? null,
+            'phone'                => $validated['phone'] ?? null,
+            'department_id'        => $departmentId,
+            'subsidiary_id'        => $subsidiaryId,
+            'password'             => Hash::make($validated['password']),
+            'is_active'            => true,
+            'two_factor_enabled'   => (bool) ($validated['two_factor_enabled'] ?? false),
+            'must_change_password' => true,  // force password change on first login
         ]);
 
         $user->assignRole($validated['role']);
@@ -220,5 +221,121 @@ class UserController extends Controller
         $user->syncRoles([$request->role]);
 
         return back()->with('success', 'Role updated successfully.');
+    }
+
+    // ── Bulk CSV Import ────────────────────────────────────────────────────────
+
+    public function importTemplate()
+    {
+        $headers = [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="users-import-template.csv"',
+        ];
+
+        $callback = function () {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, ['name','email','employee_id','phone','department_code','subsidiary_code','role','password']);
+            fputcsv($handle, ['John Kwame','john.kwame@goil.com','EMP001','0244000001','HR','','department_user','']);
+            fputcsv($handle, ['Ama Sarpong','ama.sarpong@goil.com','EMP002','0244000002','','GOILSUB01','department_head','']);
+            fclose($handle);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    public function importForm()
+    {
+        $departments  = Department::where('is_active', true)->orderBy('name')->get();
+        $subsidiaries = Subsidiary::where('is_active', true)->orderBy('name')->get();
+        $roles        = \Spatie\Permission\Models\Role::orderBy('name')->get();
+        return view('admin.users.import', compact('departments', 'subsidiaries', 'roles'));
+    }
+
+    public function import(Request $request)
+    {
+        $request->validate([
+            'csv_file' => ['required', 'file', 'mimes:csv,txt', 'max:2048'],
+        ]);
+
+        $file   = $request->file('csv_file');
+        $handle = fopen($file->getRealPath(), 'r');
+
+        // Read header row
+        $headers = array_map('strtolower', array_map('trim', fgetcsv($handle)));
+        $required = ['name', 'email', 'role', 'password'];
+        $missing  = array_diff($required, $headers);
+
+        if ($missing) {
+            fclose($handle);
+            return back()->with('error', 'CSV is missing required columns: ' . implode(', ', $missing));
+        }
+
+        $created = 0;
+        $skipped = [];
+        $rowNum  = 1;
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $rowNum++;
+            if (empty(array_filter($row))) continue; // skip blank lines
+
+            $data = array_combine($headers, array_pad($row, count($headers), ''));
+
+            // Basic required field check
+            if (empty(trim($data['name'])) || empty(trim($data['email'])) || empty(trim($data['role']))) {
+                $skipped[] = "Row {$rowNum}: name, email, and role are required.";
+                continue;
+            }
+
+            if (User::where('email', trim($data['email']))->exists()) {
+                $skipped[] = "Row {$rowNum}: {$data['email']} already exists — skipped.";
+                continue;
+            }
+
+            if (!\Spatie\Permission\Models\Role::where('name', trim($data['role']))->exists()) {
+                $skipped[] = "Row {$rowNum}: role '{$data['role']}' does not exist — skipped.";
+                continue;
+            }
+
+            // Resolve department (by code or name)
+            $department = null;
+            if (!empty($data['department_code'] ?? '')) {
+                $department = Department::where('code', trim($data['department_code']))->first();
+            }
+
+            // Resolve subsidiary (by code)
+            $subsidiary = null;
+            if (!empty($data['subsidiary_code'] ?? '')) {
+                $subsidiary = \App\Models\Subsidiary::where('code', trim($data['subsidiary_code']))->first();
+            }
+
+            $password = trim($data['password'] ?? '') ?: 'Welcome@' . now()->year;
+
+            $user = User::create([
+                'name'                 => trim($data['name']),
+                'email'                => trim($data['email']),
+                'employee_id'          => trim($data['employee_id'] ?? '') ?: null,
+                'phone'                => trim($data['phone'] ?? '') ?: null,
+                'department_id'        => $subsidiary ? null : $department?->id,
+                'subsidiary_id'        => $subsidiary?->id,
+                'password'             => Hash::make($password),
+                'is_active'            => true,
+                'must_change_password' => true,
+            ]);
+
+            $user->assignRole(trim($data['role']));
+            AuditLogger::userCreated($user, auth()->user());
+            $created++;
+        }
+
+        fclose($handle);
+
+        $msg = "Import complete — {$created} user(s) created.";
+        if ($skipped) {
+            $msg .= ' ' . count($skipped) . ' row(s) skipped. See details below.';
+        }
+
+        return back()
+            ->with('import_success', $msg)
+            ->with('import_skipped', $skipped);
     }
 }

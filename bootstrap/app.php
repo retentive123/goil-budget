@@ -37,6 +37,7 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\EnforceSingleSession::class,
             \App\Http\Middleware\EnforceSegregationOfDuties::class,
             \App\Http\Middleware\EnforceTwoFactor::class,
+            \App\Http\Middleware\ForcePasswordChange::class,
         ]);
 
         $middleware->alias([

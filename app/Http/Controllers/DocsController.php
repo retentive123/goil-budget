@@ -18,4 +18,9 @@ class DocsController extends Controller
     {
         return view('docs.process-guide');
     }
+
+    public function deploymentGuide()
+    {
+        return view('docs.deployment-guide');
+    }
 }

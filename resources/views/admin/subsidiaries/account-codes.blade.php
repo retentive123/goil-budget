@@ -56,9 +56,68 @@
                             </a>
                         </div>
                     @else
+                        {{-- Tab counts --}}
+                        @php
+                            $cntRevenue = $all->filter(fn($c) => in_array($c->category->budget_type, ['revenue','both']))->count();
+                            $cntExpense = $all->filter(fn($c) => in_array($c->category->budget_type, ['expense','both']))->count();
+                            $cntCapex   = $all->filter(fn($c) => $c->category->budget_type === 'capital_expenditure')->count();
+                            $cntAssets  = $all->filter(fn($c) => in_array($c->category->budget_type, ['assets','liabilities']))->count();
+                        @endphp
+                        <div class="type-tabs" id="typeTabs">
+                            <button type="button" class="type-tab active" data-tab="all" onclick="setTab('all')">
+                                All <span class="tab-count">{{ $all->count() }}</span>
+                            </button>
+                            @if($cntRevenue > 0)
+                            <button type="button" class="type-tab" data-tab="revenue" onclick="setTab('revenue')">
+                                Revenue <span class="tab-count">{{ $cntRevenue }}</span>
+                            </button>
+                            @endif
+                            @if($cntExpense > 0)
+                            <button type="button" class="type-tab" data-tab="expense" onclick="setTab('expense')">
+                                Expense <span class="tab-count">{{ $cntExpense }}</span>
+                            </button>
+                            @endif
+                            @if($cntCapex > 0)
+                            <button type="button" class="type-tab" data-tab="capex" onclick="setTab('capex')">
+                                CapEx <span class="tab-count">{{ $cntCapex }}</span>
+                            </button>
+                            @endif
+                            @if($cntAssets > 0)
+                            <button type="button" class="type-tab" data-tab="assets-liabilities" onclick="setTab('assets-liabilities')">
+                                Assets &amp; Liabilities <span class="tab-count">{{ $cntAssets }}</span>
+                            </button>
+                            @endif
+                        </div>
+                        {{-- Code search --}}
+                        <div class="mb-4 code-search-wrap">
+                            <div class="input-group">
+                                <span class="input-group-text rounded-start-2">
+                                    <i class="bi bi-search" style="font-size:13px"></i>
+                                </span>
+                                <input type="text"
+                                       id="codeSearch"
+                                       class="form-control"
+                                       placeholder="Search by code number or name…"
+                                       autocomplete="off"
+                                       oninput="filterCodes(this.value)">
+                                <button type="button"
+                                        id="clearSearchBtn"
+                                        class="input-group-text rounded-end-2"
+                                        onclick="clearSearch()"
+                                        title="Clear search"
+                                        style="display:none">
+                                    <i class="bi bi-x-lg" style="font-size:12px;color:#64748B"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="noSearchResults" class="text-center py-5" style="display:none">
+                            <i class="bi bi-search" style="font-size:36px;color:#CBD5E1;display:block;margin-bottom:8px"></i>
+                            <p class="text-muted small fw-semibold mb-2">No codes match your search</p>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearSearch()">Clear Search</button>
+                        </div>
                         @foreach($all->groupBy('account_category_id') as $categoryId => $codes)
                             @php $category = $codes->first()->category @endphp
-                            <div class="category-group mb-4">
+                            <div class="category-group mb-4" data-type="{{ $category->budget_type }}">
                                 <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
                                     <div class="d-flex align-items-center gap-2">
                                         <h6 class="fw-semibold text-muted small text-uppercase mb-0">
@@ -77,7 +136,9 @@
                                 </div>
                                 <div class="row g-2">
                                     @foreach($codes as $code)
-                                    <div class="col-md-4 col-lg-3">
+                                    <div class="col-md-4 col-lg-3 code-item"
+                                         data-code="{{ strtolower($code->code) }}"
+                                         data-name="{{ strtolower($code->name) }}">
                                         <div class="form-check form-check-custom">
                                             <input type="checkbox"
                                                 name="account_codes[]"
@@ -165,11 +226,37 @@
 
 @push('styles')
 <style>
-.form-check-custom { padding:8px 12px;border:1px solid #E2E8F0;border-radius:8px;transition:all .2s;background:#fff }
-.form-check-custom:hover { border-color:#1B2A4A;background:#F8FAFC }
-.form-check-custom .form-check-input:checked { background-color:#1B2A4A;border-color:#1B2A4A }
-.category-group { background:#F8FAFC;padding:16px;border-radius:10px;border:1px solid #E2E8F0 }
-.category-group:hover { border-color:#1B2A4A }
+/* ── Code search ──────────────────────────────────────────────────────────── */
+.code-search-wrap .form-control,
+.code-search-wrap .input-group-text { border-color: #E65C00 !important; }
+.code-search-wrap .input-group-text  { background: #fff; color: #E65C00; }
+.code-search-wrap .form-control:focus {
+    box-shadow: 0 0 0 3px rgba(230,92,0,.12);
+    border-color: #E65C00 !important;
+}
+#clearSearchBtn { cursor: pointer; }
+
+/* ── Checkbox card ────────────────────────────────────────────────────────── */
+.form-check-custom { padding:8px 12px;border:1.5px solid #E2E8F0;border-radius:8px;transition:all .2s;background:#fff }
+.form-check-custom:hover { border-color:#E65C00;background:#FFF8F5 }
+.form-check-custom .form-check-input { border:2px solid #E65C00;margin-top:1px }
+.form-check-custom .form-check-input:focus { box-shadow:0 0 0 3px rgba(230,92,0,.15);border-color:#E65C00 }
+.form-check-custom .form-check-input:checked { background-color:#10B981;border-color:#10B981 }
+.form-check-custom:has(.form-check-input:checked) { border-color:#10B981;background:#F0FDF4 }
+.form-check-custom .form-check-input:checked ~ .form-check-label { color:#065F46;font-weight:600 }
+.form-check-custom .form-check-input:checked ~ .form-check-label code { background-color:#D1FAE5!important;color:#065F46 }
+.form-check-custom .form-check-label { cursor:pointer;width:100%;margin-bottom:0 }
+
+/* ── Category groups ──────────────────────────────────────────────────────── */
+.category-group { background:#F8FAFC;padding:16px;border-radius:10px;border:1px solid #E2E8F0;transition:all .2s }
+.category-group:hover { border-color:#E65C00 }
+/* ── Type tabs ─────────────────────────────────────────────────────── */
+.type-tabs { display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px }
+.type-tab { font-size:12px;font-weight:600;padding:5px 14px;border-radius:20px;border:1.5px solid #E2E8F0;background:#F8FAFC;color:#64748B;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:5px }
+.type-tab:hover { border-color:#E65C00;color:#E65C00 }
+.type-tab.active { background:#E65C00;border-color:#E65C00;color:#fff }
+.tab-count { background:rgba(0,0,0,.1);border-radius:10px;padding:0 6px;font-size:10px;font-weight:700 }
+.type-tab.active .tab-count { background:rgba(255,255,255,.25) }
 </style>
 @endpush
 
@@ -209,6 +296,51 @@ function toggleAllCategories() {
 
 function selectAll() { allCheckboxes.forEach(cb => cb.checked = true); updateCounter(); }
 function clearAll()  { allCheckboxes.forEach(cb => cb.checked = false); updateCounter(); }
+
+const TAB_TYPES = {
+    'all':                null,
+    'revenue':            ['revenue','both'],
+    'expense':            ['expense','both'],
+    'capex':              ['capital_expenditure'],
+    'assets-liabilities': ['assets','liabilities'],
+};
+let activeTab = 'all';
+
+function setTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll('.type-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+    applyFilters();
+}
+
+function filterCodes() { applyFilters(); }
+
+function applyFilters() {
+    const query    = ((document.getElementById('codeSearch')||{}).value||'').trim().toLowerCase();
+    const tabTypes = TAB_TYPES[activeTab] || null;
+    const clearBtn = document.getElementById('clearSearchBtn');
+    if (clearBtn) clearBtn.style.display = query ? '' : 'none';
+    let anyVisible = false;
+    document.querySelectorAll('.category-group').forEach(group => {
+        if (tabTypes && !tabTypes.includes(group.dataset.type||'')) { group.style.display='none'; return; }
+        let visible = 0;
+        group.querySelectorAll('.code-item').forEach(item => {
+            const match = !query || (item.dataset.code||'').includes(query) || (item.dataset.name||'').includes(query);
+            item.style.display = match ? '' : 'none';
+            if (match) visible++;
+        });
+        group.style.display = visible > 0 ? '' : 'none';
+        if (visible > 0) anyVisible = true;
+    });
+    const noRes = document.getElementById('noSearchResults');
+    if (noRes) noRes.style.display = anyVisible ? 'none' : '';
+}
+
+function clearSearch() {
+    const inp = document.getElementById('codeSearch');
+    if (inp) inp.value = '';
+    applyFilters();
+    if (inp) inp.focus();
+}
 
 document.addEventListener('DOMContentLoaded', updateCounter);
 </script>

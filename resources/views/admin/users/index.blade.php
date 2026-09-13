@@ -17,7 +17,9 @@
                 </p>
             </div>
             <div class="d-flex gap-2">
-
+                <a href="{{ route('admin.users.import') }}" class="btn btn-sm btn-outline-secondary" style="border-radius: 8px;">
+                    <i class="fas fa-file-csv me-1"></i> Bulk Import CSV
+                </a>
                 <a href="{{ route('admin.users.create') }}" class="btn btn-sm" style="background: #E65C00; color: #fff; border-radius: 8px; border: none;">
                     <i class="fas fa-user-plus"></i> Add User
                 </a>

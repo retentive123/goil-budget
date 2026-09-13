@@ -58,6 +58,9 @@
             <span class="btn btn-secondary" style="pointer-events:none;">Classic View</span>
             <a href="{{ route('budget.show-pnl', $budgetVersion) }}" class="btn btn-outline-secondary">P&amp;L View</a>
         </div>
+        <button class="btn btn-sm btn-outline-secondary" onclick="window.print()" title="Print budget summary">
+            <i class="bi bi-printer"></i> Print
+        </button>
         <div class="dropdown">
             <button class="btn btn-sm btn-outline-success dropdown-toggle" type="button" data-bs-toggle="dropdown">
                 <i class="bi bi-download"></i> Export
@@ -916,5 +919,71 @@
     });
 </script>
 @endif
+
+@push('styles')
+<style>
+@media print {
+    /* Hide everything except the budget table */
+    .sidebar, .navbar, .topbar,
+    .btn, .dropdown, .dropdown-menu,
+    #save-status, #save-btn, #submit-btn,
+    .chart-card:has(.btn),   /* import/export panel */
+    .nav-tabs, .tab-content > :not(.active),
+    .pagination, form[method="GET"],
+    .alert:not(.alert-danger) {
+        display: none !important;
+    }
+
+    /* Layout reset for print */
+    body, .main-content, .content-wrapper, .px-3, .px-lg-4 {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+    }
+
+    /* Print header */
+    .d-flex.justify-content-between.align-items-center.mb-3::before {
+        content: 'GOIL COMPANY LIMITED — BUDGET SUBMISSION';
+        display: block;
+        font-size: 16px;
+        font-weight: 700;
+        text-align: center;
+        color: #1B2A4A;
+        margin-bottom: 8px;
+        border-bottom: 2px solid #E65C00;
+        padding-bottom: 6px;
+    }
+
+    /* Page settings */
+    @page {
+        size: A4 landscape;
+        margin: 1.5cm 1cm;
+    }
+
+    /* Grand total bar — keep visible but simplified */
+    .bg-goil-orange {
+        background: #1B2A4A !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Make tables page-break friendly */
+    table { page-break-inside: auto; }
+    tr    { page-break-inside: avoid; page-break-after: auto; }
+    thead { display: table-header-group; }
+    tfoot { display: table-footer-group; }
+
+    /* Category headers */
+    .fw-bold.py-2 { background: #F8FAFC !important; }
+
+    /* Remove shadows */
+    .card, .shadow-sm { box-shadow: none !important; border: 1px solid #E2E8F0 !important; }
+
+    /* Shrink font slightly for fit */
+    body, td, th { font-size: 11px !important; }
+    h5 { font-size: 14px !important; }
+}
+</style>
+@endpush
 
 @endsection
