@@ -1088,10 +1088,17 @@
         {{-- User menu --}}
         <div class="dropdown">
             <a href="#" class="user-pill dropdown-toggle" data-bs-toggle="dropdown">
-                <div class="user-avatar">
-                    {{ strtoupper(substr(Auth::user()?->name ?? '', 0, 2)) }}
+                @php $authUser = Auth::user(); @endphp
+                <div class="user-avatar" style="overflow:hidden;">
+                    @if($authUser?->avatar && Storage::disk('public')->exists($authUser->avatar))
+                        <img src="{{ Storage::url($authUser->avatar) }}"
+                             alt="Avatar"
+                             style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;">
+                    @else
+                        {{ strtoupper(substr($authUser?->name ?? '', 0, 2)) }}
+                    @endif
                 </div>
-                {{ explode(' ', Auth::user()?->name ?? '')[0] }}
+                {{ explode(' ', $authUser?->name ?? '')[0] }}
                 <i class="fas fa-chevron-down ms-1" style="font-size:10px;color:var(--slate)"></i>
             </a>
             <ul class="dropdown-menu dropdown-menu-end shadow">
@@ -1101,6 +1108,11 @@
                     </span>
                 </li>
                 <li><hr class="dropdown-divider"></li>
+                <li>
+                    <a class="dropdown-item small" href="{{ route('profile.show') }}">
+                        <i class="fas fa-user-circle me-2"></i>My Profile
+                    </a>
+                </li>
                 <li>
                     <a class="dropdown-item small" href="{{ route('password.change') }}">
                         <i class="fas fa-key me-2"></i>Change password
@@ -1466,6 +1478,7 @@ window.NAV_ITEMS = [
     { label:'Documentation',        keywords:['docs','documentation','help','guide'],   icon:'fas fa-book-open',             section:'Help',            url:'{{ route('docs.index') }}' },
     { label:'Sage Integration',     keywords:['sage','integration','erp','api','connect','requirements'], icon:'fas fa-plug',  section:'Help', url:'{{ route('docs.sage-integration') }}' },
     { label:'Process Guide',        keywords:['process','guide','how','workflow','steps','setup','actuals','approval','budget entry','reports','onboarding'], icon:'fas fa-route', section:'Help', url:'{{ route('docs.process-guide') }}' },
+    { label:'My Profile',           keywords:['profile','photo','avatar','my account','name','phone'], icon:'fas fa-user-circle',           section:'Help',            url:'{{ route('profile.show') }}' },
     { label:'Change Password',      keywords:['password','change','security'],          icon:'fas fa-key',                   section:'Help',            url:'{{ route('password.change') }}' },
     { label:'Two-Factor Auth',      keywords:['2fa','two factor','security','otp'],     icon:'fas fa-shield-alt',            section:'Help',            url:'{{ route('2fa.setup') }}' },
 ];

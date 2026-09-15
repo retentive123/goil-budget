@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\DepartmentController;
@@ -58,6 +59,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/docs/process-guide', [DocsController::class, 'processGuide'])->name('docs.process-guide');
     Route::get('/docs/deployment-guide', [DocsController::class, 'deploymentGuide'])->name('docs.deployment-guide');
     Route::get('/search', [\App\Http\Controllers\SearchController::class, 'search'])->name('search');
+    Route::get('/profile',          [ProfileController::class, 'show'])->name('profile.show');
+    Route::put('/profile',          [ProfileController::class, 'update'])->name('profile.update');
+    Route::post('/profile/avatar',  [ProfileController::class, 'uploadAvatar'])->name('profile.avatar');
+
     Route::get('/password/change',  [PasswordController::class, 'showChangeForm'])->name('password.change');
     Route::post('/password/change', [PasswordController::class, 'update'])->name('password.update');
     Route::get('/2fa/setup',    [TwoFactorController::class, 'setup'])->name('2fa.setup');

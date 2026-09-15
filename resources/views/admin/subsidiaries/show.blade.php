@@ -37,9 +37,6 @@
     </div>
 </div>
 
-@if(session('success'))
-    <div class="alert alert-success"><i class="bi bi-check-circle-fill me-2"></i>{{ session('success') }}</div>
-@endif
 
 <div class="row g-3 mb-4">
     <div class="col-md-3">

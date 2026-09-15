@@ -13,18 +13,6 @@
        class="btn btn-sm btn-outline-secondary">← All Requests</a>
 </div>
 
-@if(session('success'))
-<div class="alert alert-success alert-dismissible fade show py-2">
-    {{ session('success') }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-@endif
-@if(session('error'))
-<div class="alert alert-danger alert-dismissible fade show py-2">
-    {{ session('error') }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-@endif
 
 @forelse($batches as $batchIdx => $items)
 @php

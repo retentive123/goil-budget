@@ -58,12 +58,6 @@
         </form>
     </div>
 
-    @if(session('warning'))
-    <div class="alert alert-warning alert-dismissible fade show" role="alert" style="border-radius: 10px; font-size: 13px;">
-        <i class="fas fa-exclamation-triangle"></i> {{ session('warning') }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-    @endif
 
     @if(session('import_errors'))
     <div class="card border-0 mb-4" style="border-radius: 10px; background: #FEF2F2; border: 1px solid #FECACA !important;">
@@ -115,13 +109,6 @@
         </div>
     </div>
 
-    {{-- Flash Messages --}}
-    @if(session('success'))
-        <div class="alert alert-success alert-dismissible fade show small" role="alert">
-            <i class="fas fa-check-circle me-1"></i> {{ session('success') }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    @endif
 
     {{-- Filters --}}
     <div class="chart-card mb-4">

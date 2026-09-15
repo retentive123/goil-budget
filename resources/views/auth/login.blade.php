@@ -14,7 +14,8 @@
             min-height: 100vh;
             display: flex;
             font-family: 'Inter', system-ui, sans-serif;
-            background: #0F0F0F;
+            background: linear-gradient(135deg, #1a0a00 0%, #2d1200 40%, #E65C00 100%);
+            background-attachment: fixed;
             overflow: hidden;
         }
 
@@ -28,6 +29,7 @@
             padding: 48px;
             overflow: hidden;
             background: linear-gradient(135deg, #1a0a00 0%, #2d1200 40%, #E65C00 100%);
+            background-attachment: fixed;
         }
 
         /* Animated background circles */
@@ -417,10 +419,15 @@
             color: #CBD5E1;
         }
 
+        /* ── Curved bottom-left clip on right panel ── */
+        .right-panel {
+            clip-path: url(#rightPanelClip);
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
-            .left-panel { display: none; }
-            .right-panel { width: 100%; }
+            .left-panel  { display: none; }
+            .right-panel { width: 100%; clip-path: none; }
         }
 
         /* Loading state */
@@ -478,6 +485,17 @@
     </style>
 </head>
 <body>
+
+{{-- SVG clip-path definition (hidden) --}}
+<svg width="0" height="0" style="position:absolute;overflow:hidden">
+  <defs>
+    <clipPath id="rightPanelClip" clipPathUnits="objectBoundingBox">
+      {{-- J-curve: full width at top, sweeps right at the bottom --}}
+      {{-- The bottom-left ~38% of the right panel is removed, revealing the left panel gradient --}}
+      <path d="M 0,0 L 1,0 L 1,1 L 0.38,1 C 0.1,1 0,0.8 0,0 Z"/>
+    </clipPath>
+  </defs>
+</svg>
 
 {{-- ══════════════════════════════════
      LEFT PANEL
@@ -605,12 +623,6 @@
         </div>
         @endif
 
-        @if($errors->has('email') && !$errors->has('password'))
-        <div class="alert-msg">
-            <i class="bi bi-exclamation-triangle-fill"></i>
-            <span>{{ $errors->first('email') }}</span>
-        </div>
-        @endif
 
         {{-- Login form --}}
         <form method="POST" action="{{ route('login') }}" id="loginForm">

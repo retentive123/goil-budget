@@ -31,18 +31,6 @@ $usedTypes = $categories->pluck('budget_type')->unique()->sort()->values();
     </a>
 </div>
 
-@if(session('success'))
-<div class="alert alert-success alert-dismissible fade show py-2 mb-3">
-    {{ session('success') }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-@endif
-@if(session('error'))
-<div class="alert alert-danger alert-dismissible fade show py-2 mb-3">
-    {{ session('error') }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-@endif
 
 {{-- Toolbar --}}
 <div class="chart-card mb-3">
