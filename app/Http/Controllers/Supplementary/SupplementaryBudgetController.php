@@ -8,6 +8,8 @@ use App\Models\BudgetVersion;
 use App\Models\BudgetLineItem;
 use App\Models\BudgetPeriod;
 use App\Models\Department;
+use App\Models\ApprovalStage;
+use App\Models\SystemSetting;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -167,7 +169,7 @@ class SupplementaryBudgetController extends Controller
             }
         });
 
-        $this->notifyFinanceOfBatch($created);
+        $this->notifyBasedOnMode($created);
 
         \App\Services\AuditLogger::record(
             'supplementary_submitted', 'budget', 'created',
@@ -444,19 +446,282 @@ class SupplementaryBudgetController extends Controller
 
     public function pending()
     {
-        $pending = SupplementaryBudget::with(
+        $user = auth()->user();
+        $mode = SystemSetting::get('supplementary_approval_mode', 'finance_final');
+
+        $query = SupplementaryBudget::with(
                 'department','accountCode.category','requestedBy','period'
             )
-            ->whereIn('status', ['submitted','under_review'])
             ->orderByDesc('submitted_at')
-            ->orderByDesc('id')
-            ->paginate(60);
+            ->orderByDesc('id');
 
+        if ($mode === 'dept_head_final') {
+            // Dept head sees items from their own department awaiting dept-head approval
+            if (!$user->hasAnyRole(['finance_reviewer','bdu_admin','super_admin'])) {
+                $query->where('department_id', $user->department_id)
+                      ->where(function ($q) {
+                          $q->whereNull('dept_head_status')
+                            ->orWhere('dept_head_status', 'pending');
+                      });
+            } else {
+                // Finance/admin: see everything still pending
+                $query->whereIn('status', ['submitted','under_review']);
+            }
+        } elseif ($mode === 'full_stages') {
+            // Determine which role the current user holds among approval stages
+            $stages     = ApprovalStage::ordered();
+            $userRoles  = $user->roles->pluck('name')->toArray();
+            $myStages   = $stages->filter(fn($s) => in_array($s->role_name, $userRoles));
+
+            if ($myStages->isNotEmpty()) {
+                $myOrders = $myStages->pluck('order')->toArray();
+                $query->whereIn('status', ['submitted','under_review'])
+                      ->whereIn('current_stage_order', $myOrders);
+            } elseif ($user->hasAnyRole(['finance_reviewer','bdu_admin','super_admin'])) {
+                $query->whereIn('status', ['submitted','under_review']);
+            } else {
+                $query->whereRaw('1=0'); // no pending items for this user
+            }
+        } else {
+            // finance_final: default
+            $query->whereIn('status', ['submitted','under_review']);
+        }
+
+        $pending = $query->paginate(60);
         $batches = $pending->getCollection()
             ->groupBy(fn($s) => $s->batch_id ?? ('solo_' . $s->id))
             ->values();
 
-        return view('supplementary.pending', compact('pending', 'batches'));
+        return view('supplementary.pending', compact('pending', 'batches', 'mode'));
+    }
+
+    // ── Dept-head approval (dept_head_final mode) ─────────────────────────
+    public function deptHeadApprove(Request $request, SupplementaryBudget $supplementary)
+    {
+        $request->validate([
+            'approved_amount' => ['required','numeric','min:1'],
+            'dept_head_notes' => ['nullable','string','max:1000'],
+        ]);
+
+        abort_unless(SystemSetting::get('supplementary_approval_mode') === 'dept_head_final', 403);
+
+        $user = auth()->user();
+        abort_unless($supplementary->department_id === $user->department_id
+            || $user->hasAnyRole(['bdu_admin','super_admin']), 403);
+
+        \App\Services\SegregationService::check(
+            $supplementary->requested_by,
+            'approve this supplementary budget request'
+        );
+
+        DB::transaction(function () use ($request, $supplementary) {
+            $supplementary->update([
+                'status'            => 'approved',
+                'approved_amount'   => $request->approved_amount,
+                'dept_head_status'  => 'approved',
+                'dept_head_by'      => auth()->id(),
+                'dept_head_at'      => now(),
+                'dept_head_notes'   => $request->dept_head_notes,
+                'approved_by'       => auth()->id(),
+                'approved_at'       => now(),
+            ]);
+
+            $this->notifyDepartmentOfDecision($supplementary, 'approved', $request->dept_head_notes);
+
+            \App\Services\AuditLogger::record(
+                'supplementary_approved', 'budget', 'approved',
+                [
+                    'subject_label' => "Supplementary (dept-head): {$supplementary->accountCode->code}",
+                    'new_values'    => ['approved_amount' => $request->approved_amount],
+                    'severity'      => 'info',
+                ]
+            );
+        });
+
+        return redirect()->route('supplementary.pending')
+            ->with('success',
+                "Supplementary budget approved. GHS " . number_format($request->approved_amount, 2) .
+                " added to the department's budget."
+            );
+    }
+
+    public function deptHeadReject(Request $request, SupplementaryBudget $supplementary)
+    {
+        $request->validate(['rejection_reason' => ['required','string','min:10','max:1000']]);
+
+        abort_unless(SystemSetting::get('supplementary_approval_mode') === 'dept_head_final', 403);
+
+        $user = auth()->user();
+        abort_unless($supplementary->department_id === $user->department_id
+            || $user->hasAnyRole(['bdu_admin','super_admin']), 403);
+
+        $supplementary->update([
+            'status'           => 'rejected',
+            'rejection_reason' => $request->rejection_reason,
+            'dept_head_status' => 'rejected',
+            'dept_head_by'     => auth()->id(),
+            'dept_head_at'     => now(),
+            'dept_head_notes'  => $request->rejection_reason,
+        ]);
+
+        $this->notifyDepartmentOfDecision($supplementary, 'rejected', $request->rejection_reason);
+
+        \App\Services\AuditLogger::record(
+            'supplementary_rejected', 'budget', 'rejected',
+            [
+                'subject_label' => "Supplementary (dept-head): {$supplementary->accountCode->code}",
+                'meta'          => ['reason' => $request->rejection_reason],
+                'severity'      => 'warning',
+            ]
+        );
+
+        return redirect()->route('supplementary.pending')
+            ->with('success', 'Supplementary budget request rejected. Department notified.');
+    }
+
+    // ── Stage advance (full_stages mode) ──────────────────────────────────
+    public function stageApprove(Request $request, SupplementaryBudget $supplementary)
+    {
+        $request->validate([
+            'approved_amount' => ['required','numeric','min:1'],
+            'review_notes'    => ['nullable','string','max:1000'],
+        ]);
+
+        abort_unless(SystemSetting::get('supplementary_approval_mode') === 'full_stages', 403);
+
+        $stages    = ApprovalStage::ordered();
+        $userRoles = auth()->user()->roles->pluck('name')->toArray();
+
+        // Confirm this user is at the current stage
+        $currentStage = $stages->firstWhere('order', $supplementary->current_stage_order);
+        abort_unless($currentStage && in_array($currentStage->role_name, $userRoles), 403);
+
+        \App\Services\SegregationService::check(
+            $supplementary->requested_by,
+            'approve this supplementary budget request'
+        );
+
+        $nextStage = $stages->first(fn($s) => $s->order > $currentStage->order);
+
+        DB::transaction(function () use ($request, $supplementary, $currentStage, $nextStage) {
+            if ($nextStage) {
+                // Advance to next stage
+                $supplementary->update([
+                    'current_stage_order' => $nextStage->order,
+                    'status'              => 'under_review',
+                ]);
+                $this->notifyStage($supplementary, $nextStage);
+            } else {
+                // Final stage — approve
+                $supplementary->update([
+                    'status'          => 'approved',
+                    'approved_amount' => $request->approved_amount,
+                    'approved_by'     => auth()->id(),
+                    'approved_at'     => now(),
+                    'reviewed_by'     => auth()->id(),
+                    'reviewed_at'     => now(),
+                ]);
+                $this->notifyDepartmentOfDecision($supplementary, 'approved', $request->review_notes);
+            }
+
+            \App\Services\AuditLogger::record(
+                'supplementary_stage_approved', 'budget', 'approved',
+                [
+                    'subject_label' => "Supplementary stage {$currentStage->order}: {$supplementary->accountCode->code}",
+                    'severity'      => 'info',
+                ]
+            );
+        });
+
+        $msg = $nextStage
+            ? "Supplementary budget approved at stage {$currentStage->name}. Forwarded to {$nextStage->name}."
+            : "Supplementary budget fully approved.";
+
+        return redirect()->route('supplementary.pending')->with('success', $msg);
+    }
+
+    private function notifyBasedOnMode(array $items): void
+    {
+        $mode = SystemSetting::get('supplementary_approval_mode', 'finance_final');
+
+        if ($mode === 'dept_head_final') {
+            // Mark dept_head_status = pending and notify dept-level approvers
+            foreach ($items as $supp) {
+                $supp->update(['dept_head_status' => 'pending']);
+            }
+            // Notify managers/first-stage approvers in same department
+            $this->notifyDeptApproversOfBatch($items);
+        } elseif ($mode === 'full_stages') {
+            $firstStage = ApprovalStage::ordered()->first();
+            if ($firstStage) {
+                foreach ($items as $supp) {
+                    $supp->update(['current_stage_order' => $firstStage->order]);
+                    $this->notifyStage($supp, $firstStage);
+                }
+            } else {
+                // No stages configured — fall back to finance
+                $this->notifyFinanceOfBatch($items);
+            }
+        } else {
+            // finance_final (default)
+            $this->notifyFinanceOfBatch($items);
+        }
+    }
+
+    private function notifyDeptApproversOfBatch(array $items): void
+    {
+        if (empty($items)) return;
+
+        $first  = $items[0];
+        $stages = ApprovalStage::ordered();
+
+        // Determine who should approve: users in same dept with the first-stage role
+        $firstStageRole = $stages->first()?->role_name ?? 'finance_reviewer';
+        $approvers = \App\Models\User::role($firstStageRole)
+            ->where('is_active', true)
+            ->get();
+
+        // If no dept-level approvers found, fall back to finance
+        if ($approvers->isEmpty()) {
+            $this->notifyFinanceOfBatch($items);
+            return;
+        }
+
+        $dept   = $first->department->name;
+        $period = $first->period->name;
+        $count  = count($items);
+        $total  = array_sum(array_map(fn($s) => $s->requested_amount, $items));
+
+        foreach ($approvers as $user) {
+            \App\Models\BudgetNotification::create([
+                'user_id'         => $user->id,
+                'type'            => 'supplementary_pending',
+                'subject'         => "Supplementary budget awaiting your approval — {$dept} ({$count} item(s))",
+                'message'         => "{$dept} has submitted {$count} supplementary budget request(s) "
+                                   . "totalling GHS " . number_format($total, 2)
+                                   . " for {$period}. As department approver, your approval is needed.",
+                'notifiable_id'   => $first->id,
+                'notifiable_type' => SupplementaryBudget::class,
+            ]);
+        }
+    }
+
+    private function notifyStage(SupplementaryBudget $supp, ApprovalStage $stage): void
+    {
+        $approvers = \App\Models\User::role($stage->role_name)->where('is_active', true)->get();
+
+        foreach ($approvers as $user) {
+            \App\Models\BudgetNotification::create([
+                'user_id'         => $user->id,
+                'type'            => 'supplementary_pending',
+                'subject'         => "Supplementary budget — stage {$stage->order}: {$supp->accountCode->code}",
+                'message'         => "A supplementary budget request for {$supp->accountCode->name} "
+                                   . "(GHS " . number_format($supp->requested_amount, 2) . ") "
+                                   . "is now at {$stage->name} and requires your review.",
+                'notifiable_id'   => $supp->id,
+                'notifiable_type' => SupplementaryBudget::class,
+            ]);
+        }
     }
 
     private function notifyFinanceOfBatch(array $items): void

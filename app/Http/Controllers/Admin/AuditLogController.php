@@ -56,6 +56,44 @@ class AuditLogController extends Controller
         return view('admin.audit-log.show', compact('log'));
     }
 
+    public function purge(Request $request)
+    {
+        $infoMonths    = (int) \App\Models\SystemSetting::get('audit_retain_info_months',    24);
+        $warningMonths = (int) \App\Models\SystemSetting::get('audit_retain_warning_months', 24);
+        $keepCritical  = (bool) \App\Models\SystemSetting::get('audit_log_keep_critical', true);
+
+        $deletedInfo    = SystemAuditLog::where('severity', 'info')
+                            ->where('created_at', '<', now()->subMonths($infoMonths))
+                            ->delete();
+
+        $deletedWarning = SystemAuditLog::where('severity', 'warning')
+                            ->where('created_at', '<', now()->subMonths($warningMonths))
+                            ->delete();
+
+        $deletedCritical = 0;
+        if (!$keepCritical) {
+            $deletedCritical = SystemAuditLog::where('severity', 'critical')
+                                ->where('created_at', '<', now()->subMonths(max($infoMonths, $warningMonths)))
+                                ->delete();
+        }
+
+        $total = $deletedInfo + $deletedWarning + $deletedCritical;
+
+        \App\Services\AuditLogger::record('audit_log_purged', 'admin', 'deleted', [
+            'subject_label' => "Manual purge: {$total} records deleted",
+            'new_values'    => [
+                'info_deleted'     => $deletedInfo,
+                'warning_deleted'  => $deletedWarning,
+                'critical_deleted' => $deletedCritical,
+            ],
+            'severity' => 'warning',
+        ]);
+
+        return back()->with('success',
+            "Audit log purged — {$deletedInfo} info, {$deletedWarning} warning, {$deletedCritical} critical records removed. Total: {$total}."
+        );
+    }
+
     public function export(Request $request)
     {
         $logs = SystemAuditLog::with('user')

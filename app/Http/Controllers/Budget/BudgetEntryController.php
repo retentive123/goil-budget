@@ -224,9 +224,11 @@ class BudgetEntryController extends Controller
             return (in_array($typeA, $revenueTypes) ? 0 : 1) <=> (in_array($typeB, $revenueTypes) ? 0 : 1);
         });
 
+        $manualSplit = (bool) SystemSetting::get('manual_period_split', false);
+
         return view('budget.show', compact(
             'budgetVersion', 'summary', 'grandTotals', 'entryMode',
-            'calcMode', 'adminSetsRate', 'adminSetsFreq'
+            'calcMode', 'adminSetsRate', 'adminSetsFreq', 'manualSplit'
         ));
     }
 
@@ -271,20 +273,37 @@ class BudgetEntryController extends Controller
         $calcMode      = $period->calcMode();
         $adminSetsRate = $period->adminSetsRate();
         $adminSetsFreq = $period->adminSetsFreq();
+        $manualSplit   = (bool) SystemSetting::get('manual_period_split', false);
+        $entryMode     = $period->entry_mode ?? 'quarterly';
 
         if ($calcMode !== 'none') {
             // ── Qty × Rate [× Freq] mode ──────────────────────────────────────────
-            $request->validate([
+            $baseRules = [
                 'items'          => ['required', 'array'],
                 'items.*.id'     => ['required', 'exists:budget_line_items,id'],
                 'items.*.qty'    => ['required', 'numeric', 'min:0'],
                 'items.*.rate'   => ['required', 'numeric', 'min:0'],
                 'items.*.freq'   => ['required', 'numeric', 'min:0'],
                 'items.*.notes'  => $justificationRules,
-            ]);
+            ];
+
+            // Manual split: accept period amounts too
+            if ($manualSplit) {
+                if ($entryMode === 'monthly') {
+                    foreach (range(1, 12) as $mn) {
+                        $baseRules["items.*.m{$mn}"] = ['required', 'numeric', 'min:0'];
+                    }
+                } else {
+                    foreach (['q1','q2','q3','q4'] as $q) {
+                        $baseRules["items.*.{$q}"] = ['required', 'numeric', 'min:0'];
+                    }
+                }
+            }
+
+            $request->validate($baseRules);
 
             // Pre-load admin-set rates/freqs in one query so the loop doesn't do N+1
-            $itemIds       = collect($request->items)->pluck('id');
+            $itemIds        = collect($request->items)->pluck('id');
             $adminSnapshots = $adminSetsRate || $adminSetsFreq
                 ? \App\Models\BudgetLineItem::whereIn('id', $itemIds)
                     ->get(['id', 'rate', 'frequency'])
@@ -292,8 +311,45 @@ class BudgetEntryController extends Controller
                     ->map(fn($i) => ['rate' => $i->rate, 'frequency' => $i->frequency])
                 : collect();
 
-            DB::transaction(function () use ($request, $budgetVersion, $calcMode,
-                                             $adminSetsRate, $adminSetsFreq, $adminSnapshots) {
+            // Manual split validation: sum of periods must equal computed total
+            if ($manualSplit) {
+                $errors = [];
+                foreach ($request->items as $idx => $d) {
+                    $snap  = $adminSnapshots->get($d['id']);
+                    $qty   = (float) $d['qty'];
+                    $rate  = $adminSetsRate ? (float) ($snap['rate'] ?? 1) : (float) $d['rate'];
+                    $freq  = $calcMode === 'qty_rate_freq'
+                        ? ($adminSetsFreq ? (float) ($snap['frequency'] ?? 1) : (float) $d['freq'])
+                        : 1.0;
+                    if ($freq <= 0) $freq = 1.0;
+                    $computed = round($qty * $rate * $freq, 2);
+
+                    if ($entryMode === 'monthly') {
+                        $splitSum = round(array_sum(array_map(
+                            fn($mn) => (float) ($d["m{$mn}"] ?? 0), range(1, 12)
+                        )), 2);
+                    } else {
+                        $splitSum = round(
+                            (float)($d['q1'] ?? 0) + (float)($d['q2'] ?? 0) +
+                            (float)($d['q3'] ?? 0) + (float)($d['q4'] ?? 0), 2
+                        );
+                    }
+
+                    if (abs($splitSum - $computed) > 0.02) {
+                        $errors["items.{$idx}.q1"] =
+                            "Period split ({$splitSum}) must equal computed total ({$computed}).";
+                    }
+                }
+                if (!empty($errors)) {
+                    return response()->json([
+                        'error'  => 'One or more line items have period splits that do not balance with their computed total.',
+                        'errors' => $errors,
+                    ], 422);
+                }
+            }
+
+            DB::transaction(function () use ($request, $budgetVersion, $calcMode, $entryMode,
+                                             $adminSetsRate, $adminSetsFreq, $adminSnapshots, $manualSplit) {
                 foreach ($request->items as $d) {
                     $qty = (float) $d['qty'];
 
@@ -309,8 +365,22 @@ class BudgetEntryController extends Controller
 
                     $total = $qty * $rate * $freq;
 
-                    [$m1,$m2,$m3,$m4,$m5,$m6,$m7,$m8,$m9,$m10,$m11,$m12]
-                        = $this->spreadAnnual($total);
+                    if ($manualSplit) {
+                        // Use user-supplied period amounts
+                        if ($entryMode === 'monthly') {
+                            [$m1,$m2,$m3,$m4,$m5,$m6,$m7,$m8,$m9,$m10,$m11,$m12] = array_map(
+                                fn($mn) => (float) ($d["m{$mn}"] ?? 0), range(1, 12)
+                            );
+                        } else {
+                            [$m1,$m2,$m3]    = $this->spreadQuarter((float) ($d['q1'] ?? 0));
+                            [$m4,$m5,$m6]    = $this->spreadQuarter((float) ($d['q2'] ?? 0));
+                            [$m7,$m8,$m9]    = $this->spreadQuarter((float) ($d['q3'] ?? 0));
+                            [$m10,$m11,$m12] = $this->spreadQuarter((float) ($d['q4'] ?? 0));
+                        }
+                    } else {
+                        [$m1,$m2,$m3,$m4,$m5,$m6,$m7,$m8,$m9,$m10,$m11,$m12]
+                            = $this->spreadAnnual($total);
+                    }
 
                     BudgetLineItem::where('id', $d['id'])
                         ->where('budget_version_id', $budgetVersion->id)
@@ -330,9 +400,7 @@ class BudgetEntryController extends Controller
 
         } else {
             // ── Direct-amount modes (monthly or quarterly) ────────────────────────
-            $mode = $budgetVersion->period->entry_mode ?? 'quarterly';
-
-            if ($mode === 'monthly') {
+            if ($entryMode === 'monthly') {
                 $request->validate([
                     'items'       => ['required', 'array'],
                     'items.*.id'  => ['required', 'exists:budget_line_items,id'],
@@ -367,7 +435,7 @@ class BudgetEntryController extends Controller
                 });
 
             } else {
-                // Quarterly mode: validate Q1–Q4, spread each quarter equally across 3 months
+                // Quarterly entry mode: validate Q1–Q4, spread each quarter equally across 3 months
                 $request->validate([
                     'items'         => ['required', 'array'],
                     'items.*.id'    => ['required', 'exists:budget_line_items,id'],

@@ -13,11 +13,90 @@
             Complete record of all system activity
         </p>
     </div>
-    <a href="{{ route('admin.audit-log.export', request()->query()) }}"
-       class="btn btn-sm btn-outline-success">
-        <i class="fas fa-file-csv me-1"></i>Export All (CSV)
-    </a>
+    <div class="d-flex gap-2 align-items-center">
+        {{-- Retention info --}}
+        @php
+            $retainInfo    = \App\Models\SystemSetting::get('audit_retain_info_months', 24);
+            $retainWarning = \App\Models\SystemSetting::get('audit_retain_warning_months', 24);
+            $keepCritical  = \App\Models\SystemSetting::get('audit_log_keep_critical', true);
+        @endphp
+        <span style="font-size:11px;color:var(--slate)" class="d-none d-md-inline">
+            Retention: info {{ $retainInfo }}mo · warning {{ $retainWarning }}mo ·
+            critical {{ $keepCritical ? 'kept forever' : 'same as warning' }}
+        </span>
+
+        <a href="{{ route('admin.audit-log.export', request()->query()) }}"
+           class="btn btn-sm btn-outline-success">
+            <i class="fas fa-file-csv me-1"></i>Export CSV
+        </a>
+
+        @can('manage system settings')
+        <button type="button"
+                class="btn btn-sm btn-outline-danger"
+                data-bs-toggle="modal"
+                data-bs-target="#purgeModal">
+            <i class="bi bi-trash3 me-1"></i>Purge Logs
+        </button>
+        @endcan
+    </div>
 </div>
+
+{{-- Purge confirmation modal --}}
+@can('manage system settings')
+<div class="modal fade" id="purgeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0">
+                <h6 class="modal-title fw-bold text-danger">
+                    <i class="bi bi-trash3-fill me-2"></i>Purge Audit Logs
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning" style="font-size:13px">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                    <strong>This action is irreversible.</strong> Records older than the
+                    configured retention periods will be permanently deleted.
+                </div>
+                <table class="table table-sm small">
+                    <tr>
+                        <td class="text-muted">Info records</td>
+                        <td class="fw-semibold">Older than <strong>{{ $retainInfo }} months</strong></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Warning records</td>
+                        <td class="fw-semibold">Older than <strong>{{ $retainWarning }} months</strong></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Critical records</td>
+                        <td class="fw-semibold">
+                            @if($keepCritical)
+                                <span class="text-success"><i class="bi bi-shield-check me-1"></i>Kept forever (not deleted)</span>
+                            @else
+                                <span class="text-danger">Deleted (same period as warning)</span>
+                            @endif
+                        </td>
+                    </tr>
+                </table>
+                <p style="font-size:12px;color:var(--slate)">
+                    Retention settings can be changed in
+                    <a href="{{ route('admin.settings.index') }}">System Settings</a>.
+                </p>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-secondary btn-sm"
+                        data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ route('audit-log.purge') }}" class="d-inline">
+                    @csrf
+                    <button type="submit" class="btn btn-danger btn-sm">
+                        <i class="bi bi-trash3-fill me-1"></i>Confirm Purge
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+@endcan
 
 {{-- Stats strip --}}
 <div class="row g-3 mb-4">

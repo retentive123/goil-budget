@@ -11,6 +11,7 @@ use App\Models\BudgetVersion;
 use App\Models\Department;
 use App\Models\BudgetNotification;
 use App\Models\User;
+use App\Http\Controllers\Admin\SystemSettingController;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -34,14 +35,52 @@ Schedule::command('backup:run --type=scheduled')
     ->withoutOverlapping();
 
 // ══════════════════════════════════════════════════════════════════════════════
+// APPROVER REMINDERS
+// Runs daily. Sends in-app + email reminders to approvers who still have
+// pending budgets, based on the approver_reminder_mode setting.
+// ══════════════════════════════════════════════════════════════════════════════
+
+Artisan::command('budget:remind-approvers', function () {
+    $mode = SystemSetting::get('approver_reminder_mode', 'off');
+
+    if ($mode === 'off') {
+        $this->info('Approver reminders are disabled (mode = off).');
+        return;
+    }
+
+    if ($mode !== 'auto') {
+        $this->info("Approver reminder mode is '{$mode}' — skipping automated send.");
+        return;
+    }
+
+    $freqDays = max(1, (int) SystemSetting::get('approver_reminder_frequency_days', 3));
+
+    // Only send if today is a multiple of the frequency since a known epoch
+    // Simple approach: check if today's day-of-year mod freqDays === 0
+    $dayOfYear = (int) now()->format('z') + 1;
+    if ($dayOfYear % $freqDays !== 0 && $freqDays > 1) {
+        $this->info("Approver reminders: not due today (every {$freqDays} days, today = day {$dayOfYear}).");
+        return;
+    }
+
+    $sent = SystemSettingController::dispatchApproverReminders();
+
+    $this->info("Approver reminders sent — {$sent} notification(s) created.");
+})->purpose('Send approval reminder notifications to pending approvers (controlled by settings)');
+
+Schedule::command('budget:remind-approvers')
+    ->dailyAt('09:00')
+    ->withoutOverlapping();
+
+// ══════════════════════════════════════════════════════════════════════════════
 // POINT 9 — AUDIT LOG RETENTION
-// Keeps critical events forever. Info logs pruned after 6 months,
-// warning logs after 24 months. Periods are configurable in System Settings.
+// Configurable retention per severity via System Settings.
 // ══════════════════════════════════════════════════════════════════════════════
 
 Artisan::command('audit:prune', function () {
-    $infoMonths    = (int) SystemSetting::get('audit_retain_info_months',    6);
+    $infoMonths    = (int) SystemSetting::get('audit_retain_info_months',    24);
     $warningMonths = (int) SystemSetting::get('audit_retain_warning_months', 24);
+    $keepCritical  = (bool) SystemSetting::get('audit_log_keep_critical', true);
 
     $deletedInfo    = SystemAuditLog::where('severity', 'info')
                         ->where('created_at', '<', now()->subMonths($infoMonths))
@@ -51,10 +90,21 @@ Artisan::command('audit:prune', function () {
                         ->where('created_at', '<', now()->subMonths($warningMonths))
                         ->delete();
 
-    // Critical events are never auto-deleted
+    $deletedCritical = 0;
+    if (!$keepCritical) {
+        $retainMonths    = max($infoMonths, $warningMonths);
+        $deletedCritical = SystemAuditLog::where('severity', 'critical')
+                            ->where('created_at', '<', now()->subMonths($retainMonths))
+                            ->delete();
+    }
 
-    $this->info("Audit log pruned — {$deletedInfo} info records (>{$infoMonths}mo) and {$deletedWarning} warning records (>{$warningMonths}mo) removed. Critical events retained.");
-})->purpose('Prune old audit log entries — critical events are kept forever');
+    $criticalNote = $keepCritical ? 'Critical events retained forever.' : "{$deletedCritical} critical record(s) also pruned.";
+
+    $this->info(
+        "Audit log pruned — {$deletedInfo} info (>{$infoMonths}mo), "
+        . "{$deletedWarning} warning (>{$warningMonths}mo). {$criticalNote}"
+    );
+})->purpose('Prune old audit log entries per retention settings');
 
 Schedule::command('audit:prune')
     ->monthlyOn(1, '03:00')   // 1st of each month at 03:00

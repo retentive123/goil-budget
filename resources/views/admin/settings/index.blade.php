@@ -33,6 +33,7 @@
                             'general'       => 'bi bi-building-fill',
                             'budget'        => 'bi bi-clipboard2-fill',
                             'notifications' => 'bi bi-bell-fill',
+                            'mail'          => 'bi bi-envelope-fill',
                             'security'      => 'bi bi-shield-lock-fill',
                             'backup'        => 'bi bi-archive-fill',
                             default         => 'bi bi-wrench-adjustable'
@@ -46,7 +47,8 @@
                             {{ match($group) {
                                 'general'       => 'Application name, company, currency and fiscal year',
                                 'budget'        => 'Calculation mode, version limits, actuals check, virement rules',
-                                'notifications' => 'Email notification triggers',
+                                'notifications' => 'Email notification triggers and approver reminders',
+                                'mail'          => 'SMTP server, credentials, and sender identity for all system emails',
                                 'security'      => 'Session, login, and SSO security settings',
                                 'backup'        => 'Scheduled backups, retention and notifications',
                                 default         => ''
@@ -198,6 +200,101 @@
                             month's specific budgeted amount.
                         </div>
 
+                        @elseif($setting->key === 'supplementary_approval_mode')
+                        <select id="setting_{{ $setting->key }}"
+                                name="settings[{{ $setting->key }}]"
+                                class="form-select form-select-sm"
+                                style="max-width:300px"
+                                onchange="markDirty(this)">
+                            @foreach([
+                                'finance_final'   => 'Finance approves (default)',
+                                'dept_head_final' => 'Department Head approves finally',
+                                'full_stages'     => 'Full approval stages (all configured stages)',
+                            ] as $val => $lbl)
+                            <option value="{{ $val }}"
+                                {{ old("settings.{$setting->key}", $setting->value) === $val ? 'selected' : '' }}>
+                                {{ $lbl }}
+                            </option>
+                            @endforeach
+                        </select>
+                        <div style="font-size:11px;color:var(--slate);margin-top:4px">
+                            <strong>Finance approves:</strong> submitted requests go directly to Finance.<br>
+                            <strong>Dept Head finally:</strong> department head is the final approver.<br>
+                            <strong>Full stages:</strong> follows all configured approval stages in order.
+                        </div>
+
+                        @elseif($setting->key === 'approver_reminder_mode')
+                        <select id="setting_{{ $setting->key }}"
+                                name="settings[{{ $setting->key }}]"
+                                class="form-select form-select-sm"
+                                style="max-width:220px"
+                                onchange="markDirty(this); toggleReminderFreq(this.value)">
+                            @foreach([
+                                'off'    => 'Off — no reminders',
+                                'auto'   => 'Auto — send on schedule',
+                                'manual' => 'Manual — triggered by admin',
+                            ] as $val => $lbl)
+                            <option value="{{ $val }}"
+                                {{ old("settings.{$setting->key}", $setting->value) === $val ? 'selected' : '' }}>
+                                {{ $lbl }}
+                            </option>
+                            @endforeach
+                        </select>
+                        <div style="font-size:11px;color:var(--slate);margin-top:4px">
+                            <strong>Auto:</strong> sends in-app + email reminders to approvers on a set schedule.<br>
+                            <strong>Manual:</strong> admin triggers reminders from this page.
+                        </div>
+
+                        @elseif($setting->type === 'password')
+                        {{-- Password: masked input, blank = keep existing --}}
+                        <input type="password"
+                               id="setting_{{ $setting->key }}"
+                               name="settings[{{ $setting->key }}]"
+                               value=""
+                               autocomplete="new-password"
+                               placeholder="Leave blank to keep current password"
+                               class="form-control form-control-sm"
+                               onchange="markDirty(this)">
+                        <div style="font-size:11px;color:var(--slate);margin-top:3px">
+                            <i class="bi bi-lock-fill me-1"></i>Stored encrypted. Leave blank to keep the existing value.
+                        </div>
+
+                        @elseif($setting->key === 'mail_mailer')
+                        <select id="setting_{{ $setting->key }}"
+                                name="settings[{{ $setting->key }}]"
+                                class="form-select form-select-sm"
+                                style="max-width:220px"
+                                onchange="markDirty(this); toggleSmtpFields(this.value)">
+                            @foreach([
+                                'smtp'  => 'SMTP — send via mail server',
+                                'log'   => 'Log — write to log file (dev)',
+                                'array' => 'Array — discard (testing)',
+                            ] as $val => $lbl)
+                            <option value="{{ $val }}"
+                                {{ old("settings.{$setting->key}", $setting->value) === $val ? 'selected' : '' }}>
+                                {{ $lbl }}
+                            </option>
+                            @endforeach
+                        </select>
+
+                        @elseif($setting->key === 'mail_encryption')
+                        <select id="setting_{{ $setting->key }}"
+                                name="settings[{{ $setting->key }}]"
+                                class="form-select form-select-sm"
+                                style="max-width:220px"
+                                onchange="markDirty(this)">
+                            @foreach([
+                                'tls'  => 'TLS / STARTTLS (port 587)',
+                                'ssl'  => 'SSL / Implicit TLS (port 465)',
+                                'none' => 'None (port 25 — not recommended)',
+                            ] as $val => $lbl)
+                            <option value="{{ $val }}"
+                                {{ old("settings.{$setting->key}", $setting->value) === $val ? 'selected' : '' }}>
+                                {{ $lbl }}
+                            </option>
+                            @endforeach
+                        </select>
+
                         @elseif($setting->key === 'backup_frequency')
                         <select id="setting_{{ $setting->key }}"
                                 name="settings[{{ $setting->key }}]"
@@ -267,6 +364,51 @@
                 </a>
             </div>
 
+            {{-- Test Mail --}}
+            <div class="chart-card mb-4" style="border-left:4px solid #0EA5E9">
+                <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px">
+                    <i class="bi bi-envelope-check-fill me-2" style="color:#0EA5E9"></i>Test Mail Settings
+                </div>
+                <p style="font-size:12px;color:var(--slate);margin-bottom:10px">
+                    Send a test email to verify your SMTP configuration is working.
+                    <strong>Save settings first</strong>, then test.
+                </p>
+                <form method="POST" action="{{ route('admin.settings.test-mail') }}">
+                    @csrf
+                    <div class="mb-2">
+                        <input type="email"
+                               name="test_email"
+                               class="form-control form-control-sm"
+                               value="{{ auth()->user()->email }}"
+                               placeholder="Send test to…">
+                    </div>
+                    <button type="submit" class="btn w-100"
+                            style="background:#0EA5E9;color:#fff;border-radius:8px;font-size:13px">
+                        <i class="bi bi-send-fill me-1"></i>Send Test Email
+                    </button>
+                </form>
+            </div>
+
+            {{-- Send Approver Reminders (manual trigger) --}}
+            @php $reminderMode = \App\Models\SystemSetting::get('approver_reminder_mode', 'off'); @endphp
+            @if($reminderMode === 'manual')
+            <div class="chart-card mb-4" style="border-left:4px solid #6366F1">
+                <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px">
+                    <i class="bi bi-bell-fill me-2" style="color:#6366F1"></i>Approver Reminders
+                </div>
+                <p style="font-size:12px;color:var(--slate);margin-bottom:10px">
+                    Manually send pending-approval reminders to all active approvers right now.
+                </p>
+                <form method="POST" action="{{ route('admin.settings.send-reminders') }}">
+                    @csrf
+                    <button type="submit" class="btn w-100"
+                            style="background:#6366F1;color:#fff;border-radius:8px;font-size:13px">
+                        <i class="bi bi-send-fill me-1"></i>Send Reminders Now
+                    </button>
+                </form>
+            </div>
+            @endif
+
             {{-- Quick SSO Status --}}
             @php
                 $ssoEnabled = \App\Models\SystemSetting::get('sso_enabled', false);
@@ -335,6 +477,31 @@
 </form>
 
 <script>
+// Show/hide SMTP-specific settings based on the selected mail driver
+function toggleSmtpFields(driver) {
+    const smtpKeys = ['mail_host','mail_port','mail_encryption','mail_username','mail_password'];
+    smtpKeys.forEach(key => {
+        const row = document.querySelector(`[data-setting-key="${key}"]`);
+        if (row) row.style.display = driver === 'smtp' ? '' : 'none';
+    });
+}
+document.addEventListener('DOMContentLoaded', function () {
+    const driverEl = document.getElementById('setting_mail_mailer');
+    if (driverEl) toggleSmtpFields(driverEl.value);
+});
+
+function toggleReminderFreq(mode) {
+    // Show/hide the frequency_days row based on mode
+    document.querySelectorAll('[data-setting-key="approver_reminder_frequency_days"]').forEach(row => {
+        row.style.display = mode === 'auto' ? '' : 'none';
+    });
+}
+// Run on page load to set initial state
+document.addEventListener('DOMContentLoaded', function () {
+    const modeEl = document.getElementById('setting_approver_reminder_mode');
+    if (modeEl) toggleReminderFreq(modeEl.value);
+});
+
 function markDirty(el) {
     document.getElementById('changeIndicator').style.display = 'block';
 

@@ -95,6 +95,26 @@ class SystemSettingsSeeder extends Seeder
                 'group'       => 'budget',
             ],
 
+            // ── Feature: Manual period split
+            [
+                'key'         => 'manual_period_split',
+                'value'       => '0',
+                'type'        => 'boolean',
+                'label'       => 'Allow Manual Quarter / Month Split',
+                'description' => 'When enabled, budget inputters can manually distribute a line item\'s total across quarters or months. The split must balance (sum must equal the total). When disabled, the system distributes evenly.',
+                'group'       => 'budget',
+            ],
+
+            // ── Feature: Supplementary / Virement approval routing
+            [
+                'key'         => 'supplementary_approval_mode',
+                'value'       => 'finance_final',
+                'type'        => 'string',
+                'label'       => 'Supplementary / Virement Approval Mode',
+                'description' => 'finance_final = Finance approves as the final step (default). dept_head_final = Department head is the sole final approver. full_stages = Request goes through all configured approval stages.',
+                'group'       => 'budget',
+            ],
+
             // Notifications
             [
                 'key'         => 'email_notifications_enabled',
@@ -145,6 +165,50 @@ class SystemSettingsSeeder extends Seeder
                 'group'       => 'notifications',
             ],
 
+            // ── Feature: Approver renotification
+            [
+                'key'         => 'approver_reminder_mode',
+                'value'       => 'off',
+                'type'        => 'string',
+                'label'       => 'Approver Reminder Mode',
+                'description' => 'off = No reminders sent. auto = System sends reminders automatically at the set frequency. manual = Reminders are sent only when triggered manually from this page.',
+                'group'       => 'notifications',
+            ],
+            [
+                'key'         => 'approver_reminder_frequency_days',
+                'value'       => '3',
+                'type'        => 'integer',
+                'label'       => 'Approver Reminder Frequency (days)',
+                'description' => 'In auto mode, send a reminder every N days to approvers who have pending budgets. Minimum 1.',
+                'group'       => 'notifications',
+            ],
+
+            // ── Feature: Audit log retention (also used by audit:prune command)
+            [
+                'key'         => 'audit_retain_info_months',
+                'value'       => '24',
+                'type'        => 'integer',
+                'label'       => 'Audit Log Retention — Info (months)',
+                'description' => 'Delete info-level audit log entries older than this many months. Default is 24 months (2 years).',
+                'group'       => 'notifications',
+            ],
+            [
+                'key'         => 'audit_retain_warning_months',
+                'value'       => '24',
+                'type'        => 'integer',
+                'label'       => 'Audit Log Retention — Warning (months)',
+                'description' => 'Delete warning-level audit log entries older than this many months. Default is 24 months (2 years).',
+                'group'       => 'notifications',
+            ],
+            [
+                'key'         => 'audit_log_keep_critical',
+                'value'       => '1',
+                'type'        => 'boolean',
+                'label'       => 'Keep Critical Audit Logs Forever',
+                'description' => 'When enabled, critical-severity audit entries are never deleted by the prune job. Disable to also prune critical entries after the retention period.',
+                'group'       => 'notifications',
+            ],
+
             // Security
             [
                 'key'         => 'session_timeout_minutes',
@@ -185,6 +249,72 @@ class SystemSettingsSeeder extends Seeder
                 'label'       => 'Two-Factor Authentication',
                 'description' => 'Require 2FA for all users. Requires email to be configured.',
                 'group'       => 'security',
+            ],
+
+            // Mail / SMTP settings
+            [
+                'key'         => 'mail_mailer',
+                'value'       => env('MAIL_MAILER', 'log'),
+                'type'        => 'string',
+                'label'       => 'Mail Driver',
+                'description' => 'smtp = send via SMTP server. log = write emails to the log file (development). array = discard (testing).',
+                'group'       => 'mail',
+            ],
+            [
+                'key'         => 'mail_host',
+                'value'       => env('MAIL_HOST', ''),
+                'type'        => 'string',
+                'label'       => 'SMTP Host',
+                'description' => 'Hostname of your outgoing mail server (e.g. smtp.office365.com).',
+                'group'       => 'mail',
+            ],
+            [
+                'key'         => 'mail_port',
+                'value'       => env('MAIL_PORT', '587'),
+                'type'        => 'integer',
+                'label'       => 'SMTP Port',
+                'description' => '587 for TLS/STARTTLS, 465 for SSL, 25 for plain.',
+                'group'       => 'mail',
+            ],
+            [
+                'key'         => 'mail_encryption',
+                'value'       => 'tls',
+                'type'        => 'string',
+                'label'       => 'Encryption',
+                'description' => 'tls = STARTTLS on port 587 (recommended). ssl = implicit TLS on port 465. none = no encryption.',
+                'group'       => 'mail',
+            ],
+            [
+                'key'         => 'mail_username',
+                'value'       => env('MAIL_USERNAME', ''),
+                'type'        => 'string',
+                'label'       => 'SMTP Username',
+                'description' => 'Username for authenticating with your mail server (usually the sender email).',
+                'group'       => 'mail',
+            ],
+            [
+                'key'         => 'mail_password',
+                'value'       => '',
+                'type'        => 'password',
+                'label'       => 'SMTP Password',
+                'description' => 'Password for your SMTP account. Stored encrypted. Leave blank to keep existing value.',
+                'group'       => 'mail',
+            ],
+            [
+                'key'         => 'mail_from_address',
+                'value'       => env('MAIL_FROM_ADDRESS', ''),
+                'type'        => 'string',
+                'label'       => 'From Email Address',
+                'description' => 'The email address all system emails are sent from.',
+                'group'       => 'mail',
+            ],
+            [
+                'key'         => 'mail_from_name',
+                'value'       => env('MAIL_FROM_NAME', env('APP_NAME', 'GOIL Budget Tool')),
+                'type'        => 'string',
+                'label'       => 'From Name',
+                'description' => 'The display name shown in recipients\' email clients.',
+                'group'       => 'mail',
             ],
 
             // Backup settings group

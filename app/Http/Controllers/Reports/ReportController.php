@@ -581,7 +581,7 @@ public function deptComparison(Request $request)
         $basis      = request('budget_basis', 'original');
         $versionIds = $this->effectiveVersionIds($period, $basis);
 
-        $versions = BudgetVersion::with('department','lineItems')
+        $versions = BudgetVersion::with('department','lineItems.accountCode.category')
             ->whereIn('id', $versionIds)
             ->get();
 
@@ -593,7 +593,24 @@ public function deptComparison(Request $request)
                 ->where('status', 'confirmed')
                 ->sum('amount');
 
-            $pct      = $approved > 0 ? round(($actual/$approved)*100,1) : 0;
+            $pct = $approved > 0 ? round(($actual / $approved) * 100, 1) : 0;
+
+            // Per-line-item utilisation
+            $lineItems = $v->lineItems->sortBy(fn($i) => $i->accountCode->code ?? '')->map(function ($item) {
+                $itemActual  = \App\Models\BudgetActual::where('budget_line_item_id', $item->id)
+                    ->where('status', 'confirmed')->sum('amount');
+                $itemBudget  = $item->effectiveBudget();
+                $itemPct     = $itemBudget > 0 ? round(($itemActual / $itemBudget) * 100, 1) : 0;
+                return [
+                    'code'     => $item->accountCode->code ?? '—',
+                    'name'     => $item->accountCode->name ?? '—',
+                    'category' => $item->accountCode->category->name ?? '—',
+                    'budget'   => $itemBudget,
+                    'actual'   => $itemActual,
+                    'pct'      => $itemPct,
+                    'status'   => $itemPct > 90 ? 'critical' : ($itemPct > 70 ? 'warning' : 'healthy'),
+                ];
+            })->values();
 
             return [
                 'department'      => $v->department->name,
@@ -602,8 +619,8 @@ public function deptComparison(Request $request)
                 'actual'          => $actual,
                 'utilisation_pct' => $pct,
                 'remaining'       => $approved - $actual,
-                'status'          => $pct > 90 ? 'critical'
-                    : ($pct > 70 ? 'warning' : 'healthy'),
+                'status'          => $pct > 90 ? 'critical' : ($pct > 70 ? 'warning' : 'healthy'),
+                'line_items'      => $lineItems,
             ];
         })->sortByDesc('utilisation_pct')->values();
 

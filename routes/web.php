@@ -150,15 +150,18 @@ Route::middleware('auth')->group(function () {
 
         // Audit log
         Route::middleware('permission:view audit log')->group(function () {
-            Route::get('audit-log',         [AuditLogController::class, 'index'])->name('audit-log.index');
-            Route::get('audit-log/export',  [AuditLogController::class, 'export'])->name('audit-log.export');
-            Route::get('audit-log/{id}',    [AuditLogController::class, 'show'])->name('audit-log.show');
+            Route::get('audit-log',          [AuditLogController::class, 'index'])->name('audit-log.index');
+            Route::get('audit-log/export',   [AuditLogController::class, 'export'])->name('audit-log.export');
+            Route::get('audit-log/{id}',     [AuditLogController::class, 'show'])->name('audit-log.show');
+            Route::post('audit-log/purge',   [AuditLogController::class, 'purge'])->name('audit-log.purge');
         });
 
         // System settings
         Route::middleware('permission:manage system settings')->group(function () {
-            Route::get('settings',  [SystemSettingController::class, 'index'])->name('settings.index');
-            Route::post('settings', [SystemSettingController::class, 'update'])->name('settings.update');
+            Route::get('settings',                  [SystemSettingController::class, 'index'])->name('settings.index');
+            Route::post('settings',                 [SystemSettingController::class, 'update'])->name('settings.update');
+            Route::post('settings/send-reminders',  [SystemSettingController::class, 'sendApproverReminders'])->name('settings.send-reminders');
+            Route::post('settings/test-mail',       [SystemSettingController::class, 'sendTestMail'])->name('settings.test-mail');
         });
 
 
@@ -251,6 +254,10 @@ Route::middleware('auth')->group(function () {
             Route::post('/batch/{batchId}/reject',         [SupplementaryBudgetController::class, 'rejectBatch'])->name('reject-batch');
             Route::delete('/{supplementary}',              [SupplementaryBudgetController::class, 'destroy'])->name('destroy');
             Route::delete('/batch/{batchId}',              [SupplementaryBudgetController::class, 'destroyBatch'])->name('destroy-batch');
+            // Routing-mode approval endpoints
+            Route::post('/{supplementary}/dept-head-approve', [SupplementaryBudgetController::class, 'deptHeadApprove'])->name('dept-head-approve');
+            Route::post('/{supplementary}/dept-head-reject',  [SupplementaryBudgetController::class, 'deptHeadReject'])->name('dept-head-reject');
+            Route::post('/{supplementary}/stage-approve',     [SupplementaryBudgetController::class, 'stageApprove'])->name('stage-approve');
         });
 
         // Wildcard show route must come last so it doesn't swallow /pending and /create

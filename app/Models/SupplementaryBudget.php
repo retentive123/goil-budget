@@ -17,6 +17,10 @@ class SupplementaryBudget extends Model
         'original_amount','requested_amount',
         'justification','supporting_evidence',
         'requested_by',
+        // dept-head approval routing
+        'dept_head_status','dept_head_by','dept_head_at','dept_head_notes',
+        // full-stages routing
+        'current_stage_order',
     ];
 
     protected $casts = [
@@ -26,6 +30,7 @@ class SupplementaryBudget extends Model
         'submitted_at'     => 'datetime',
         'reviewed_at'      => 'datetime',
         'approved_at'      => 'datetime',
+        'dept_head_at'     => 'datetime',
     ];
 
     public function period()
@@ -61,6 +66,11 @@ class SupplementaryBudget extends Model
     public function approvedBy()
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function deptHead()
+    {
+        return $this->belongsTo(User::class, 'dept_head_by');
     }
 
     public function totalAfterSupplementary(): float

@@ -220,7 +220,11 @@
             @else
                 Budget amounts are computed as <strong>Quantity × Rate</strong>.
             @endif
-            The annual total is spread equally across all 12 months.
+            @if($manualSplit)
+                You can manually distribute the total across {{ $entryMode === 'monthly' ? 'months' : 'quarters' }} — the split must balance.
+            @else
+                The annual total is spread equally across all 12 months.
+            @endif
         </div>
         <div style="font-size:12px;opacity:.8">
             @if($adminSetsRate && $adminSetsFreq)
@@ -231,6 +235,10 @@
                 Frequency is set by your administrator and cannot be changed. Enter Quantity and Rate.
             @else
                 Enter Quantity{{ $calcMode === 'qty_rate_freq' ? ', Rate, and Frequency' : ' and Rate' }} for each line item.
+            @endif
+            @if($manualSplit)
+                <strong>Manual split mode:</strong>
+                {{ $entryMode === 'monthly' ? 'Month' : 'Quarter' }} totals must sum to the computed year total.
             @endif
         </div>
     </div>
@@ -320,10 +328,16 @@
                             </th>
                             @endif
                             <th class="text-end" style="min-width:130px;">Year Total</th>
-                            <th class="text-end" style="min-width:100px;">Q1</th>
-                            <th class="text-end" style="min-width:100px;">Q2</th>
-                            <th class="text-end" style="min-width:100px;">Q3</th>
-                            <th class="text-end" style="min-width:100px;">Q4</th>
+                            @if($manualSplit && $entryMode === 'monthly')
+                                @foreach(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] as $ml)
+                                <th class="text-end" style="min-width:80px;">{{ $ml }}</th>
+                                @endforeach
+                            @else
+                            <th class="text-end" style="min-width:100px;">Q1{{ $manualSplit ? ' ✎' : '' }}</th>
+                            <th class="text-end" style="min-width:100px;">Q2{{ $manualSplit ? ' ✎' : '' }}</th>
+                            <th class="text-end" style="min-width:100px;">Q3{{ $manualSplit ? ' ✎' : '' }}</th>
+                            <th class="text-end" style="min-width:100px;">Q4{{ $manualSplit ? ' ✎' : '' }}</th>
+                            @endif
                         @elseif($entryMode === 'monthly')
                             @foreach($monthLabels as $ml)
                                 <th class="text-end" style="min-width:90px;">{{ $ml }} ({{ currency() }})</th>
@@ -444,16 +458,69 @@
                             </td>
                             @endif
 
-                            {{-- Computed year total --}}
+                            {{-- Computed year total + live split-balance indicator --}}
                             <td class="text-end fw-semibold row-original"
-                                style="color:var(--navy)">
+                                style="color:var(--navy);min-width:130px">
                                 {{ number_format($item->total_amount, 2) }}
+                                @if($manualSplit)
+                                <div class="split-remain"
+                                     data-computed="{{ $item->total_amount }}"
+                                     style="font-size:10px;font-weight:600;
+                                            margin-top:3px;line-height:1.2">
+                                    &nbsp;
+                                </div>
+                                @endif
                             </td>
-                            {{-- Quarterly split (read-only, live-computed) --}}
-                            <td class="text-end small text-muted q1-display">{{ number_format($displayQ1, 2) }}</td>
-                            <td class="text-end small text-muted q2-display">{{ number_format($displayQ2, 2) }}</td>
-                            <td class="text-end small text-muted q3-display">{{ number_format($displayQ3, 2) }}</td>
-                            <td class="text-end small text-muted q4-display">{{ number_format($displayQ4, 2) }}</td>
+
+                            @if($manualSplit && $entryMode === 'monthly')
+                                {{-- Manual monthly split inputs --}}
+                                @foreach(range(1,12) as $mn)
+                                <td>
+                                    <input type="number"
+                                        class="form-control form-control-sm split-input m{{ $mn }}-split text-end"
+                                        value="{{ $item->{'m'.$mn.'_amount'} }}"
+                                        min="0" step="0.01"
+                                        placeholder="0.00"
+                                        oninput="updateSplitBalance(this)">
+                                </td>
+                                @endforeach
+                            @elseif($manualSplit)
+                                {{-- Manual quarterly split inputs --}}
+                                <td>
+                                    <input type="number"
+                                        class="form-control form-control-sm split-input q1-split text-end"
+                                        value="{{ number_format($displayQ1, 2, '.', '') }}"
+                                        min="0" step="0.01"
+                                        oninput="updateSplitBalance(this)">
+                                </td>
+                                <td>
+                                    <input type="number"
+                                        class="form-control form-control-sm split-input q2-split text-end"
+                                        value="{{ number_format($displayQ2, 2, '.', '') }}"
+                                        min="0" step="0.01"
+                                        oninput="updateSplitBalance(this)">
+                                </td>
+                                <td>
+                                    <input type="number"
+                                        class="form-control form-control-sm split-input q3-split text-end"
+                                        value="{{ number_format($displayQ3, 2, '.', '') }}"
+                                        min="0" step="0.01"
+                                        oninput="updateSplitBalance(this)">
+                                </td>
+                                <td>
+                                    <input type="number"
+                                        class="form-control form-control-sm split-input q4-split text-end"
+                                        value="{{ number_format($displayQ4, 2, '.', '') }}"
+                                        min="0" step="0.01"
+                                        oninput="updateSplitBalance(this)">
+                                </td>
+                            @else
+                                {{-- Auto-distributed quarterly display (read-only) --}}
+                                <td class="text-end small text-muted q1-display">{{ number_format($displayQ1, 2) }}</td>
+                                <td class="text-end small text-muted q2-display">{{ number_format($displayQ2, 2) }}</td>
+                                <td class="text-end small text-muted q3-display">{{ number_format($displayQ3, 2) }}</td>
+                                <td class="text-end small text-muted q4-display">{{ number_format($displayQ4, 2) }}</td>
+                            @endif
 
                             {{-- Supplementary & Effective --}}
                             <td class="text-end" style="color:{{ $itemSupp > 0 ? '#10B981' : 'inherit' }}">
@@ -611,8 +678,9 @@
     const SAVE_URL  = "{{ route('budget.save', $budgetVersion) }}";
     const CSRF      = document.querySelector('meta[name="csrf-token"]')?.content || "{{ csrf_token() }}";
     const CUR       = "{{ currency() }}";
-    const ENTRY_MODE = '{{ $entryMode }}';
-    const CALC_MODE  = '{{ $calcMode }}';
+    const ENTRY_MODE   = '{{ $entryMode }}';
+    const CALC_MODE    = '{{ $calcMode }}';
+    const MANUAL_SPLIT = {{ $manualSplit ? 'true' : 'false' }};
 
     let autoSaveTimer = null;
     let isSaving      = false;
@@ -643,13 +711,18 @@
             const ytEl = row.querySelector('.row-original');
             if (ytEl) ytEl.textContent = numFmt(orig);
 
-            // Quarterly split display (equal quarters)
-            const qShare = orig / 4;
-            const qVals  = [qShare, qShare, qShare, orig - qShare * 3];
-            ['q1-display','q2-display','q3-display','q4-display'].forEach((cls, i) => {
-                const el = row.querySelector('.' + cls);
-                if (el) el.textContent = numFmt(qVals[i]);
-            });
+            if (!MANUAL_SPLIT) {
+                // Quarterly split display (equal quarters, auto-distributed)
+                const qShare = orig / 4;
+                const qVals  = [qShare, qShare, qShare, orig - qShare * 3];
+                ['q1-display','q2-display','q3-display','q4-display'].forEach((cls, i) => {
+                    const el = row.querySelector('.' + cls);
+                    if (el) el.textContent = numFmt(qVals[i]);
+                });
+            } else {
+                // Manual split: highlight balance status
+                updateSplitBalance(row.querySelector('.split-input') || row);
+            }
         } else if (ENTRY_MODE === 'monthly') {
             for (let m = 1; m <= 12; m++) {
                 orig += parseFloat(row.querySelector(`.m${m}`)?.value) || 0;
@@ -668,6 +741,77 @@
 
         updateCategoryFooter(row.closest('table'));
         updateGrandTotals();
+        scheduleAutoSave();
+    }
+
+    // ── Balance indicator for manual period split ──────────────────────────────
+    function updateSplitBalance(inputOrRow) {
+        const row = inputOrRow?.closest
+            ? (inputOrRow.closest('tr[data-item-id]') || inputOrRow)
+            : inputOrRow;
+        if (!row || !row.dataset?.itemId) return;
+
+        const qty  = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
+        const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
+        const freq = CALC_MODE === 'qty_rate_freq'
+            ? parseFloat(row.querySelector('.freq-input')?.value || '1')
+            : 1;
+        const liveComputed = Math.round(qty * rate * freq * 100) / 100;
+        // In direct-entry mode (no qty/rate inputs) liveComputed is 0;
+        // fall back to the server-rendered total stored in data-computed.
+        const indicator = row.querySelector('.split-remain');
+        const computed = liveComputed > 0
+            ? liveComputed
+            : parseFloat(indicator?.dataset?.computed || '0');
+
+        let splitSum = 0;
+        if (ENTRY_MODE === 'monthly') {
+            [1,2,3,4,5,6,7,8,9,10,11,12].forEach(n => {
+                splitSum += parseFloat(row.querySelector(`.m${n}-split`)?.value) || 0;
+            });
+        } else {
+            splitSum += parseFloat(row.querySelector('.q1-split')?.value) || 0;
+            splitSum += parseFloat(row.querySelector('.q2-split')?.value) || 0;
+            splitSum += parseFloat(row.querySelector('.q3-split')?.value) || 0;
+            splitSum += parseFloat(row.querySelector('.q4-split')?.value) || 0;
+        }
+        splitSum = Math.round(splitSum * 100) / 100;
+
+        const remaining = Math.round((computed - splitSum) * 100) / 100;
+        const balanced  = Math.abs(remaining) <= 0.02;
+
+        // ── Border highlight on split inputs ──
+        row.querySelectorAll('.split-input').forEach(el => {
+            el.style.outline      = balanced
+                ? '2px solid #10B981'
+                : '2px solid ' + (remaining < 0 ? '#F43F5E' : '#F59E0B');
+            el.style.borderRadius = '4px';
+            el.title = balanced ? 'Balanced ✓' :
+                (remaining > 0
+                    ? `Still need to allocate: ${numFmt(remaining)}`
+                    : `Over by: ${numFmt(Math.abs(remaining))}`);
+        });
+
+        // ── Inline remaining indicator in the year-total cell ──
+        if (indicator) {
+            if (computed === 0) {
+                indicator.textContent = '';
+                return;
+            }
+            if (balanced) {
+                indicator.innerHTML =
+                    '<span style="color:#10B981">✓ Balanced</span>';
+            } else if (remaining > 0) {
+                indicator.innerHTML =
+                    '<span style="color:#F59E0B">' +
+                    '↓ ' + numFmt(remaining) + ' left</span>';
+            } else {
+                indicator.innerHTML =
+                    '<span style="color:#F43F5E">' +
+                    '↑ ' + numFmt(Math.abs(remaining)) + ' over</span>';
+            }
+        }
+
         scheduleAutoSave();
     }
 
@@ -773,9 +917,25 @@
                     ? parseFloat(row.querySelector('.freq-input')?.value || '1')
                     : 1;
                 const rowTotal = qty * rate * freq;
-                const qShare = rowTotal / 4;
-                q1 += qShare; q2 += qShare; q3 += qShare; q4 += rowTotal - qShare * 3;
                 orig += rowTotal;
+                if (MANUAL_SPLIT) {
+                    if (ENTRY_MODE === 'monthly') {
+                        const ms = [1,2,3,4,5,6,7,8,9,10,11,12].map(n =>
+                            parseFloat(row.querySelector(`.m${n}-split`)?.value) || 0);
+                        q1 += ms[0]+ms[1]+ms[2];
+                        q2 += ms[3]+ms[4]+ms[5];
+                        q3 += ms[6]+ms[7]+ms[8];
+                        q4 += ms[9]+ms[10]+ms[11];
+                    } else {
+                        q1 += parseFloat(row.querySelector('.q1-split')?.value) || 0;
+                        q2 += parseFloat(row.querySelector('.q2-split')?.value) || 0;
+                        q3 += parseFloat(row.querySelector('.q3-split')?.value) || 0;
+                        q4 += parseFloat(row.querySelector('.q4-split')?.value) || 0;
+                    }
+                } else {
+                    const qShare = rowTotal / 4;
+                    q1 += qShare; q2 += qShare; q3 += qShare; q4 += rowTotal - qShare * 3;
+                }
             } else if (ENTRY_MODE === 'monthly') {
                 const ms = [1,2,3,4,5,6,7,8,9,10,11,12].map(n =>
                     parseFloat(row.querySelector(`.m${n}`)?.value) || 0);
@@ -809,7 +969,7 @@
             const notes = row.querySelector('.notes-input')?.value || '';
 
             if (CALC_MODE !== 'none') {
-                return {
+                const base = {
                     id:   row.dataset.itemId,
                     qty:  parseFloat(row.querySelector('.qty-input')?.value)  || 0,
                     rate: parseFloat(row.querySelector('.rate-input')?.value) || 0,
@@ -818,6 +978,19 @@
                         : 1,
                     notes,
                 };
+                if (MANUAL_SPLIT) {
+                    if (ENTRY_MODE === 'monthly') {
+                        [1,2,3,4,5,6,7,8,9,10,11,12].forEach(n => {
+                            base[`m${n}`] = parseFloat(row.querySelector(`.m${n}-split`)?.value) || 0;
+                        });
+                    } else {
+                        base.q1 = parseFloat(row.querySelector('.q1-split')?.value) || 0;
+                        base.q2 = parseFloat(row.querySelector('.q2-split')?.value) || 0;
+                        base.q3 = parseFloat(row.querySelector('.q3-split')?.value) || 0;
+                        base.q4 = parseFloat(row.querySelector('.q4-split')?.value) || 0;
+                    }
+                }
+                return base;
             }
 
             if (ENTRY_MODE === 'monthly') {
@@ -840,7 +1013,7 @@
     }
 
     async function saveBudget() {
-        if (isSaving) return;
+        if (isSaving) return false;
         isSaving = true;
 
         const btn    = document.getElementById('save-btn');
@@ -859,15 +1032,28 @@
                 body: JSON.stringify({ items: collectItems() }),
             });
 
+            const data = await res.json();
+
             if (!res.ok) {
-                if (status) status.textContent = 'Save failed (' + res.status + ')';
-                return;
+                const msg = data?.error || 'Save failed (' + res.status + ')';
+                if (status) {
+                    status.style.color = '#F43F5E';
+                    status.textContent = msg;
+                }
+                return false;
             }
 
-            const data = await res.json();
-            if (status) status.textContent = data.success ? 'Saved at ' + data.saved_at : 'Save failed.';
+            if (status) {
+                status.style.color = '';
+                status.textContent = data.success ? 'Saved at ' + data.saved_at : 'Save failed.';
+            }
+            return data.success === true;
         } catch (e) {
-            if (status) status.textContent = 'Network error — not saved.';
+            if (status) {
+                status.style.color = '#F43F5E';
+                status.textContent = 'Network error — not saved.';
+            }
+            return false;
         } finally {
             isSaving = false;
             if (btn) btn.disabled = false;
@@ -881,11 +1067,16 @@
         autoSaveTimer = setTimeout(saveBudget, 3000);
     }
 
-    // ── On load: compute year-total / Q1-Q4 display for any saved qty/rate/freq values ──
+    // ── On load: compute year-total / Q1-Q4 display and split balance indicators ──
     if (CALC_MODE !== 'none') {
         document.querySelectorAll('tr[data-item-id]').forEach(row => {
             const firstInput = row.querySelector('.qty-input, .rate-input, .freq-input');
             if (firstInput) liveUpdate(firstInput);
+            // In manual split mode, also refresh the balance indicator for existing values
+            if (MANUAL_SPLIT) {
+                const firstSplit = row.querySelector('.split-input');
+                if (firstSplit) updateSplitBalance(firstSplit);
+            }
         });
     }
 
@@ -898,21 +1089,42 @@
         const status = document.getElementById('save-status');
         const btn    = this;
 
+        // ── Client-side pre-check: block submission if any split is unbalanced ──
+        if (MANUAL_SPLIT) {
+            const unbalancedRows = [...document.querySelectorAll('tr[data-item-id]')].filter(row => {
+                const ind = row.querySelector('.split-remain');
+                if (!ind) return false;
+                const text = ind.textContent.trim();
+                // Indicator shows something and it's not the "balanced" tick
+                return text.length > 0 && !text.includes('Balanced');
+            });
+            if (unbalancedRows.length > 0) {
+                const n = unbalancedRows.length;
+                alert(
+                    `${n} line item${n === 1 ? ' has' : 's have'} unbalanced period splits.\n\n` +
+                    `All split amounts must equal the line item total before you can submit.\n\n` +
+                    `Look for amber (↓ left) or red (↑ over) indicators in the Year Total column.`
+                );
+                return; // don't even attempt save
+            }
+        }
+
         btn.textContent = 'Saving…';
         btn.style.opacity = '.6';
         btn.style.pointerEvents = 'none';
 
         clearTimeout(autoSaveTimer); // cancel any pending auto-save — we're doing it now
-        await saveBudget();
+        const saved = await saveBudget();
 
-        if (status && status.textContent.startsWith('Save failed')) {
-            // Save failed — warn but still let them proceed
-            if (!confirm('Auto-save encountered an error. Proceed to submit anyway?\n\nClick Cancel to stay and retry saving.')) {
-                btn.textContent = 'Submit for Approval →';
-                btn.style.opacity = '';
-                btn.style.pointerEvents = '';
-                return;
-            }
+        if (!saved) {
+            // Save failed (network, validation, or unbalanced splits) — block navigation
+            const msg = (status && status.textContent) || 'Save failed.';
+            alert('Cannot submit — the budget could not be saved:\n\n' + msg +
+                  '\n\nFix the issue and try again.');
+            btn.textContent = 'Submit for Approval →';
+            btn.style.opacity = '';
+            btn.style.pointerEvents = '';
+            return;
         }
 
         window.location.href = href;

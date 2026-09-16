@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use App\Services\AuditLogger;
+use App\Models\SystemSetting;
 
 class BudgetSubmissionController extends Controller
 {
@@ -76,6 +77,42 @@ class BudgetSubmissionController extends Controller
         $request->validate([
             'submission_notes' => ['nullable', 'string', 'max:1000'],
         ]);
+
+        // ── Guard: if manual period split is ON, every line item must be balanced ──
+        if ((bool) SystemSetting::get('manual_period_split', false)) {
+            $calcMode  = SystemSetting::get('budget_entry_calc_mode', 'none');
+            $entryMode = SystemSetting::get('budget_entry_mode', 'quarterly');
+
+            if ($calcMode !== 'none') {
+                $budgetVersion->load('lineItems');
+                $imbalanced = [];
+
+                foreach ($budgetVersion->lineItems as $item) {
+                    $computed = round((float) $item->total_amount, 2);
+                    $splitSum = $entryMode === 'monthly'
+                        ? round(array_sum(array_map(
+                            fn($n) => (float) ($item->{"m{$n}_amount"} ?? 0), range(1, 12)
+                          )), 2)
+                        : round(
+                            (float) $item->q1_amount + (float) $item->q2_amount +
+                            (float) $item->q3_amount + (float) $item->q4_amount, 2
+                          );
+
+                    if (abs($splitSum - $computed) > 0.02) {
+                        $imbalanced[] = $item->accountCode->code ?? "item #{$item->id}";
+                    }
+                }
+
+                if (!empty($imbalanced)) {
+                    return redirect()->route('budget.show', $budgetVersion)
+                        ->with('error',
+                            'Cannot submit: the following line items have unbalanced period splits — ' .
+                            implode(', ', $imbalanced) . '. ' .
+                            'Each item\'s splits must add up to its total before submission.'
+                        );
+                }
+            }
+        }
 
         DB::transaction(function () use ($request, $budgetVersion) {
             $budgetVersion->update([

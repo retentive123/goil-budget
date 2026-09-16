@@ -28,6 +28,18 @@ class SystemSetting extends Model
     // Get a setting value by key with optional default
     public static function get(string $key, mixed $default = null): mixed
     {
+        // Passwords are never cached — always read from DB and decrypted on the fly
+        $setting = self::where('key', $key)->first();
+
+        if ($setting && $setting->type === 'password') {
+            if (!$setting->value) return $default;
+            try {
+                return \Illuminate\Support\Facades\Crypt::decryptString($setting->value);
+            } catch (\Exception) {
+                return $setting->value; // Not yet encrypted (legacy or plain-text seed)
+            }
+        }
+
         return Cache::remember("setting:{$key}", 3600, function () use ($key, $default) {
             $setting = self::where('key', $key)->first();
 
