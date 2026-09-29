@@ -184,6 +184,12 @@
                             </td>
                             <td style="padding: 10px 16px; text-align: center;">
                                 <div class="d-flex gap-1 justify-content-center">
+                                    <a href="{{ route('admin.departments.show', $dept) }}"
+                                       class="btn btn-sm btn-outline-info"
+                                       style="border-radius: 6px; font-size: 11px; padding: 2px 8px;"
+                                       title="View Department">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
                                     <a href="{{ route('admin.departments.account-codes', $dept) }}"
                                        class="btn btn-sm btn-outline-secondary"
                                        style="border-radius: 6px; font-size: 11px; padding: 2px 8px;"

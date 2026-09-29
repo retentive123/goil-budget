@@ -149,8 +149,9 @@
 
                                 <div class="row g-2">
                                     @foreach($codes as $code)
+                                    @php $sageCode = $code->code . '-' . $department->code; @endphp
                                     <div class="col-md-4 col-lg-3 code-item"
-                                         data-code="{{ strtolower($code->code) }}"
+                                         data-code="{{ strtolower($code->code) }} {{ strtolower($sageCode) }}"
                                          data-name="{{ strtolower($code->name) }}">
                                         <div class="form-check form-check-custom">
                                             <input type="checkbox"
@@ -161,9 +162,14 @@
                                                 data-category="{{ $categoryId }}"
                                                 {{ in_array($code->id, $assigned) ? 'checked' : '' }}
                                                 onchange="updateCounter()">
-                                            <label for="code_{{ $code->id }}" class="form-check-label small d-flex align-items-center gap-2">
-                                                <code class="bg-light px-1 py-0 rounded small">{{ $code->code }}</code>
-                                                <span class="text-truncate" style="max-width: 120px;">{{ $code->name }}</span>
+                                            <label for="code_{{ $code->id }}" class="form-check-label small d-flex flex-column gap-0">
+                                                <span class="d-flex align-items-center gap-2">
+                                                    <code class="bg-light px-1 py-0 rounded small">{{ $code->code }}</code>
+                                                    <span class="text-truncate" style="max-width: 110px;" title="{{ $code->name }}">{{ $code->name }}</span>
+                                                </span>
+                                                <span class="sage-code text-muted" style="font-size:10px;padding-left:2px;letter-spacing:.3px;">
+                                                    Sage: {{ $sageCode }}
+                                                </span>
                                             </label>
                                         </div>
                                     </div>
@@ -314,6 +320,7 @@
     background-color: #D1FAE5 !important;
     color: #065F46;
 }
+.form-check-custom .form-check-input:checked ~ .form-check-label .sage-code { color: #059669; }
 .form-check-custom .form-check-label { cursor: pointer; width: 100%; margin-bottom: 0; }
 
 /* ── Category groups ──────────────────────────────────────────────────────── */

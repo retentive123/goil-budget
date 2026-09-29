@@ -170,10 +170,15 @@
                             </div>
                             @foreach($codes as $code)
                             <div class="d-flex align-items-center gap-2 py-1 border-bottom" style="border-color:#F8FAFC!important;">
-                                <code class="px-2 py-1 rounded flex-shrink-0"
-                                      style="background:#F1F5F9;color:#1B2A4A;font-size:11px;">
-                                    {{ $code->code }}
-                                </code>
+                                <div class="flex-shrink-0">
+                                    <code class="px-2 py-1 rounded d-block"
+                                          style="background:#F1F5F9;color:#1B2A4A;font-size:11px;">
+                                        {{ $code->code }}
+                                    </code>
+                                    <span style="font-size:10px;color:#94A3B8;letter-spacing:.3px;padding-left:2px;">
+                                        {{ $code->code }}-{{ $department->code }}
+                                    </span>
+                                </div>
                                 <span class="small text-truncate" style="color:#475569;">{{ $code->name }}</span>
                                 @if(!$code->pivot->is_active ?? false)
                                     <span class="badge ms-auto flex-shrink-0"

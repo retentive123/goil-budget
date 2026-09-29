@@ -221,6 +221,9 @@ class DepartmentController extends Controller
         $callback = function () use ($codes, $department) {
             $out = fopen('php://output', 'w');
 
+            // UTF-8 BOM so Excel opens the file with correct encoding
+            fwrite($out, "\xEF\xBB\xBF");
+
             // Report header
             fputcsv($out, ['Department Code Assignment Report']);
             fputcsv($out, ['Department:', $department->name . ' (' . $department->code . ')']);
@@ -229,10 +232,11 @@ class DepartmentController extends Controller
             fputcsv($out, []);
 
             // Column headings
-            fputcsv($out, ['Code', 'Name', 'Category', 'Status', 'Description']);
+            fputcsv($out, ['Sage Code', 'Code', 'Name', 'Category', 'Status', 'Description']);
 
             foreach ($codes as $code) {
                 fputcsv($out, [
+                    $code->code . '-' . $department->code,
                     $code->code,
                     $code->name,
                     $code->category->name ?? '—',

@@ -86,7 +86,7 @@
             <div class="modal-footer border-0">
                 <button type="button" class="btn btn-secondary btn-sm"
                         data-bs-dismiss="modal">Cancel</button>
-                <form method="POST" action="{{ route('audit-log.purge') }}" class="d-inline">
+                <form method="POST" action="{{ route('admin.audit-log.purge') }}" class="d-inline">
                     @csrf
                     <button type="submit" class="btn btn-danger btn-sm">
                         <i class="bi bi-trash3-fill me-1"></i>Confirm Purge
