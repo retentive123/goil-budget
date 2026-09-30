@@ -23,25 +23,25 @@ class GoilDataSeeder extends Seeder
         $this->command->info('Seeding departments…');
 
         $departments = [
-            ['name' => 'GCEO/MD',              'code'  => '01001'],
-            ['name' => 'COO',                   'code' => '09001'],
-            ['name' => 'Finance',               'code' => '05001'],
-            ['name' => 'Admin/HR',              'code' => '07000'],
-            ['name' => 'Operations',            'code' => '02001'],
-            ['name' => 'CIA',                   'code' => '01002'],
-            ['name' => 'HSSE',                  'code' => '01003'],
-            ['name' => 'TSPM',                  'code' => '03001'],
-            ['name' => 'Estates',               'code' => '10001'],
-            ['name' => 'Legal',                 'code' => '01004'],
-            ['name' => 'Research',              'code' => '01005'],
-            ['name' => 'TSP',                   'code' => '11001'],
-            ['name' => 'Non Fuels',             'code' => '12001'],
-            ['name' => 'Procurement',           'code' => '01007'],
-            ['name' => 'Fuels Marketing',       'code' => '04001'],
-            ['name' => 'IT',                    'code' => '06001'],
-            ['name' => 'Business Development',  'code' => '01006'],
-            ['name' => 'Corporate Affairs',     'code' => '08001'],
-            ['name' => 'Risk',                  'code' => '01008'],
+            ['name' => 'GCEO/MD',             'code' => '01001', 'description' => 'Office of the Group Chief Executive Officer & Managing Director. Provides overall strategic leadership and corporate governance.'],
+            ['name' => 'COO',                  'code' => '15000', 'description' => 'Office of the Chief Operating Officer. Oversees operational efficiency and coordination across all business units.'],
+            ['name' => 'Finance',              'code' => '05001', 'description' => 'Financial planning, accounting, treasury, and management reporting for the company.'],
+            ['name' => 'Admin/HR',             'code' => '07000', 'description' => 'Administration & Human Resources. Manages human capital, staff welfare, payroll, and general administrative services.'],
+            ['name' => 'Operations',           'code' => '02001', 'description' => 'Manages day-to-day depot, station, and distribution operations including fuel storage and logistics.'],
+            ['name' => 'CIA',                  'code' => '01002', 'description' => 'Corporate Internal Audit. Provides independent assurance on risk management, internal controls, and governance processes.'],
+            ['name' => 'HSSE',                 'code' => '01003', 'description' => 'Health, Safety, Security & Environment. Ensures compliance with HSSE standards and policies across all operations.'],
+            ['name' => 'TSPM',                 'code' => '03001', 'description' => 'Technical Services & Project Management. Oversees engineering projects, technical infrastructure, and asset maintenance.'],
+            ['name' => 'Estates',              'code' => '18000', 'description' => 'Manages company-owned properties, buildings, land leases, and residential accommodation.'],
+            ['name' => 'Legal',                'code' => '01004', 'description' => 'Legal Affairs. Provides legal advisory services, contract management, and regulatory compliance oversight.'],
+            ['name' => 'Research',             'code' => '01005', 'description' => 'Research & Development. Conducts market research, competitive analysis, and product development studies.'],
+            ['name' => 'TSP',                  'code' => '16000', 'description' => 'Transport Services & Procurement. Manages the company\'s vehicle fleet, transport logistics, and related procurement.'],
+            ['name' => 'Non Fuels',            'code' => '17000', 'description' => 'Manages non-fuel product lines including lubricants, LPG, GoCard, and other retail offerings.'],
+            ['name' => 'Procurement',          'code' => '01007', 'description' => 'Manages sourcing, purchasing, and supply chain activities for all goods and services across the company.'],
+            ['name' => 'Fuels Marketing',      'code' => '04001', 'description' => 'Manages marketing and sales of petroleum products including petrol, diesel, kerosene, LPG, and aviation fuel.'],
+            ['name' => 'IT',                   'code' => '06001', 'description' => 'Information Technology. Manages ICT infrastructure, enterprise systems, and digital transformation initiatives.'],
+            ['name' => 'Business Development', 'code' => '01006', 'description' => 'Identifies and develops new business opportunities, strategic partnerships, and market expansion initiatives.'],
+            ['name' => 'Corporate Affairs',    'code' => '08001', 'description' => 'Public relations, stakeholder engagement, corporate communications, and CSR initiatives.'],
+            ['name' => 'Risk',                 'code' => '01008', 'description' => 'Enterprise Risk Management. Identifies, assesses, and mitigates operational, financial, and strategic risks.'],
         ];
 
         $deptIds = [];
@@ -51,6 +51,7 @@ class GoilDataSeeder extends Seeder
                 [
                     'name'        => $dept['name'],
                     'code'        => $dept['code'],
+                    'description' => $dept['description'] ?? null,
                     'budget_type' => 'expense',
                     'is_active'   => true,
                     'created_at'  => now(),
@@ -121,7 +122,35 @@ class GoilDataSeeder extends Seeder
         );
         $catMap['Capital Expenditure'] = DB::table('account_categories')->where('code', 'CAT-CAPEX')->value('id');
 
-        $this->command->info('  ' . (count($categories) + 1) . ' categories done.');
+        // Sales Revenue category
+        DB::table('account_categories')->updateOrInsert(
+            ['code' => 'CAT-REV'],
+            [
+                'name'        => 'Sales Revenue',
+                'code'        => 'CAT-REV',
+                'budget_type' => 'revenue',
+                'is_active'   => true,
+                'created_at'  => now(),
+                'updated_at'  => now(),
+            ]
+        );
+        $catMap['Sales Revenue'] = DB::table('account_categories')->where('code', 'CAT-REV')->value('id');
+
+        // Cost of Sales category
+        DB::table('account_categories')->updateOrInsert(
+            ['code' => 'CAT-COS'],
+            [
+                'name'        => 'Cost of Sales',
+                'code'        => 'CAT-COS',
+                'budget_type' => 'expense',
+                'is_active'   => true,
+                'created_at'  => now(),
+                'updated_at'  => now(),
+            ]
+        );
+        $catMap['Cost of Sales'] = DB::table('account_categories')->where('code', 'CAT-COS')->value('id');
+
+        $this->command->info('  ' . (count($categories) + 3) . ' categories done.');
 
         // ── 3. Account Codes ──────────────────────────────────────────────────
         $this->command->info('Seeding account codes…');
@@ -330,6 +359,106 @@ class GoilDataSeeder extends Seeder
             ['Capital Expenditure', '11700', 'Computers & Accessories'],
             ['Capital Expenditure', '11800', 'Right of Use Assets'],
             ['Capital Expenditure', '11900', 'Capital Work in Progress'],
+
+            // Sales Revenue (41000 series)
+            ['Sales Revenue', '41000-113', 'Diesel XP'],
+            ['Sales Revenue', '41000-114', 'Super XP RON95'],
+            ['Sales Revenue', '41000-120', 'Super XP RON91'],
+            ['Sales Revenue', '41000-115', 'Mining Diesel'],
+            ['Sales Revenue', '41000-116', 'Kerosene'],
+            ['Sales Revenue', '41000-117', 'Fuel Oil (RFO)'],
+            ['Sales Revenue', '41000-118', 'Premix'],
+            ['Sales Revenue', '41000-401', 'Aviation Turbines Kerosene'],
+            ['Sales Revenue', '41000-402', 'Marine Gas Oil-MGO'],
+            ['Sales Revenue', '41000-404', 'LPG'],
+            ['Sales Revenue', '41000-407', 'AGO Rig'],
+            ['Sales Revenue', '41000-408', 'Ocean Bunkering'],
+            ['Sales Revenue', '41000-500', 'CRM/LPG'],
+            ['Sales Revenue', '41000-411-002-03', 'Diesel Gamma SAE 40 - 4 Litres'],
+            ['Sales Revenue', '41000-411-012-01', 'GOIL Engine Oil 40/50 - 208 Litres'],
+            ['Sales Revenue', '41000-411-017-03', 'Motor Oil HD 40/50 - 4 Litres'],
+            ['Sales Revenue', '41000-414-007-01', 'Marinemix GM - 1 Litre'],
+            ['Sales Revenue', '41000-411-017-01', 'Motor Oil HD 40/50 - 1 Litre'],
+            ['Sales Revenue', '41000-411-002-01', 'Diesel Gamma SAE 40 - 1 Litre'],
+            ['Sales Revenue', '41000-411-019-03', 'Super Motor Oil 20W/50 - 4 Litres'],
+            ['Sales Revenue', '41000-411-026-01', 'Transformer Oil - 210 Litres'],
+            ['Sales Revenue', '41000-411-002-02', 'Diesel Gamma SAE 40 - 208 Litres'],
+            ['Sales Revenue', '41000-411-021-01', 'Super Turbo 15W/40 - 208 Litres'],
+            ['Sales Revenue', '41000-411-002-05', 'Diesel Gamma SAE 40 - 5 Litres'],
+            ['Sales Revenue', '41000-413-020-01', 'OSO 68 - 208 Litres'],
+            ['Sales Revenue', '41000-411-020-08', 'Super Synthetic 5W/30 - 5 Litres'],
+            ['Sales Revenue', '41000-411-020-12', 'Super Synthetic 5W/20 - 5 Litres'],
+            ['Sales Revenue', '41000-411-027-01', 'GOIL Super Synthetic 0W20 - 5 Litres'],
+            ['Sales Revenue', '41000-411-016-02', 'GOIL Super Taxi SAE 40 - 4 Litres'],
+            ['Sales Revenue', '41000-411-020-11', 'Super Synthetic 5W/20 - 4 Litres'],
+            ['Sales Revenue', '41000-411-020-17', 'Super Synthetic 5W/30 - 4 Litres'],
+            ['Sales Revenue', '41000-416-003-01', 'Rotra HY 140 - 208 Litres'],
+            ['Sales Revenue', '41000-411-002-04', 'Diesel Gamma SAE 40 - 20 Litres'],
+            ['Sales Revenue', '41000-411-008-04', 'Diesel Synthetic SAE 15W/40 - 5 Litres'],
+            ['Sales Revenue', '41000-416-001-01', 'ATF Dexron II - 1 Litre'],
+            ['Sales Revenue', '41000-415-002-01', 'Radiator Coolant Solution - 1 Litre'],
+            ['Sales Revenue', '41000-411-020-05', 'Super Synthetic 5W/40 - 5 Litres'],
+            ['Sales Revenue', '41000-411-020-02', 'Super Synthetic 5W/40 - 4 Litres'],
+            ['Sales Revenue', '41000-413-015-02', 'OSO 100 - 209 Litres'],
+            ['Sales Revenue', '41000-411-023-01', 'Sigma Truck 15W/40 - 209 Litres'],
+            ['Sales Revenue', '41000-413-020-02', 'OSO 68 - 209 Litres'],
+            ['Sales Revenue', '41000-413-057-03', 'Transmission Fluid TO-4 SAE 30 - 209 Litres'],
+            ['Sales Revenue', '41000-413-030-04', 'Transmission Fluid TO-4 SAE 50 - 209 Litres'],
+            ['Sales Revenue', '41000-413-046-01', 'Deg. Compound - 200 Litres'],
+            ['Sales Revenue', '41000-413-058-02', 'Rockdrill Oil 320 - 208 Litres'],
+            ['Sales Revenue', '41000-413-004-02', 'Blasia 220 - 209 Litres'],
+            ['Sales Revenue', '41000-413-024-02', 'Therm Oil 7 - 209 Litres'],
+            ['Sales Revenue', '41000-412-014-01', 'Renolit Moly LX 2 - 180 kg'],
+
+            // Cost of Sales (52000 series — same products, different ledger prefix)
+            ['Cost of Sales', '52000-113', 'Diesel XP'],
+            ['Cost of Sales', '52000-114', 'Super XP RON95'],
+            ['Cost of Sales', '52000-120', 'Super XP RON91'],
+            ['Cost of Sales', '52000-115', 'Mining Diesel'],
+            ['Cost of Sales', '52000-116', 'Kerosene'],
+            ['Cost of Sales', '52000-117', 'Fuel Oil (RFO)'],
+            ['Cost of Sales', '52000-118', 'Premix'],
+            ['Cost of Sales', '52000-401', 'Aviation Turbines Kerosene'],
+            ['Cost of Sales', '52000-402', 'Marine Gas Oil-MGO'],
+            ['Cost of Sales', '52000-404', 'LPG'],
+            ['Cost of Sales', '52000-407', 'AGO Rig'],
+            ['Cost of Sales', '52000-408', 'Ocean Bunkering'],
+            ['Cost of Sales', '52000-500', 'CRM/LPG'],
+            ['Cost of Sales', '52000-411-002-03', 'Diesel Gamma SAE 40 - 4 Litres'],
+            ['Cost of Sales', '52000-411-012-01', 'GOIL Engine Oil 40/50 - 208 Litres'],
+            ['Cost of Sales', '52000-411-017-03', 'Motor Oil HD 40/50 - 4 Litres'],
+            ['Cost of Sales', '52000-414-007-01', 'Marinemix GM - 1 Litre'],
+            ['Cost of Sales', '52000-411-017-01', 'Motor Oil HD 40/50 - 1 Litre'],
+            ['Cost of Sales', '52000-411-002-01', 'Diesel Gamma SAE 40 - 1 Litre'],
+            ['Cost of Sales', '52000-411-019-03', 'Super Motor Oil 20W/50 - 4 Litres'],
+            ['Cost of Sales', '52000-411-026-01', 'Transformer Oil - 210 Litres'],
+            ['Cost of Sales', '52000-411-002-02', 'Diesel Gamma SAE 40 - 208 Litres'],
+            ['Cost of Sales', '52000-411-021-01', 'Super Turbo 15W/40 - 208 Litres'],
+            ['Cost of Sales', '52000-411-002-05', 'Diesel Gamma SAE 40 - 5 Litres'],
+            ['Cost of Sales', '52000-413-020-01', 'OSO 68 - 208 Litres'],
+            ['Cost of Sales', '52000-411-020-08', 'Super Synthetic 5W/30 - 5 Litres'],
+            ['Cost of Sales', '52000-411-020-12', 'Super Synthetic 5W/20 - 5 Litres'],
+            ['Cost of Sales', '52000-411-027-01', 'GOIL Super Synthetic 0W20 - 5 Litres'],
+            ['Cost of Sales', '52000-411-016-02', 'GOIL Super Taxi SAE 40 - 4 Litres'],
+            ['Cost of Sales', '52000-411-020-11', 'Super Synthetic 5W/20 - 4 Litres'],
+            ['Cost of Sales', '52000-411-020-17', 'Super Synthetic 5W/30 - 4 Litres'],
+            ['Cost of Sales', '52000-416-003-01', 'Rotra HY 140 - 208 Litres'],
+            ['Cost of Sales', '52000-411-002-04', 'Diesel Gamma SAE 40 - 20 Litres'],
+            ['Cost of Sales', '52000-411-008-04', 'Diesel Synthetic SAE 15W/40 - 5 Litres'],
+            ['Cost of Sales', '52000-416-001-01', 'ATF Dexron II - 1 Litre'],
+            ['Cost of Sales', '52000-415-002-01', 'Radiator Coolant Solution - 1 Litre'],
+            ['Cost of Sales', '52000-411-020-05', 'Super Synthetic 5W/40 - 5 Litres'],
+            ['Cost of Sales', '52000-411-020-02', 'Super Synthetic 5W/40 - 4 Litres'],
+            ['Cost of Sales', '52000-413-015-02', 'OSO 100 - 209 Litres'],
+            ['Cost of Sales', '52000-411-023-01', 'Sigma Truck 15W/40 - 209 Litres'],
+            ['Cost of Sales', '52000-413-020-02', 'OSO 68 - 209 Litres'],
+            ['Cost of Sales', '52000-413-057-03', 'Transmission Fluid TO-4 SAE 30 - 209 Litres'],
+            ['Cost of Sales', '52000-413-030-04', 'Transmission Fluid TO-4 SAE 50 - 209 Litres'],
+            ['Cost of Sales', '52000-413-046-01', 'Deg. Compound - 200 Litres'],
+            ['Cost of Sales', '52000-413-058-02', 'Rockdrill Oil 320 - 208 Litres'],
+            ['Cost of Sales', '52000-413-004-02', 'Blasia 220 - 209 Litres'],
+            ['Cost of Sales', '52000-413-024-02', 'Therm Oil 7 - 209 Litres'],
+            ['Cost of Sales', '52000-412-014-01', 'Renolit Moly LX 2 - 180 kg'],
         ];
 
         foreach ($codes as [$catName, $code, $name]) {
@@ -530,6 +659,50 @@ class GoilDataSeeder extends Seeder
         }
 
         $this->command->info('  ' . $inserted . ' department–code assignments done.');
+
+        // ── Revenue / Cost of Sales assignments ───────────────────────────────────
+        $this->command->info('Seeding revenue & cost of sales assignments…');
+
+        // Fuels Marketing (04001): Diesel XP, Super XP RON95, Super XP RON91 — revenue + COS
+        $fuelsMktCodes = [
+            '41000-113', '41000-114', '41000-120',
+            '52000-113', '52000-114', '52000-120',
+        ];
+
+        // TSPM (03001): all remaining revenue & COS codes
+        $allRevCosCodes = DB::table('account_codes')
+            ->whereIn('account_category_id', DB::table('account_categories')
+                ->whereIn('code', ['CAT-REV', 'CAT-COS'])
+                ->pluck('id'))
+            ->pluck('code')
+            ->all();
+
+        $tspmCodes = array_values(array_diff($allRevCosCodes, $fuelsMktCodes));
+
+        $revCosAssignments = [];
+        foreach ($fuelsMktCodes as $code) {
+            $revCosAssignments[] = [$code, '04001'];
+        }
+        foreach ($tspmCodes as $code) {
+            $revCosAssignments[] = [$code, '03001'];
+        }
+
+        $revCosInserted = 0;
+        foreach ($revCosAssignments as [$accCode, $deptCode]) {
+            $deptId = $deptMap[$deptCode] ?? null;
+            $codeId = $codeMap[$accCode] ?? null;
+            if (! $deptId || ! $codeId) {
+                $this->command->warn("  Skipping {$accCode} → {$deptCode}: not found in DB");
+                continue;
+            }
+            DB::table('department_account_codes')->updateOrInsert(
+                ['department_id' => $deptId, 'account_code_id' => $codeId],
+                ['is_active' => true, 'created_at' => now(), 'updated_at' => now()]
+            );
+            $revCosInserted++;
+        }
+
+        $this->command->info('  ' . $revCosInserted . ' revenue & cost of sales assignments done.');
 
         // ── Approval Stages ───────────────────────────────────────────────────────
         $this->command->info('Seeding approval stages…');
