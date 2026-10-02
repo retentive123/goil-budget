@@ -717,7 +717,7 @@
            class="sidebar-link {{ request()->routeIs('approvals.*') ? 'active' : '' }}">
             <i class="fas fa-check-circle nav-icon"></i>
             <span class="link-text">Approvals</span>
-            @php $pendingCount = \App\Models\BudgetVersion::whereIn('status',['submitted','under_review'])->count(); @endphp
+            @php $pendingCount = app(\App\Services\ApprovalService::class)->pendingForUser(); @endphp
             @if($pendingCount)
                 <span class="nav-badge">{{ $pendingCount }}</span>
             @endif
@@ -832,6 +832,11 @@
                 <i class="bi bi-building nav-icon"></i>
                 <span class="link-text">Subsidiaries</span>
             </a>
+            <a href="{{ route('reports.ratios') }}"
+               class="sidebar-link {{ request()->routeIs('reports.ratios') ? 'active' : '' }}">
+                <i class="bi bi-percent nav-icon"></i>
+                <span class="link-text">Ratio Analysis</span>
+            </a>
         </div>
         @endcan
         {{-- ════════════════════════════════════════════════ --}}
@@ -918,6 +923,11 @@
                class="sidebar-link {{ request()->routeIs('admin.capex-configs.*') ? 'active' : '' }}">
                 <i class="fas fa-hard-hat nav-icon"></i>
                 <span class="link-text">CapEx Layout</span>
+            </a>
+            <a href="{{ route('admin.ratio-configs.index') }}"
+               class="sidebar-link {{ request()->routeIs('admin.ratio-configs.*') ? 'active' : '' }}">
+                <i class="bi bi-percent nav-icon"></i>
+                <span class="link-text">Ratio Configs</span>
             </a>
             {{-- Ex-pump hidden from menu (accessible via direct URL) --}}
             <a href="{{ route('admin.account-categories.index') }}"
@@ -1445,6 +1455,7 @@ window.NAV_ITEMS = [
     { label:'Financial Statements', keywords:['financial','pnl','income','balance'],   icon:'fas fa-file-invoice-dollar',   section:'Reports',         url:'{{ route('reports.financial') }}' },
     { label:'Capital Expenditure',  keywords:['capex','capital','expenditure','report'],icon:'fas fa-hard-hat',              section:'Reports',         url:'{{ route('reports.capex') }}' },
     { label:'Subsidiary Report',   keywords:['subsidiary','subsidiaries','report','entity budget'],icon:'bi bi-building',      section:'Reports',         url:'{{ route('reports.subsidiary') }}' },
+    { label:'Ratio Analysis',      keywords:['ratio','ratios','analysis','utilisation rate','kpi','efficiency','intensity'], icon:'bi bi-percent', section:'Reports', url:'{{ route('reports.ratios') }}' },
     @endcan
 
     // ── Administration ────────────────────────────────────
@@ -1460,6 +1471,7 @@ window.NAV_ITEMS = [
     { label:'P&L Layout',           keywords:['pnl','income statement','layout','pl'], icon:'fas fa-sliders-h',             section:'Administration',  url:'{{ route('admin.income-statement-configs.index') }}' },
     { label:'Balance Sheet Layout', keywords:['balance sheet','bs','layout'],           icon:'fas fa-balance-scale',         section:'Administration',  url:'{{ route('admin.balance-sheet-configs.index') }}' },
     { label:'CapEx Layout',         keywords:['capex','capital','layout'],              icon:'fas fa-hard-hat',              section:'Administration',  url:'{{ route('admin.capex-configs.index') }}' },
+    { label:'Ratio Configs',        keywords:['ratio','ratios','configure','formula','kpi'], icon:'bi bi-percent',            section:'Administration',  url:'{{ route('admin.ratio-configs.index') }}' },
     { label:'Ex-pump Templates',    keywords:['expump','ex-pump','fuel','price'],       icon:'fas fa-gas-pump',              section:'Administration',  url:'{{ route('admin.expump-templates.index') }}' },
     { label:'Account Categories',   keywords:['category','categories','account'],       icon:'fas fa-folder',                section:'Administration',  url:'{{ route('admin.account-categories.index') }}' },
     { label:'Account Codes',        keywords:['codes','account','codes'],               icon:'fas fa-hashtag',               section:'Administration',  url:'{{ route('admin.account-codes.index') }}' },

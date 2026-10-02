@@ -3,6 +3,15 @@
 
 @section('content')
 
+@php
+    $isMonthly  = ($entryMode ?? 'quarterly') === 'monthly';
+    $periodCols = $isMonthly
+        ? ['m1'=>'Jan','m2'=>'Feb','m3'=>'Mar','m4'=>'Apr','m5'=>'May','m6'=>'Jun',
+           'm7'=>'Jul','m8'=>'Aug','m9'=>'Sep','m10'=>'Oct','m11'=>'Nov','m12'=>'Dec']
+        : ['q1'=>'Q1','q2'=>'Q2','q3'=>'Q3','q4'=>'Q4'];
+    $periodColspan = count($periodCols) + 2;
+@endphp
+
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div class="d-flex align-items-center gap-2">
         <a href="{{ route('approvals.index') }}" class="text-muted text-decoration-none">Approvals</a>
@@ -162,11 +171,11 @@
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-sm mb-0" id="pnl-table">
+                    <table class="table table-sm mb-0" id="pnl-table" style="{{ $isMonthly ? 'min-width:1600px' : '' }}">
                         <thead>
                             <tr style="background:#1B2A4A;color:#fff;font-size:12px">
                                 <th rowspan="2" style="min-width:220px;vertical-align:middle">Account</th>
-                                <th colspan="6" class="text-center border-start border-secondary py-2">
+                                <th colspan="{{ $periodColspan }}" class="text-center border-start border-secondary py-2">
                                     {{ $budgetVersion->period->year }} Budget
                                 </th>
                                 @if($prevPeriod)
@@ -176,10 +185,9 @@
                                 @endif
                             </tr>
                             <tr style="background:#243B55;color:#CBD5E1;font-size:11px">
-                                <th class="text-end border-start border-secondary" style="min-width:90px">Q1</th>
-                                <th class="text-end" style="min-width:90px">Q2</th>
-                                <th class="text-end" style="min-width:90px">Q3</th>
-                                <th class="text-end" style="min-width:90px">Q4</th>
+                                @foreach($periodCols as $pKey => $pLabel)
+                                <th class="text-end{{ $loop->first ? ' border-start border-secondary' : '' }}" style="min-width:{{ $isMonthly ? '70px' : '90px' }}">{{ $pLabel }}</th>
+                                @endforeach
                                 <th class="text-end" style="min-width:110px">Total</th>
                                 <th class="text-end" style="min-width:60px">CS&nbsp;%</th>
                                 @if($prevPeriod)
@@ -211,13 +219,14 @@
                     <span class="fw-semibold small text-uppercase">{{ $categoryName }}</span>
                     <span class="small text-muted">Total: <strong>{{ currency() }} {{ number_format($catEffectiveTotal, 2) }}</strong></span>
                 </div>
-                <div class="card-body p-0">
-                    <table class="table table-sm table-hover mb-0">
+                <div class="card-body p-0" style="{{ $isMonthly ? 'overflow-x:auto' : '' }}">
+                    <table class="table table-sm table-hover mb-0" style="{{ $isMonthly ? 'min-width:900px' : '' }}">
                         <thead class="table-light">
                             <tr>
                                 <th style="width:30%">Account</th>
-                                <th class="text-end">Q1</th><th class="text-end">Q2</th>
-                                <th class="text-end">Q3</th><th class="text-end">Q4</th>
+                                @foreach($periodCols as $pKey => $pLabel)
+                                <th class="text-end">{{ $pLabel }}</th>
+                                @endforeach
                                 <th class="text-end">Supplementary</th><th class="text-end">Total</th>
                             </tr>
                         </thead>
@@ -226,10 +235,9 @@
                             @php $itemSupp = $item->approvedSupplementaryTotal(); @endphp
                             <tr>
                                 <td class="small"><code>{{ $item->accountCode->code }}</code> {{ $item->accountCode->name }}</td>
-                                <td class="text-end small">{{ number_format($item->q1_amount, 2) }}</td>
-                                <td class="text-end small">{{ number_format($item->q2_amount, 2) }}</td>
-                                <td class="text-end small">{{ number_format($item->q3_amount, 2) }}</td>
-                                <td class="text-end small">{{ number_format($item->q4_amount, 2) }}</td>
+                                @foreach($periodCols as $pKey => $pLabel)
+                                <td class="text-end small">{{ number_format($item->{$pKey.'_amount'}, 2) }}</td>
+                                @endforeach
                                 <td class="text-end small" style="color:{{ $itemSupp > 0 ? '#10B981' : 'inherit' }}">
                                     {{ $itemSupp > 0 ? '+'.number_format($itemSupp, 2) : '—' }}
                                 </td>
@@ -242,10 +250,9 @@
                         <tfoot style="background:#F8FAFC;font-weight:700;font-size:11px">
                             <tr>
                                 <td>Category Total</td>
-                                <td class="text-end">{{ number_format($categoryData['items']->sum('q1_amount'), 2) }}</td>
-                                <td class="text-end">{{ number_format($categoryData['items']->sum('q2_amount'), 2) }}</td>
-                                <td class="text-end">{{ number_format($categoryData['items']->sum('q3_amount'), 2) }}</td>
-                                <td class="text-end">{{ number_format($categoryData['items']->sum('q4_amount'), 2) }}</td>
+                                @foreach($periodCols as $pKey => $pLabel)
+                                <td class="text-end">{{ number_format($categoryData['items']->sum($pKey.'_amount'), 2) }}</td>
+                                @endforeach
                                 <td class="text-end" style="color:{{ $catSuppTotal > 0 ? '#10B981' : 'inherit' }}">
                                     {{ $catSuppTotal > 0 ? '+'.number_format($catSuppTotal, 2) : '—' }}
                                 </td>
@@ -272,13 +279,14 @@
                     <span class="fw-semibold small text-uppercase">{{ $categoryName }}</span>
                     <span class="small text-muted">Total: <strong>{{ currency() }} {{ number_format($catEffectiveTotal, 2) }}</strong></span>
                 </div>
-                <div class="card-body p-0">
-                    <table class="table table-sm table-hover mb-0">
+                <div class="card-body p-0" style="{{ $isMonthly ? 'overflow-x:auto' : '' }}">
+                    <table class="table table-sm table-hover mb-0" style="{{ $isMonthly ? 'min-width:900px' : '' }}">
                         <thead class="table-light">
                             <tr>
                                 <th style="width:30%">Account</th>
-                                <th class="text-end">Q1</th><th class="text-end">Q2</th>
-                                <th class="text-end">Q3</th><th class="text-end">Q4</th>
+                                @foreach($periodCols as $pKey => $pLabel)
+                                <th class="text-end">{{ $pLabel }}</th>
+                                @endforeach
                                 <th class="text-end">Supplementary</th><th class="text-end">Total</th>
                             </tr>
                         </thead>
@@ -287,10 +295,9 @@
                             @php $itemSupp = $item->approvedSupplementaryTotal(); @endphp
                             <tr>
                                 <td class="small"><code>{{ $item->accountCode->code }}</code> {{ $item->accountCode->name }}</td>
-                                <td class="text-end small">{{ number_format($item->q1_amount, 2) }}</td>
-                                <td class="text-end small">{{ number_format($item->q2_amount, 2) }}</td>
-                                <td class="text-end small">{{ number_format($item->q3_amount, 2) }}</td>
-                                <td class="text-end small">{{ number_format($item->q4_amount, 2) }}</td>
+                                @foreach($periodCols as $pKey => $pLabel)
+                                <td class="text-end small">{{ number_format($item->{$pKey.'_amount'}, 2) }}</td>
+                                @endforeach
                                 <td class="text-end small" style="color:{{ $itemSupp > 0 ? '#10B981' : 'inherit' }}">
                                     {{ $itemSupp > 0 ? '+'.number_format($itemSupp, 2) : '—' }}
                                 </td>
@@ -303,10 +310,9 @@
                         <tfoot style="background:#F8FAFC;font-weight:700;font-size:11px">
                             <tr>
                                 <td>Category Total</td>
-                                <td class="text-end">{{ number_format($categoryData['items']->sum('q1_amount'), 2) }}</td>
-                                <td class="text-end">{{ number_format($categoryData['items']->sum('q2_amount'), 2) }}</td>
-                                <td class="text-end">{{ number_format($categoryData['items']->sum('q3_amount'), 2) }}</td>
-                                <td class="text-end">{{ number_format($categoryData['items']->sum('q4_amount'), 2) }}</td>
+                                @foreach($periodCols as $pKey => $pLabel)
+                                <td class="text-end">{{ number_format($categoryData['items']->sum($pKey.'_amount'), 2) }}</td>
+                                @endforeach
                                 <td class="text-end" style="color:{{ $catSuppTotal > 0 ? '#10B981' : 'inherit' }}">
                                     {{ $catSuppTotal > 0 ? '+'.number_format($catSuppTotal, 2) : '—' }}
                                 </td>
@@ -380,76 +386,48 @@
         {{-- Decision Form --}}
         @if($canDecide)
             @php $roleConfig = $approvalService->currentRoleConfig($budgetVersion) ?? null; @endphp
-            <div class="card border-0 shadow-lg mb-4" style="border-radius:16px;overflow:hidden;border-top:4px solid #E65C00">
-                <div class="card-header border-0 px-4 py-3" style="background:#E65C00;color:#fff">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="d-flex align-items-center justify-content-center rounded-circle"
-                                style="width:40px;height:40px;background:rgba(255,255,255,.12);font-size:18px">
-                                <i class="bi bi-check-circle"></i>
-                            </div>
-                            <div>
-                                <div style="font-size:14px;font-weight:700">
-                                    Your Decision — {{ $currentStage->name }}
-                                </div>
-                                @if($roleConfig)
-                                <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:2px">
-                                    <i class="bi bi-{{ $roleConfig->scope === 'all' ? 'globe2' : 'building' }}"></i>
-                                    Scope: {{ $roleConfig->scope === 'all' ? 'All departments' : 'Own department only' }}
-                                    @if($roleConfig->can_partial_approve)
-                                        · <i class="bi bi-check2-square"></i> Partial approval enabled
-                                    @endif
-                                    @if($roleConfig->can_reduce_amounts)
-                                        · <i class="bi bi-dash-circle"></i> Can reduce amounts
-                                    @endif
-                                </div>
-                                @endif
-                            </div>
-                        </div>
-                        <span class="badge px-3 py-2" style="background:rgba(255,255,255,.15);color:#fff;font-size:11px;border-radius:20px">
-                            <i class="bi bi-clock"></i> Pending Review
-                        </span>
+            <div class="card border-0 shadow mb-4" style="border-radius:12px;overflow:hidden;border-top:3px solid #E65C00">
+                <div class="card-header border-0 px-3 py-3" style="background:#E65C00;color:#fff">
+                    <div class="fw-bold" style="font-size:14px">Your Decision — {{ $currentStage->name }}</div>
+                    @if($roleConfig)
+                    <div style="font-size:11px;color:rgba(255,255,255,.75);margin-top:3px">
+                        Scope: {{ $roleConfig->scope === 'all' ? 'All departments' : 'Own department only' }}
+                        @if($roleConfig->can_partial_approve) &middot; Partial approval enabled @endif
+                        @if($roleConfig->can_reduce_amounts) &middot; Can reduce amounts @endif
                     </div>
+                    @endif
                 </div>
 
-                <div class="card-body p-4">
+                <div class="card-body p-3">
                     <form id="decision-form" method="POST" action="{{ route('approvals.decide', $budgetVersion) }}">
                         @csrf
 
-                        <div class="mb-4">
-                            <label class="form-label fw-semibold" style="color:#1B2A4A;font-size:13px">
-                                <i class="bi bi-check2-circle" style="color:#E65C00"></i> Decision
-                            </label>
-                            <div class="d-flex gap-4">
-                                <div class="form-check">
-                                    <input type="radio" name="decision" value="approved"
-                                        id="dec-approve" class="form-check-input" required
-                                        style="border-color:#10B981">
-                                    <label for="dec-approve" class="form-check-label fw-semibold" style="color:#10B981">
-                                        <i class="bi bi-check-circle"></i> Approve
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input type="radio" name="decision" value="rejected"
-                                        id="dec-reject" class="form-check-input"
-                                        style="border-color:#F43F5E">
-                                    <label for="dec-reject" class="form-check-label fw-semibold" style="color:#F43F5E">
-                                        <i class="bi bi-x-circle"></i> Reject
-                                    </label>
-                                </div>
+                        <div class="mb-3">
+                            <div class="small fw-semibold mb-2" style="color:#64748B">Decision</div>
+                            <div class="d-flex gap-2">
+                                <label class="dec-card flex-fill text-center py-2 px-2 rounded-2"
+                                       for="dec-approve" id="lbl-approve"
+                                       style="cursor:pointer;border:2px solid #BBF7D0;background:#F0FDF4;color:#15803D;font-weight:600;font-size:13px;transition:all .15s">
+                                    <input type="radio" name="decision" id="dec-approve" value="approved" class="d-none" required>
+                                    Approve
+                                </label>
+                                <label class="dec-card flex-fill text-center py-2 px-2 rounded-2"
+                                       for="dec-reject" id="lbl-reject"
+                                       style="cursor:pointer;border:2px solid #FECDD3;background:#FFF1F2;color:#BE123C;font-weight:600;font-size:13px;transition:all .15s">
+                                    <input type="radio" name="decision" id="dec-reject" value="rejected" class="d-none">
+                                    Reject
+                                </label>
                             </div>
                         </div>
 
-                        <div class="mb-4">
-                            <label class="form-label fw-semibold" style="color:#1B2A4A;font-size:13px">
-                                <i class="bi bi-chat-dots" style="color:#E65C00"></i> Comments
-                                <span class="text-danger" id="comments-required" style="display:none">
-                                    (required for rejection)
-                                </span>
+                        <div class="mb-3">
+                            <label class="small fw-semibold mb-1 d-block" style="color:#64748B">
+                                Comments
+                                <span class="text-danger fw-normal" id="comments-required" style="display:none">(required)</span>
                             </label>
-                            <textarea name="comments" rows="4"
+                            <textarea name="comments" rows="3"
                                     class="form-control @error('comments') is-invalid @enderror"
-                                    style="border-radius:10px;border-color:#E2E8F0;padding:12px;resize:vertical"
+                                    style="border-radius:8px;border-color:#E2E8F0;padding:10px;resize:vertical;font-size:13px"
                                     placeholder="Add comments…">{{ old('comments') }}</textarea>
                             @error('comments')
                                 <div class="invalid-feedback">{{ $message }}</div>
@@ -457,12 +435,10 @@
                         </div>
 
                         @if($roleConfig?->can_partial_approve)
-                        <div class="mb-4">
-                            <div style="font-size:12px;font-weight:600;color:#1B2A4A;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">
-                                <i class="bi bi-list-ul" style="color:#E65C00"></i> Line Item Decisions
-                                <span style="font-weight:400;text-transform:none;color:#94A3B8;font-size:11px">
-                                    (optional — leave blank to apply overall decision)
-                                </span>
+                        <div class="mb-3">
+                            <div class="small fw-semibold mb-2" style="color:#64748B">
+                                Line Item Decisions
+                                <span style="font-weight:400;color:#94A3B8;font-size:11px">(optional)</span>
                             </div>
                             <div style="max-height:400px;overflow-y:auto;border-radius:10px;border:1px solid #E2E8F0">
                                 @foreach($summary as $catName => $catData)
@@ -511,8 +487,8 @@
                         @endif
 
                         <button type="submit" class="btn w-100 py-2 fw-semibold"
-                                style="background:#E65C00;color:#fff;border-radius:10px;border:none;font-size:14px">
-                            <i class="bi bi-send"></i> Submit Decision
+                                style="background:#E65C00;color:#fff;border-radius:8px;border:none;font-size:14px">
+                            Submit Decision
                         </button>
                     </form>
                 </div>
@@ -602,16 +578,37 @@ document.querySelectorAll('input[name="decision"]').forEach(radio => {
     radio.addEventListener('change', function() {
         document.getElementById('comments-required').style.display =
             this.value === 'rejected' ? 'inline' : 'none';
+        const lblApprove = document.getElementById('lbl-approve');
+        const lblReject  = document.getElementById('lbl-reject');
+        if (lblApprove) {
+            const on = this.value === 'approved';
+            lblApprove.style.background  = on ? '#16A34A' : '#F0FDF4';
+            lblApprove.style.color       = on ? '#fff'    : '#15803D';
+            lblApprove.style.borderColor = on ? '#16A34A' : '#BBF7D0';
+        }
+        if (lblReject) {
+            const on = this.value === 'rejected';
+            lblReject.style.background  = on ? '#BE123C' : '#FFF1F2';
+            lblReject.style.color       = on ? '#fff'    : '#BE123C';
+            lblReject.style.borderColor = on ? '#BE123C' : '#FECDD3';
+        }
     });
 });
 </script>
 
 @push('scripts')
 <script>
-const PNL      = @json($pnlData);
-const HAS_PREV = {{ $prevPeriod ? 'true' : 'false' }};
-const EDITABLE = false;
-const CUR      = "{{ currency() }}";
+const PNL        = @json($pnlData);
+const HAS_PREV   = {{ $prevPeriod ? 'true' : 'false' }};
+const EDITABLE   = false;
+const CUR        = "{{ currency() }}";
+const ENTRY_MODE = '{{ $entryMode }}';
+const PERIOD_COLS = ENTRY_MODE === 'monthly'
+    ? ['m1','m2','m3','m4','m5','m6','m7','m8','m9','m10','m11','m12']
+    : ['q1','q2','q3','q4'];
+const PERIOD_LABELS = ENTRY_MODE === 'monthly'
+    ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    : ['Q1','Q2','Q3','Q4'];
 
 function numFmt(v) {
     return parseFloat(v || 0).toLocaleString('en-GH', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -665,10 +662,7 @@ function renderSection(type, label) {
                 ${escHtml(cat.name)}
                 <span class="text-muted fw-normal ms-1" style="font-size:11px">(${cat.items.length})</span>
             </td>
-            <td class="text-end border-start" id="cq1_${catId}">${numFmt(cat.totals.q1)}</td>
-            <td class="text-end" id="cq2_${catId}">${numFmt(cat.totals.q2)}</td>
-            <td class="text-end" id="cq3_${catId}">${numFmt(cat.totals.q3)}</td>
-            <td class="text-end" id="cq4_${catId}">${numFmt(cat.totals.q4)}</td>
+            ${PERIOD_COLS.map((pk, pi) => `<td class="text-end${pi===0?' border-start':''}" id="c${pk}_${catId}">${numFmt(cat.totals[pk])}</td>`).join('')}
             <td class="text-end fw-bold" id="ceff_${catId}">${numFmt(cat.totals.effective)}</td>
             <td class="text-end text-muted" id="ccs_${catId}">${numFmt(cat.totals.common_size)}%</td>
             ${HAS_PREV ? `
@@ -689,10 +683,7 @@ function renderSection(type, label) {
                     <code class="text-muted me-1" style="font-size:11px">${escHtml(item.code)}</code>${escHtml(item.name)}${suppBadge}
                     ${item.justification ? `<div class="text-muted" style="font-size:11px">${escHtml(item.justification)}</div>` : ''}
                 </td>
-                <td class="text-end border-start">${numFmt(item.q1)}</td>
-                <td class="text-end">${numFmt(item.q2)}</td>
-                <td class="text-end">${numFmt(item.q3)}</td>
-                <td class="text-end">${numFmt(item.q4)}</td>
+                ${PERIOD_COLS.map((pk, pi) => `<td class="text-end${pi===0?' border-start':''}">${numFmt(item[pk])}</td>`).join('')}
                 <td class="text-end fw-semibold">${numFmt(item.effective)}</td>
                 <td class="text-end text-muted small">${numFmt(item.common_size)}%</td>
                 ${HAS_PREV ? `
@@ -708,10 +699,7 @@ function renderSection(type, label) {
     const bg2 = type === 'revenue' ? '#1E3A5F' : '#431407';
     html += `<tr id="st_${type}" style="background:${bg2};color:#fff;font-weight:700;font-size:12px;border-top:2px solid #fff">
         <td style="padding-left:12px;font-size:13px">TOTAL ${label}</td>
-        <td class="text-end border-start border-secondary">${numFmt(t.q1)}</td>
-        <td class="text-end">${numFmt(t.q2)}</td>
-        <td class="text-end">${numFmt(t.q3)}</td>
-        <td class="text-end">${numFmt(t.q4)}</td>
+        ${PERIOD_COLS.map((pk, pi) => `<td class="text-end${pi===0?' border-start border-secondary':''}">${numFmt(t[pk])}</td>`).join('')}
         <td class="text-end">${numFmt(t.effective)}</td>
         <td class="text-end">100%</td>
         ${HAS_PREV ? `
@@ -734,10 +722,7 @@ function renderNetRow() {
 
     return `<tr style="background:#0F172A;color:#fff;font-weight:700;font-size:13px;border-top:3px solid #E2E8F0">
         <td style="padding-left:12px">NET INCOME / (LOSS)</td>
-        <td class="text-end border-start border-secondary">${numFmt(revT.q1 - expT.q1)}</td>
-        <td class="text-end">${numFmt(revT.q2 - expT.q2)}</td>
-        <td class="text-end">${numFmt(revT.q3 - expT.q3)}</td>
-        <td class="text-end">${numFmt(revT.q4 - expT.q4)}</td>
+        ${PERIOD_COLS.map((pk, pi) => `<td class="text-end${pi===0?' border-start border-secondary':''}">${numFmt(revT[pk] - expT[pk])}</td>`).join('')}
         <td class="text-end fs-6 fw-bold" style="color:${netColor}">${numFmt(net)}</td>
         <td class="text-end">—</td>
         ${HAS_PREV ? `

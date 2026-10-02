@@ -17,6 +17,14 @@
     </style>
 </head>
 <body>
+@php
+    $isMonthly  = ($entryMode ?? 'quarterly') === 'monthly';
+    $periodCols = $isMonthly
+        ? ['m1'=>'Jan','m2'=>'Feb','m3'=>'Mar','m4'=>'Apr','m5'=>'May','m6'=>'Jun',
+           'm7'=>'Jul','m8'=>'Aug','m9'=>'Sep','m10'=>'Oct','m11'=>'Nov','m12'=>'Dec']
+        : ['q1'=>'Q1','q2'=>'Q2','q3'=>'Q3','q4'=>'Q4'];
+    $colspan = count($periodCols) + 4; // code + account + original + supp + total
+@endphp
     <h1>{{ setting('company_name', 'GOIL') }} — Approved Budget Report</h1>
     <p>Period: {{ $period?->name }} &nbsp;|&nbsp; Generated: {{ now()->format('d M Y H:i') }}</p>
 
@@ -25,10 +33,9 @@
             <tr style="background:#1B2A4A;color:#fff">
                 <th style="padding:6px;text-align:left">Code</th>
                 <th style="padding:6px;text-align:left">Account</th>
-                <th style="padding:6px;text-align:right">Q1</th>
-                <th style="padding:6px;text-align:right">Q2</th>
-                <th style="padding:6px;text-align:right">Q3</th>
-                <th style="padding:6px;text-align:right">Q4</th>
+                @foreach($periodCols as $pl)
+                <th style="padding:6px;text-align:right">{{ $pl }}</th>
+                @endforeach
                 <th style="padding:6px;text-align:right">Original</th>
                 <th style="padding:6px;text-align:right">Supplementary</th>
                 <th style="padding:6px;text-align:right">Effective Total</th>
@@ -37,7 +44,7 @@
         <tbody>
             @foreach($versions as $v)
             <tr style="background:#F1F5F9">
-                <td colspan="9" style="padding:6px;font-weight:bold">
+                <td colspan="{{ $colspan }}" style="padding:6px;font-weight:bold">
                     {{ $v->department->name }} — {{ $v->period->name }}
                 </td>
             </tr>
@@ -50,10 +57,9 @@
             <tr>
                 <td style="padding:4px;border-bottom:1px solid #E2E8F0">{{ $item->accountCode->code }}</td>
                 <td style="padding:4px;border-bottom:1px solid #E2E8F0">{{ $item->accountCode->name }}</td>
-                <td style="padding:4px;border-bottom:1px solid #E2E8F0;text-align:right">{{ number_format($item->q1_amount,2) }}</td>
-                <td style="padding:4px;border-bottom:1px solid #E2E8F0;text-align:right">{{ number_format($item->q2_amount,2) }}</td>
-                <td style="padding:4px;border-bottom:1px solid #E2E8F0;text-align:right">{{ number_format($item->q3_amount,2) }}</td>
-                <td style="padding:4px;border-bottom:1px solid #E2E8F0;text-align:right">{{ number_format($item->q4_amount,2) }}</td>
+                @foreach($periodCols as $pk => $pl)
+                <td style="padding:4px;border-bottom:1px solid #E2E8F0;text-align:right">{{ number_format($item->{$pk.'_amount'},2) }}</td>
+                @endforeach
                 <td style="padding:4px;border-bottom:1px solid #E2E8F0;text-align:right">{{ number_format($orig,2) }}</td>
                 <td style="padding:4px;border-bottom:1px solid #E2E8F0;text-align:right;color:#92400E">
                     {{ $supp > 0 ? '+'.number_format($supp,2) : '—' }}

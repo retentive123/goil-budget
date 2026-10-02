@@ -60,6 +60,33 @@ class ApprovalService
         return true;
     }
 
+    public function pendingForUser(): int
+    {
+        $user = auth()->user();
+        if (!$user) return 0;
+
+        $roleNames = $user->roles->pluck('name')->toArray();
+        if (empty($roleNames)) return 0;
+
+        $placeholders = implode(',', array_fill(0, count($roleNames), '?'));
+
+        return BudgetVersion::whereIn('status', [
+                BudgetVersion::STATUS_SUBMITTED,
+                BudgetVersion::STATUS_UNDER_REVIEW,
+            ])
+            ->whereRaw("(
+                SELECT role_name FROM approval_stages
+                WHERE is_active = 1
+                AND id NOT IN (
+                    SELECT approval_stage_id FROM approval_decisions
+                    WHERE budget_version_id = budget_versions.id
+                    AND decision = 'approved'
+                )
+                ORDER BY `order` ASC LIMIT 1
+            ) IN ({$placeholders})", $roleNames)
+            ->count();
+    }
+
     // Get role config for the current user's approver role on this version
     public function currentRoleConfig(BudgetVersion $version): ?Role
     {

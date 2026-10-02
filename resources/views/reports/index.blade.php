@@ -252,5 +252,26 @@
         </div>
     </div>
 
+    {{-- Ratio Analysis Report --}}
+    <div class="col-md-4">
+        <div class="chart-card h-100 position-relative" style="border-top:3px solid #E65C00">
+            <div style="font-size:28px;color:#E65C00">
+                <i class="bi bi-percent"></i>
+            </div>
+            <div class="chart-title mt-2">Ratio Analysis</div>
+            <span class="badge position-absolute top-0 end-0 m-2"
+                  style="background:#FFF7ED;color:#9A3412;font-size:10px">New</span>
+            <p class="small text-muted">
+                Configurable financial ratios — utilisation, efficiency, intensity.
+                Compare periods and track trend direction.
+            </p>
+            <a href="{{ route('reports.ratios') }}"
+               class="btn btn-sm"
+               style="background:#E65C00;color:#fff;border-radius:8px">
+                Open Report →
+            </a>
+        </div>
+    </div>
+
 </div>
 @endsection

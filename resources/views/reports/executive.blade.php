@@ -10,6 +10,14 @@
     'showDept'   => false,
 ])
 
+@php
+    $isMonthly  = ($entryMode ?? 'quarterly') === 'monthly';
+    $periodCols = $isMonthly
+        ? ['m1'=>'Jan','m2'=>'Feb','m3'=>'Mar','m4'=>'Apr','m5'=>'May','m6'=>'Jun',
+           'm7'=>'Jul','m8'=>'Aug','m9'=>'Sep','m10'=>'Oct','m11'=>'Nov','m12'=>'Dec']
+        : ['q1'=>'Q1','q2'=>'Q2','q3'=>'Q3','q4'=>'Q4'];
+@endphp
+
 {{-- KPI cards --}}
 <div class="row g-3 mb-4">
     <div class="col-md-3">
@@ -59,11 +67,11 @@
         </div>
     </div>
 
-    {{-- Quarterly totals --}}
+    {{-- Period distribution bar --}}
     <div class="col-md-5">
         <div class="chart-card h-100">
-            <div class="chart-title">Quarterly Distribution ({{ currency() }})</div>
-            <canvas id="quarterBar" height="220"></canvas>
+            <div class="chart-title">{{ $isMonthly ? 'Monthly' : 'Quarterly' }} Distribution ({{ currency() }})</div>
+            <canvas id="periodBar" height="220"></canvas>
         </div>
     </div>
 
@@ -143,15 +151,14 @@ $typeColors = [
 <div class="chart-card">
     <div class="chart-title">Department Breakdown</div>
     <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0">
+        <table class="table table-sm table-hover mb-0" style="{{ $isMonthly ? 'min-width:1200px' : '' }}">
             <thead style="font-size:11px;text-transform:uppercase;
                           letter-spacing:.5px;color:var(--slate)">
                 <tr>
                     <th>Department</th>
-                    <th class="text-end">Q1 ({{ currency() }})</th>
-                    <th class="text-end">Q2 ({{ currency() }})</th>
-                    <th class="text-end">Q3 ({{ currency() }})</th>
-                    <th class="text-end">Q4 ({{ currency() }})</th>
+                    @foreach($periodCols as $pk => $pl)
+                    <th class="text-end">{{ $pl }} ({{ currency() }})</th>
+                    @endforeach
                     <th class="text-end">Original</th>
                     <th class="text-end">Supplementary</th>
                     <th class="text-end">Effective Total ({{ currency() }})</th>
@@ -170,10 +177,9 @@ $typeColors = [
                         <div class="fw-semibold small">{{ $row['name'] }}</div>
                         <div style="font-size:10px;color:var(--slate)">{{ $row['code'] }}</div>
                     </td>
-                    <td class="text-end small">{{ number_format($row['q1'],0) }}</td>
-                    <td class="text-end small">{{ number_format($row['q2'],0) }}</td>
-                    <td class="text-end small">{{ number_format($row['q3'],0) }}</td>
-                    <td class="text-end small">{{ number_format($row['q4'],0) }}</td>
+                    @foreach($periodCols as $pk => $pl)
+                    <td class="text-end small">{{ number_format($row[$pk],0) }}</td>
+                    @endforeach
                     <td class="text-end small text-muted">{{ number_format($original,0) }}</td>
                     <td class="text-end small" style="color:{{ $supplementary > 0 ? '#10B981' : 'inherit' }}">
                         {{ $supplementary > 0 ? '+'.number_format($supplementary,0) : '—' }}
@@ -194,10 +200,9 @@ $typeColors = [
             <tfoot style="background:#F8FAFC;font-weight:700;font-size:13px">
                 <tr>
                     <td>Grand Total</td>
-                    <td class="text-end">{{ number_format($quarterlyTotals['q1'],0) }}</td>
-                    <td class="text-end">{{ number_format($quarterlyTotals['q2'],0) }}</td>
-                    <td class="text-end">{{ number_format($quarterlyTotals['q3'],0) }}</td>
-                    <td class="text-end">{{ number_format($quarterlyTotals['q4'],0) }}</td>
+                    @foreach($periodCols as $pk => $pl)
+                    <td class="text-end">{{ number_format($periodTotals[$pk],0) }}</td>
+                    @endforeach
                     <td class="text-end">{{ number_format($grandTotal - $totalSupplementary,0) }}</td>
                     <td class="text-end" style="color:#10B981">
                         +{{ number_format($totalSupplementary ?? 0,0) }}
@@ -211,6 +216,31 @@ $typeColors = [
         </table>
     </div>
 </div>
+
+@php
+    // Build JS-safe chart data based on entry mode
+    $chartLabels = array_values($periodCols);
+    $chartData   = array_map(fn($pk) => $periodTotals[$pk], array_keys($periodCols));
+
+    // Dept ranking datasets — one dataset per period column
+    $rankColors = $isMonthly
+        ? ['#1B2A4A','#2D4A7A','#3B6CB5','#4D8BC8','#6AAED6','#93C9E0',
+           '#C9A84C','#D4B96A','#DFD094','#10B981','#34D399','#6EE7B7']
+        : ['#1B2A4A','#C9A84C','#10B981','#6366F1'];
+
+    $rankDatasets = [];
+    $colIdx = 0;
+    foreach ($periodCols as $pk => $pl) {
+        $rankDatasets[] = [
+            'label'           => $pl,
+            'data'            => $deptTotals->pluck($pk)->toArray(),
+            'backgroundColor' => $rankColors[$colIdx] ?? '#94A3B8',
+            'borderRadius'    => 4,
+            'borderSkipped'   => false,
+        ];
+        $colIdx++;
+    }
+@endphp
 
 <script>
 const COLORS = ['#1B2A4A','#C9A84C','#10B981','#6366F1','#F59E0B',
@@ -242,20 +272,16 @@ new Chart(document.getElementById('statusDonut'), {
     }
 });
 
-// Quarterly bar
-new Chart(document.getElementById('quarterBar'), {
+// Period distribution bar
+new Chart(document.getElementById('periodBar'), {
     type: 'bar',
     data: {
-        labels: ['Q1','Q2','Q3','Q4'],
+        labels: {!! json_encode($chartLabels) !!},
         datasets: [{
-            data: [
-                {{ $quarterlyTotals['q1'] }},
-                {{ $quarterlyTotals['q2'] }},
-                {{ $quarterlyTotals['q3'] }},
-                {{ $quarterlyTotals['q4'] }},
-            ],
-            backgroundColor: ['#1B2A4A','#C9A84C','#10B981','#6366F1'],
-            borderRadius: 8,
+            data: {!! json_encode($chartData) !!},
+            backgroundColor: {!! json_encode(array_slice(['#1B2A4A','#C9A84C','#10B981','#6366F1',
+                '#F59E0B','#EC4899','#14B8A6','#8B5CF6','#F97316','#06B6D4','#3B82F6','#A855F7'], 0, count($chartLabels))) !!},
+            borderRadius: 6,
             borderSkipped: false,
         }]
     },
@@ -270,7 +296,7 @@ new Chart(document.getElementById('quarterBar'), {
                     callback: v => '{{ currency() }} '+(v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000).toFixed(0)+'K':v)
                 }
             },
-            x:{ grid:{ display:false }, ticks:{ font:{size:13}, color:'#1B2A4A' } }
+            x:{ grid:{ display:false }, ticks:{ font:{size:{{ $isMonthly ? 10 : 13 }}}, color:'#1B2A4A' } }
         }
     }
 });
@@ -315,29 +341,12 @@ new Chart(document.getElementById('budgetTypePie'), {
     }
 });
 
-// Dept ranking horizontal bar
+// Dept ranking stacked bar
 new Chart(document.getElementById('deptRankBar'), {
     type: 'bar',
     data: {
         labels: {!! json_encode($deptTotals->pluck('name')->toArray()) !!},
-        datasets: [
-            {
-                label: 'Q1', data: {!! json_encode($deptTotals->pluck('q1')->toArray()) !!},
-                backgroundColor:'#1B2A4A', borderRadius:4, borderSkipped:false,
-            },
-            {
-                label: 'Q2', data: {!! json_encode($deptTotals->pluck('q2')->toArray()) !!},
-                backgroundColor:'#C9A84C', borderRadius:4, borderSkipped:false,
-            },
-            {
-                label: 'Q3', data: {!! json_encode($deptTotals->pluck('q3')->toArray()) !!},
-                backgroundColor:'#10B981', borderRadius:4, borderSkipped:false,
-            },
-            {
-                label: 'Q4', data: {!! json_encode($deptTotals->pluck('q4')->toArray()) !!},
-                backgroundColor:'#6366F1', borderRadius:4, borderSkipped:false,
-            },
-        ]
+        datasets: {!! json_encode($rankDatasets) !!},
     },
     options: {
         responsive: true,

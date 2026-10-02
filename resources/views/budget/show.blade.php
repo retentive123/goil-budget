@@ -103,25 +103,25 @@
     $effectiveTotal = $grandTotals['total'];
 @endphp
 
-<div class="card mb-3 border-0 bg-goil-orange">
-    <div class="card-body py-2">
-        <div class="row text-center">
+@php
+    $gtIsMonthly  = ($entryMode ?? 'quarterly') === 'monthly';
+    $gtPeriodCols = $gtIsMonthly
+        ? ['m1'=>'Jan','m2'=>'Feb','m3'=>'Mar','m4'=>'Apr','m5'=>'May','m6'=>'Jun',
+           'm7'=>'Jul','m8'=>'Aug','m9'=>'Sep','m10'=>'Oct','m11'=>'Nov','m12'=>'Dec']
+        : ['q1'=>'Q1','q2'=>'Q2','q3'=>'Q3','q4'=>'Q4'];
+@endphp
+<div class="card mb-3 border-0 bg-goil-orange" style="{{ $gtIsMonthly ? 'overflow-x:auto;' : '' }}">
+    <div class="card-body py-2" style="{{ $gtIsMonthly ? 'min-width:900px;' : '' }}">
+        <div class="row text-center flex-nowrap">
+            @foreach($gtPeriodCols as $pk => $pl)
             <div class="col">
-                <div class="small text-white-50">Q1</div>
-                <div class="fw-bold" id="gt-q1">{{ currency() }} {{ number_format($grandTotals['q1'], 2) }}</div>
+                <div class="small text-white-50">{{ $pl }}</div>
+                <div class="fw-bold {{ $gtIsMonthly ? '' : '' }}" id="gt-{{ $pk }}"
+                     style="{{ $gtIsMonthly ? 'font-size:12px;' : '' }}">
+                    {{ currency() }} {{ number_format($grandTotals[$pk] ?? 0, 2) }}
+                </div>
             </div>
-            <div class="col">
-                <div class="small text-white-50">Q2</div>
-                <div class="fw-bold" id="gt-q2">{{ currency() }} {{ number_format($grandTotals['q2'], 2) }}</div>
-            </div>
-            <div class="col">
-                <div class="small text-white-50">Q3</div>
-                <div class="fw-bold" id="gt-q3">{{ currency() }} {{ number_format($grandTotals['q3'], 2) }}</div>
-            </div>
-            <div class="col">
-                <div class="small text-white-50">Q4</div>
-                <div class="fw-bold" id="gt-q4">{{ currency() }} {{ number_format($grandTotals['q4'], 2) }}</div>
-            </div>
+            @endforeach
             <div class="col border-start border-secondary">
                 <div class="small text-white-50">Original Total</div>
                 <div class="fw-bold" id="gt-total">{{ currency() }} {{ number_format($grandTotals['total'], 2) }}</div>
@@ -208,7 +208,7 @@
 {{-- ──────────────────────────────────────────────────────────
      Calc-mode legend (shown when not 'none')
      ────────────────────────────────────────────────────────── --}}
-@if($calcMode !== 'none')
+@if($calcMode !== 'none' && $budgetVersion->isEditable())
 <div class="alert mb-3 d-flex align-items-start gap-3"
      style="background:#F5F3FF;border:1px solid #C4B5FD;border-radius:10px;
             color:#4C1D95;font-size:13px;">
@@ -279,32 +279,15 @@
 
 <div class="tab-content border border-top-0 rounded-bottom mb-3" id="budgetTabsContent">
 @foreach($budgetTabGroups as $btab)
-<div class="tab-pane fade {{ $btab['active'] ? 'show active' : '' }} p-3"
+<div class="tab-pane fade {{ $btab['active'] ? 'show active' : '' }} p-0"
      id="{{ $btab['id'] }}" role="tabpanel">
-    @forelse($btab['summary'] as $categoryName => $categoryData)
-    @php
-        $catSupp = $categoryData['items']->sum(fn($i) => $i->approvedSupplementaryTotal());
-    @endphp
-    <div class="card shadow-sm mb-3">
-        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
-            <span class="fw-semibold small text-uppercase">{{ $categoryName }}</span>
-            <span class="small text-muted">
-                Original: <strong class="cat-header-orig">{{ currency() }} {{ number_format($categoryData['total'], 2) }}</strong>
-                @if($catSupp > 0)
-                <span style="color:#10B981;">+{{ currency() }} {{ number_format($catSupp, 2) }} supp.</span>
-                <span class="cat-header-eff" style="color:var(--navy);font-weight:700;">
-                    | Effective: {{ currency() }} {{ number_format($categoryData['total'] + $catSupp, 2) }}
-                </span>
-                @endif
-            </span>
-        </div>
-        @php
-            $monthLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        @endphp
+    @php $monthLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; @endphp
+    @if(!empty($btab['summary']))
+    <div class="card shadow-sm border-0">
         <div class="card-body p-0" style="overflow-x:auto;">
             <table class="table table-sm table-hover mb-0"
                    style="{{ $calcMode !== 'none' ? 'min-width:900px;' : ($entryMode === 'monthly' ? 'min-width:1400px;' : '') }}">
-                <thead class="table-light">
+                <thead class="table-light sticky-top" style="z-index:1">
                     <tr>
                         <th style="min-width:180px;">Account</th>
 
@@ -328,9 +311,9 @@
                             </th>
                             @endif
                             <th class="text-end" style="min-width:130px;">Year Total</th>
-                            @if($manualSplit && $entryMode === 'monthly')
+                            @if($entryMode === 'monthly')
                                 @foreach(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] as $ml)
-                                <th class="text-end" style="min-width:80px;">{{ $ml }}</th>
+                                <th class="text-end" style="min-width:80px;">{{ $ml }}{{ $manualSplit ? ' ✎' : '' }}</th>
                                 @endforeach
                             @else
                             <th class="text-end" style="min-width:100px;">Q1{{ $manualSplit ? ' ✎' : '' }}</th>
@@ -360,6 +343,21 @@
                     </tr>
                 </thead>
                 <tbody>
+    @forelse($btab['summary'] as $categoryName => $categoryData)
+    @php
+        $catIdx  = $loop->index;
+        $catSupp = $categoryData['items']->sum(fn($i) => $i->approvedSupplementaryTotal());
+    @endphp
+    {{-- Category separator row --}}
+    <tr style="background:#EFF3F9">
+        <td colspan="99" style="padding:7px 14px;font-size:11px;font-weight:700;color:#1B2A4A;text-transform:uppercase;letter-spacing:.5px">
+            {{ $categoryName }}
+            <span class="fw-normal text-muted ms-2" style="text-transform:none;letter-spacing:0;font-size:12px">
+                {{ currency() }} <span class="cat-header-orig-{{ $catIdx }}">{{ number_format($categoryData['total'], 2) }}</span>
+                @if($catSupp > 0)&nbsp;<span style="color:#10B981">+{{ number_format($catSupp, 2) }} supp</span>@endif
+            </span>
+        </td>
+    </tr>
                     @foreach($categoryData['items'] as $item)
                     @php
                         $itemSupp      = $item->approvedSupplementaryTotal();
@@ -378,7 +376,7 @@
                         $displayQ3 = $item->q3_amount;
                         $displayQ4 = $item->q4_amount;
                     @endphp
-                    <tr data-item-id="{{ $item->id }}" data-supp="{{ $itemSupp }}">
+                    <tr data-item-id="{{ $item->id }}" data-supp="{{ $itemSupp }}" data-cat="{{ $catIdx }}">
                         <td class="small">
                             <code>{{ $item->accountCode->code }}</code>
                             {{ $item->accountCode->name }}
@@ -461,7 +459,7 @@
                             {{-- Computed year total + live split-balance indicator --}}
                             <td class="text-end fw-semibold row-original"
                                 style="color:var(--navy);min-width:130px">
-                                {{ number_format($item->total_amount, 2) }}
+                                <span class="year-total-num">{{ number_format($item->total_amount, 2) }}</span>
                                 @if($manualSplit)
                                 <div class="split-remain"
                                      data-computed="{{ $item->total_amount }}"
@@ -469,57 +467,75 @@
                                             margin-top:3px;line-height:1.2">
                                     &nbsp;
                                 </div>
+                                <button type="button"
+                                        onclick="autoSplitEqual(this)"
+                                        title="Split total equally across {{ $entryMode === 'monthly' ? '12 months' : '4 quarters' }}"
+                                        style="margin-top:4px;font-size:9px;padding:1px 6px;border-radius:4px;
+                                               background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;
+                                               cursor:pointer;white-space:nowrap;display:inline-block;
+                                               line-height:1.5;font-weight:600;">
+                                    ÷ equal
+                                </button>
                                 @endif
                             </td>
 
-                            @if($manualSplit && $entryMode === 'monthly')
-                                {{-- Manual monthly split inputs --}}
-                                @foreach(range(1,12) as $mn)
-                                <td>
-                                    <input type="number"
-                                        class="form-control form-control-sm split-input m{{ $mn }}-split text-end"
-                                        value="{{ $item->{'m'.$mn.'_amount'} }}"
-                                        min="0" step="0.01"
-                                        placeholder="0.00"
-                                        oninput="updateSplitBalance(this)">
-                                </td>
-                                @endforeach
-                            @elseif($manualSplit)
-                                {{-- Manual quarterly split inputs --}}
-                                <td>
-                                    <input type="number"
-                                        class="form-control form-control-sm split-input q1-split text-end"
-                                        value="{{ number_format($displayQ1, 2, '.', '') }}"
-                                        min="0" step="0.01"
-                                        oninput="updateSplitBalance(this)">
-                                </td>
-                                <td>
-                                    <input type="number"
-                                        class="form-control form-control-sm split-input q2-split text-end"
-                                        value="{{ number_format($displayQ2, 2, '.', '') }}"
-                                        min="0" step="0.01"
-                                        oninput="updateSplitBalance(this)">
-                                </td>
-                                <td>
-                                    <input type="number"
-                                        class="form-control form-control-sm split-input q3-split text-end"
-                                        value="{{ number_format($displayQ3, 2, '.', '') }}"
-                                        min="0" step="0.01"
-                                        oninput="updateSplitBalance(this)">
-                                </td>
-                                <td>
-                                    <input type="number"
-                                        class="form-control form-control-sm split-input q4-split text-end"
-                                        value="{{ number_format($displayQ4, 2, '.', '') }}"
-                                        min="0" step="0.01"
-                                        oninput="updateSplitBalance(this)">
-                                </td>
+                            @if($entryMode === 'monthly')
+                                @if($manualSplit)
+                                    {{-- Manual monthly split inputs --}}
+                                    @foreach(range(1,12) as $mn)
+                                    <td>
+                                        <input type="number"
+                                            class="form-control form-control-sm split-input m{{ $mn }}-split text-end"
+                                            value="{{ $item->{'m'.$mn.'_amount'} }}"
+                                            min="0" step="0.01"
+                                            placeholder="0.00"
+                                            oninput="updateSplitBalance(this)">
+                                    </td>
+                                    @endforeach
+                                @else
+                                    {{-- Auto-distributed monthly display (read-only) --}}
+                                    @foreach(range(1,12) as $mn)
+                                    <td class="text-end small text-muted m{{ $mn }}-display">{{ number_format($item->{'m'.$mn.'_amount'}, 2) }}</td>
+                                    @endforeach
+                                @endif
                             @else
-                                {{-- Auto-distributed quarterly display (read-only) --}}
-                                <td class="text-end small text-muted q1-display">{{ number_format($displayQ1, 2) }}</td>
-                                <td class="text-end small text-muted q2-display">{{ number_format($displayQ2, 2) }}</td>
-                                <td class="text-end small text-muted q3-display">{{ number_format($displayQ3, 2) }}</td>
-                                <td class="text-end small text-muted q4-display">{{ number_format($displayQ4, 2) }}</td>
+                                @if($manualSplit)
+                                    {{-- Manual quarterly split inputs --}}
+                                    <td>
+                                        <input type="number"
+                                            class="form-control form-control-sm split-input q1-split text-end"
+                                            value="{{ number_format($displayQ1, 2, '.', '') }}"
+                                            min="0" step="0.01"
+                                            oninput="updateSplitBalance(this)">
+                                    </td>
+                                    <td>
+                                        <input type="number"
+                                            class="form-control form-control-sm split-input q2-split text-end"
+                                            value="{{ number_format($displayQ2, 2, '.', '') }}"
+                                            min="0" step="0.01"
+                                            oninput="updateSplitBalance(this)">
+                                    </td>
+                                    <td>
+                                        <input type="number"
+                                            class="form-control form-control-sm split-input q3-split text-end"
+                                            value="{{ number_format($displayQ3, 2, '.', '') }}"
+                                            min="0" step="0.01"
+                                            oninput="updateSplitBalance(this)">
+                                    </td>
+                                    <td>
+                                        <input type="number"
+                                            class="form-control form-control-sm split-input q4-split text-end"
+                                            value="{{ number_format($displayQ4, 2, '.', '') }}"
+                                            min="0" step="0.01"
+                                            oninput="updateSplitBalance(this)">
+                                    </td>
+                                @else
+                                    {{-- Auto-distributed quarterly display (read-only) --}}
+                                    <td class="text-end small text-muted q1-display">{{ number_format($displayQ1, 2) }}</td>
+                                    <td class="text-end small text-muted q2-display">{{ number_format($displayQ2, 2) }}</td>
+                                    <td class="text-end small text-muted q3-display">{{ number_format($displayQ3, 2) }}</td>
+                                    <td class="text-end small text-muted q4-display">{{ number_format($displayQ4, 2) }}</td>
+                                @endif
                             @endif
 
                             {{-- Supplementary & Effective --}}
@@ -597,10 +613,16 @@
                                 <td class="text-end small">{{ $item->frequency !== null ? number_format($item->frequency, 4) : '—' }}</td>
                                 @endif
                                 <td class="text-end small fw-semibold">{{ number_format($item->total_amount, 2) }}</td>
+                                @if($entryMode === 'monthly')
+                                    @foreach(range(1,12) as $mn)
+                                    <td class="text-end small text-muted">{{ number_format($item->{'m'.$mn.'_amount'}, 2) }}</td>
+                                    @endforeach
+                                @else
                                 <td class="text-end small text-muted">{{ number_format($displayQ1, 2) }}</td>
                                 <td class="text-end small text-muted">{{ number_format($displayQ2, 2) }}</td>
                                 <td class="text-end small text-muted">{{ number_format($displayQ3, 2) }}</td>
                                 <td class="text-end small text-muted">{{ number_format($displayQ4, 2) }}</td>
+                                @endif
                             @elseif($entryMode === 'monthly')
                                 @foreach(range(1,12) as $mn)
                                 <td class="text-end small">{{ number_format($item->{'m'.$mn.'_amount'}, 2) }}</td>
@@ -620,55 +642,57 @@
                         @endif
                     </tr>
                     @endforeach
+    {{-- Category total row --}}
+    <tr style="background:#F8FAFC;font-weight:700;" data-cat-foot="{{ $catIdx }}" data-cat-supp="{{ $catSupp }}">
+        <td style="padding-left:14px">Category Total</td>
+        @if($calcMode !== 'none')
+            <td></td><td></td>
+            @if($calcMode === 'qty_rate_freq')<td></td>@endif
+            <td class="text-end" data-foot="yearTotal">{{ number_format($categoryData['total'], 2) }}</td>
+            @if($entryMode === 'monthly')
+                @foreach(range(1,12) as $mn)
+                <td class="text-end" data-foot="m{{ $mn }}">{{ number_format($categoryData["m{$mn}"] ?? 0, 2) }}</td>
+                @endforeach
+            @else
+                <td class="text-end" data-foot="q1">{{ number_format($categoryData['q1'], 2) }}</td>
+                <td class="text-end" data-foot="q2">{{ number_format($categoryData['q2'], 2) }}</td>
+                <td class="text-end" data-foot="q3">{{ number_format($categoryData['q3'], 2) }}</td>
+                <td class="text-end" data-foot="q4">{{ number_format($categoryData['q4'], 2) }}</td>
+            @endif
+        @elseif($entryMode === 'monthly')
+            @foreach(range(1,12) as $mn)
+            <td class="text-end">{{ number_format($categoryData["m{$mn}"], 2) }}</td>
+            @endforeach
+            <td class="text-end">{{ number_format($categoryData['total'], 2) }}</td>
+        @else
+            <td class="text-end">{{ number_format($categoryData['q1'], 2) }}</td>
+            <td class="text-end">{{ number_format($categoryData['q2'], 2) }}</td>
+            <td class="text-end">{{ number_format($categoryData['q3'], 2) }}</td>
+            <td class="text-end">{{ number_format($categoryData['q4'], 2) }}</td>
+            <td class="text-end">{{ number_format($categoryData['total'], 2) }}</td>
+        @endif
+        <td class="text-end" style="color:{{ $catSupp > 0 ? '#10B981' : 'inherit' }}">
+            {{ $catSupp > 0 ? '+'.number_format($catSupp, 2) : '—' }}
+        </td>
+        <td class="text-end" data-foot="eff" style="color:var(--navy)">
+            {{ number_format($categoryData['total'] + $catSupp, 2) }}
+        </td>
+        @if($budgetVersion->isEditable())
+        <td></td>
+        @endif
+    </tr>
+    @empty
+    @endforelse
                 </tbody>
-
-                {{-- Category footer --}}
-                <tfoot style="background:#F8FAFC;font-weight:700;"
-                       data-cat-supp="{{ $catSupp }}">
-                    <tr>
-                        <td>Category Total</td>
-                        @if($calcMode !== 'none')
-                            {{-- Blank spacers align with qty / rate [/ freq] input columns --}}
-                            <td></td><td></td>
-                            @if($calcMode === 'qty_rate_freq')<td></td>@endif
-                            {{-- data-foot lets JS find cells without fragile index arithmetic --}}
-                            <td class="text-end" data-foot="yearTotal">{{ number_format($categoryData['total'], 2) }}</td>
-                            <td class="text-end" data-foot="q1">{{ number_format($categoryData['q1'], 2) }}</td>
-                            <td class="text-end" data-foot="q2">{{ number_format($categoryData['q2'], 2) }}</td>
-                            <td class="text-end" data-foot="q3">{{ number_format($categoryData['q3'], 2) }}</td>
-                            <td class="text-end" data-foot="q4">{{ number_format($categoryData['q4'], 2) }}</td>
-                        @elseif($entryMode === 'monthly')
-                            @foreach(range(1,12) as $mn)
-                            <td class="text-end">{{ number_format($categoryData["m{$mn}"], 2) }}</td>
-                            @endforeach
-                            <td class="text-end">{{ number_format($categoryData['total'], 2) }}</td>
-                        @else
-                            <td class="text-end">{{ number_format($categoryData['q1'], 2) }}</td>
-                            <td class="text-end">{{ number_format($categoryData['q2'], 2) }}</td>
-                            <td class="text-end">{{ number_format($categoryData['q3'], 2) }}</td>
-                            <td class="text-end">{{ number_format($categoryData['q4'], 2) }}</td>
-                            <td class="text-end">{{ number_format($categoryData['total'], 2) }}</td>
-                        @endif
-                        <td class="text-end" style="color:{{ $catSupp > 0 ? '#10B981' : 'inherit' }}">
-                            {{ $catSupp > 0 ? '+'.number_format($catSupp, 2) : '—' }}
-                        </td>
-                        <td class="text-end" data-foot="eff" style="color:var(--navy)">
-                            {{ number_format($categoryData['total'] + $catSupp, 2) }}
-                        </td>
-                        @if($budgetVersion->isEditable())
-                        <td></td>
-                        @endif
-                    </tr>
-                </tfoot>
             </table>
         </div>
     </div>
-    @empty
+    @else
     <div class="text-center text-muted py-5">
         <i class="bi bi-inbox d-block mb-2" style="font-size:2rem;opacity:.3"></i>
         No items in this section yet.
     </div>
-    @endforelse
+    @endif
 </div>
 @endforeach
 </div>
@@ -707,18 +731,29 @@
                 : 1;
             orig = qty * rate * freq;
 
-            // Year total cell
+            // Year total cell — update only the number span so split-remain/button survive
             const ytEl = row.querySelector('.row-original');
-            if (ytEl) ytEl.textContent = numFmt(orig);
+            const ytNum = ytEl?.querySelector('.year-total-num') ?? ytEl;
+            if (ytNum) ytNum.textContent = numFmt(orig);
 
             if (!MANUAL_SPLIT) {
-                // Quarterly split display (equal quarters, auto-distributed)
-                const qShare = orig / 4;
-                const qVals  = [qShare, qShare, qShare, orig - qShare * 3];
-                ['q1-display','q2-display','q3-display','q4-display'].forEach((cls, i) => {
-                    const el = row.querySelector('.' + cls);
-                    if (el) el.textContent = numFmt(qVals[i]);
-                });
+                if (ENTRY_MODE === 'monthly') {
+                    // Monthly display (equal 12 months, auto-distributed)
+                    const mShare = Math.round(orig / 12 * 100) / 100;
+                    const mLast  = Math.round((orig - mShare * 11) * 100) / 100;
+                    for (let i = 1; i <= 12; i++) {
+                        const el = row.querySelector(`.m${i}-display`);
+                        if (el) el.textContent = numFmt(i === 12 ? mLast : mShare);
+                    }
+                } else {
+                    // Quarterly display (equal quarters, auto-distributed)
+                    const qShare = orig / 4;
+                    const qVals  = [qShare, qShare, qShare, orig - qShare * 3];
+                    ['q1-display','q2-display','q3-display','q4-display'].forEach((cls, i) => {
+                        const el = row.querySelector('.' + cls);
+                        if (el) el.textContent = numFmt(qVals[i]);
+                    });
+                }
             } else {
                 // Manual split: highlight balance status
                 updateSplitBalance(row.querySelector('.split-input') || row);
@@ -736,10 +771,13 @@
 
         const origEl = row.querySelector('.row-original');
         const effEl  = row.querySelector('.row-total');
-        if (origEl && CALC_MODE === 'none') origEl.textContent = numFmt(orig);
+        if (origEl && CALC_MODE === 'none') {
+            const origNum = origEl.querySelector('.year-total-num') ?? origEl;
+            origNum.textContent = numFmt(orig);
+        }
         if (effEl)  effEl.textContent  = numFmt(orig + supp);
 
-        updateCategoryFooter(row.closest('table'));
+        updateCategoryFooter(row);
         updateGrandTotals();
         scheduleAutoSave();
     }
@@ -815,16 +853,62 @@
         scheduleAutoSave();
     }
 
-    function updateCategoryFooter(table) {
-        const rows    = table.querySelectorAll('tbody tr[data-item-id]');
-        const tfoot   = table.querySelector('tfoot');
-        if (!tfoot) return;
-        const catSupp = parseFloat(tfoot.dataset.catSupp) || 0;
-        const cells   = tfoot.querySelectorAll('td');
+    // ── Auto-split equally across all periods ─────────────────────────────────
+    function autoSplitEqual(btn) {
+        const row = btn.closest('tr[data-item-id]');
+        if (!row) return;
+
+        // Resolve the total using the same logic as updateSplitBalance
+        const qty  = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
+        const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
+        const freq = CALC_MODE === 'qty_rate_freq'
+            ? parseFloat(row.querySelector('.freq-input')?.value || '1')
+            : 1;
+        const liveComputed = Math.round(qty * rate * freq * 100) / 100;
+        const indicator = row.querySelector('.split-remain');
+        const total = liveComputed > 0
+            ? liveComputed
+            : parseFloat(indicator?.dataset?.computed || '0');
+
+        if (total === 0) return;
+
+        if (ENTRY_MODE === 'monthly') {
+            const share = Math.floor(total / 12 * 100) / 100;
+            const last  = Math.round((total - share * 11) * 100) / 100;
+            for (let m = 1; m <= 12; m++) {
+                const inp = row.querySelector(`.m${m}-split`);
+                if (inp) inp.value = (m === 12 ? last : share).toFixed(2);
+            }
+        } else {
+            const share = Math.floor(total / 4 * 100) / 100;
+            const last  = Math.round((total - share * 3) * 100) / 100;
+            ['q1-split','q2-split','q3-split','q4-split'].forEach((cls, i) => {
+                const inp = row.querySelector(`.${cls}`);
+                if (inp) inp.value = (i === 3 ? last : share).toFixed(2);
+            });
+        }
+
+        updateSplitBalance(row.querySelector('.split-input') || row);
+    }
+
+    function updateCategoryFooter(itemRow) {
+        const catIdx  = itemRow.dataset.cat;
+        const tbody   = itemRow.closest('tbody');
+        if (!tbody || catIdx === undefined) return;
+        const rows    = tbody.querySelectorAll(`tr[data-item-id][data-cat="${catIdx}"]`);
+        const footRow = tbody.querySelector(`tr[data-cat-foot="${catIdx}"]`);
+        if (!footRow) return;
+        const catSupp = parseFloat(footRow.dataset.catSupp) || 0;
+        const fq      = name => footRow.querySelector(`[data-foot="${name}"]`);
 
         if (CALC_MODE !== 'none') {
             let orig = 0;
-            const qs = [0, 0, 0, 0];
+            const ps = {};
+            if (ENTRY_MODE === 'monthly') {
+                for (let m = 1; m <= 12; m++) ps[`m${m}`] = 0;
+            } else {
+                ['q1','q2','q3','q4'].forEach(k => ps[k] = 0);
+            }
             rows.forEach(row => {
                 const qty  = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
                 const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
@@ -834,28 +918,34 @@
                     : 1;
                 const rowTotal = qty * rate * freq;
                 orig += rowTotal;
-                const qShare = rowTotal / 4;
-                qs[0] += qShare; qs[1] += qShare; qs[2] += qShare; qs[3] += rowTotal - qShare * 3;
+                if (ENTRY_MODE === 'monthly') {
+                    const share = Math.round(rowTotal / 12 * 100) / 100;
+                    for (let m = 1; m <= 12; m++) {
+                        ps[`m${m}`] += (m === 12 ? Math.round((rowTotal - share * 11) * 100) / 100 : share);
+                    }
+                } else {
+                    const qShare = rowTotal / 4;
+                    ps.q1 += qShare; ps.q2 += qShare; ps.q3 += qShare;
+                    ps.q4 += rowTotal - qShare * 3;
+                }
             });
 
-            // Use data-foot attributes — no fragile cell-index arithmetic needed
-            const foot = tfoot.querySelector('tr');
-            const fq = name => foot?.querySelector(`[data-foot="${name}"]`);
             const ytEl = fq('yearTotal'); if (ytEl) ytEl.textContent = numFmt(orig);
-            const qLabels = ['q1','q2','q3','q4'];
-            qLabels.forEach((lbl, i) => { const c = fq(lbl); if (c) c.textContent = numFmt(qs[i]); });
+            if (ENTRY_MODE === 'monthly') {
+                for (let m = 1; m <= 12; m++) {
+                    const c = fq(`m${m}`); if (c) c.textContent = numFmt(ps[`m${m}`]);
+                }
+            } else {
+                ['q1','q2','q3','q4'].forEach(lbl => { const c = fq(lbl); if (c) c.textContent = numFmt(ps[lbl]); });
+            }
             const effCell = fq('eff');
             if (effCell) effCell.textContent = numFmt(orig + catSupp);
 
-            const card = table.closest('.card');
-            if (card) {
-                const hOrig = card.querySelector('.cat-header-orig');
-                const hEff  = card.querySelector('.cat-header-eff');
-                if (hOrig) hOrig.textContent = CUR + ' ' + numFmt(orig);
-                if (hEff)  hEff.textContent  = '| Effective: ' + CUR + ' ' + numFmt(orig + catSupp);
-            }
+            const hOrig = tbody.querySelector(`.cat-header-orig-${catIdx}`);
+            if (hOrig) hOrig.textContent = numFmt(orig);
 
         } else if (ENTRY_MODE === 'monthly') {
+            const cells = Array.from(footRow.querySelectorAll('td'));
             const ms = new Array(12).fill(0);
             let orig = 0;
             rows.forEach(row => {
@@ -870,14 +960,10 @@
             }
             if (cells[13]) cells[13].textContent = numFmt(orig);
             if (cells[15]) cells[15].textContent = numFmt(orig + catSupp);
-            const card = table.closest('.card');
-            if (card) {
-                const hOrig = card.querySelector('.cat-header-orig');
-                const hEff  = card.querySelector('.cat-header-eff');
-                if (hOrig) hOrig.textContent = CUR + ' ' + numFmt(orig);
-                if (hEff)  hEff.textContent  = '| Effective: ' + CUR + ' ' + numFmt(orig + catSupp);
-            }
+            const hOrig = tbody.querySelector(`.cat-header-orig-${catIdx}`);
+            if (hOrig) hOrig.textContent = numFmt(orig);
         } else {
+            const cells = Array.from(footRow.querySelectorAll('td'));
             let q1=0, q2=0, q3=0, q4=0, orig=0;
             rows.forEach(row => {
                 const rq1 = parseFloat(row.querySelector('.q1')?.value) || 0;
@@ -893,73 +979,81 @@
             if (cells[4]) cells[4].textContent = numFmt(q4);
             if (cells[5]) cells[5].textContent = numFmt(orig);
             if (cells[7]) cells[7].textContent = numFmt(orig + catSupp);
-            const card = table.closest('.card');
-            if (card) {
-                const hOrig = card.querySelector('.cat-header-orig');
-                const hEff  = card.querySelector('.cat-header-eff');
-                if (hOrig) hOrig.textContent = CUR + ' ' + numFmt(orig);
-                if (hEff)  hEff.textContent  = '| Effective: ' + CUR + ' ' + numFmt(orig + catSupp);
-            }
+            const hOrig = tbody.querySelector(`.cat-header-orig-${catIdx}`);
+            if (hOrig) hOrig.textContent = numFmt(orig);
         }
     }
 
     function updateGrandTotals() {
-        let q1=0, q2=0, q3=0, q4=0, orig=0, totalSupp=0;
+        const fmt = v => CUR + ' ' + numFmt(v);
+        const el  = id => document.getElementById(id);
+        let orig = 0, totalSupp = 0;
 
-        document.querySelectorAll('tr[data-item-id]').forEach(row => {
-            const supp = parseFloat(row.dataset.supp) || 0;
-            totalSupp += supp;
-
-            if (CALC_MODE !== 'none') {
-                const qty  = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
-                const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
-                const freq = CALC_MODE === 'qty_rate_freq'
-                    ? parseFloat(row.querySelector('.freq-input')?.value || '1')
-                    : 1;
-                const rowTotal = qty * rate * freq;
-                orig += rowTotal;
-                if (MANUAL_SPLIT) {
-                    if (ENTRY_MODE === 'monthly') {
-                        const ms = [1,2,3,4,5,6,7,8,9,10,11,12].map(n =>
-                            parseFloat(row.querySelector(`.m${n}-split`)?.value) || 0);
-                        q1 += ms[0]+ms[1]+ms[2];
-                        q2 += ms[3]+ms[4]+ms[5];
-                        q3 += ms[6]+ms[7]+ms[8];
-                        q4 += ms[9]+ms[10]+ms[11];
+        if (ENTRY_MODE === 'monthly') {
+            const mTotals = new Array(12).fill(0);
+            document.querySelectorAll('tr[data-item-id]').forEach(row => {
+                totalSupp += parseFloat(row.dataset.supp) || 0;
+                if (CALC_MODE !== 'none') {
+                    const qty      = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
+                    const rate     = parseFloat(row.querySelector('.rate-input')?.value) || 0;
+                    const freq     = CALC_MODE === 'qty_rate_freq'
+                        ? parseFloat(row.querySelector('.freq-input')?.value || '1') : 1;
+                    const rowTotal = qty * rate * freq;
+                    orig += rowTotal;
+                    if (MANUAL_SPLIT) {
+                        [1,2,3,4,5,6,7,8,9,10,11,12].forEach((n,i) => {
+                            mTotals[i] += parseFloat(row.querySelector(`.m${n}-split`)?.value) || 0;
+                        });
                     } else {
+                        const share = rowTotal / 12;
+                        mTotals.forEach((_,i) => mTotals[i] += share);
+                    }
+                } else {
+                    [1,2,3,4,5,6,7,8,9,10,11,12].forEach((n,i) => {
+                        const v = parseFloat(row.querySelector(`.m${n}`)?.value) || 0;
+                        mTotals[i] += v;
+                        orig += v;
+                    });
+                }
+            });
+            [1,2,3,4,5,6,7,8,9,10,11,12].forEach((n,i) => {
+                if (el(`gt-m${n}`)) el(`gt-m${n}`).textContent = fmt(mTotals[i]);
+            });
+        } else {
+            let q1=0, q2=0, q3=0, q4=0;
+            document.querySelectorAll('tr[data-item-id]').forEach(row => {
+                totalSupp += parseFloat(row.dataset.supp) || 0;
+                if (CALC_MODE !== 'none') {
+                    const qty      = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
+                    const rate     = parseFloat(row.querySelector('.rate-input')?.value) || 0;
+                    const freq     = CALC_MODE === 'qty_rate_freq'
+                        ? parseFloat(row.querySelector('.freq-input')?.value || '1') : 1;
+                    const rowTotal = qty * rate * freq;
+                    orig += rowTotal;
+                    if (MANUAL_SPLIT) {
                         q1 += parseFloat(row.querySelector('.q1-split')?.value) || 0;
                         q2 += parseFloat(row.querySelector('.q2-split')?.value) || 0;
                         q3 += parseFloat(row.querySelector('.q3-split')?.value) || 0;
                         q4 += parseFloat(row.querySelector('.q4-split')?.value) || 0;
+                    } else {
+                        const qShare = rowTotal / 4;
+                        q1 += qShare; q2 += qShare; q3 += qShare; q4 += rowTotal - qShare * 3;
                     }
                 } else {
-                    const qShare = rowTotal / 4;
-                    q1 += qShare; q2 += qShare; q3 += qShare; q4 += rowTotal - qShare * 3;
+                    const rq1 = parseFloat(row.querySelector('.q1')?.value) || 0;
+                    const rq2 = parseFloat(row.querySelector('.q2')?.value) || 0;
+                    const rq3 = parseFloat(row.querySelector('.q3')?.value) || 0;
+                    const rq4 = parseFloat(row.querySelector('.q4')?.value) || 0;
+                    q1 += rq1; q2 += rq2; q3 += rq3; q4 += rq4;
+                    orig += rq1 + rq2 + rq3 + rq4;
                 }
-            } else if (ENTRY_MODE === 'monthly') {
-                const ms = [1,2,3,4,5,6,7,8,9,10,11,12].map(n =>
-                    parseFloat(row.querySelector(`.m${n}`)?.value) || 0);
-                q1 += ms[0]+ms[1]+ms[2];
-                q2 += ms[3]+ms[4]+ms[5];
-                q3 += ms[6]+ms[7]+ms[8];
-                q4 += ms[9]+ms[10]+ms[11];
-                orig += ms.reduce((a,b) => a+b, 0);
-            } else {
-                const rq1 = parseFloat(row.querySelector('.q1')?.value) || 0;
-                const rq2 = parseFloat(row.querySelector('.q2')?.value) || 0;
-                const rq3 = parseFloat(row.querySelector('.q3')?.value) || 0;
-                const rq4 = parseFloat(row.querySelector('.q4')?.value) || 0;
-                q1 += rq1; q2 += rq2; q3 += rq3; q4 += rq4;
-                orig += rq1 + rq2 + rq3 + rq4;
-            }
-        });
+            });
+            if (el('gt-q1')) el('gt-q1').textContent = fmt(q1);
+            if (el('gt-q2')) el('gt-q2').textContent = fmt(q2);
+            if (el('gt-q3')) el('gt-q3').textContent = fmt(q3);
+            if (el('gt-q4')) el('gt-q4').textContent = fmt(q4);
+        }
 
-        const fmt = v => CUR + ' ' + numFmt(v);
-        const el  = id => document.getElementById(id);
-        if (el('gt-q1'))        el('gt-q1').textContent        = fmt(q1);
-        if (el('gt-q2'))        el('gt-q2').textContent        = fmt(q2);
-        if (el('gt-q3'))        el('gt-q3').textContent        = fmt(q3);
-        if (el('gt-q4'))        el('gt-q4').textContent        = fmt(q4);
         if (el('gt-total'))     el('gt-total').textContent     = fmt(orig);
         if (el('gt-effective')) el('gt-effective').textContent = fmt(orig + totalSupp);
     }
@@ -1100,12 +1194,14 @@
             });
             if (unbalancedRows.length > 0) {
                 const n = unbalancedRows.length;
-                alert(
-                    `${n} line item${n === 1 ? ' has' : 's have'} unbalanced period splits.\n\n` +
-                    `All split amounts must equal the line item total before you can submit.\n\n` +
-                    `Look for amber (↓ left) or red (↑ over) indicators in the Year Total column.`
-                );
-                return; // don't even attempt save
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Unbalanced Splits',
+                    html: `<b>${n} line item${n === 1 ? '' : 's'}</b> ${n === 1 ? 'has' : 'have'} period splits that don't add up to the line total.<br><br>Look for <span style="color:#F59E0B">amber (↓ left)</span> or <span style="color:#F43F5E">red (↑ over)</span> indicators in the Year Total column.`,
+                    confirmButtonText: 'OK, I\'ll fix it',
+                    confirmButtonColor: '#E65C00',
+                });
+                return;
             }
         }
 
@@ -1117,10 +1213,13 @@
         const saved = await saveBudget();
 
         if (!saved) {
-            // Save failed (network, validation, or unbalanced splits) — block navigation
             const msg = (status && status.textContent) || 'Save failed.';
-            alert('Cannot submit — the budget could not be saved:\n\n' + msg +
-                  '\n\nFix the issue and try again.');
+            Swal.fire({
+                icon: 'error',
+                title: 'Save Failed',
+                text: msg,
+                confirmButtonColor: '#E65C00',
+            });
             btn.textContent = 'Submit for Approval →';
             btn.style.opacity = '';
             btn.style.pointerEvents = '';

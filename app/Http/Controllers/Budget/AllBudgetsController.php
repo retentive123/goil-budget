@@ -181,10 +181,12 @@ class AllBudgetsController extends Controller
             ->with('accountCode', 'requestedBy', 'approvedBy')
             ->get();
 
+        $entryMode = $budgetVersion->period->entry_mode ?? 'quarterly';
+
         return view('budgets.all.show', compact(
             'budgetVersion', 'summary', 'grandTotals',
             'progress', 'canDecide', 'currentStage',
-            'actualsPerItem', 'allVersions', 'supplementaries'
+            'actualsPerItem', 'allVersions', 'supplementaries', 'entryMode'
         ));
     }
 

@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Models\BudgetActual;
+use App\Models\BudgetPeriod;
 use App\Models\BudgetVersion;
 use App\Models\Virement;
 use Maatwebsite\Excel\Concerns\FromCollection;
@@ -23,12 +24,21 @@ class BudgetExport implements FromCollection, WithHeadings, WithTitle, WithStyle
      * Format: [['type' => 'dept'|'line', 'status' => 'healthy'|'warning'|'critical'], ...]
      */
     protected array $rowMeta = [];
+    protected string $entryMode;
+    protected array  $periodCols;
 
     public function __construct(
         protected ?int    $periodId,
         protected ?int    $departmentId,
         protected string  $type = 'approved'
-    ) {}
+    ) {
+        $period           = $periodId ? BudgetPeriod::find($periodId) : null;
+        $this->entryMode  = $period?->entry_mode ?? 'quarterly';
+        $this->periodCols = $this->entryMode === 'monthly'
+            ? ['m1'=>'Jan','m2'=>'Feb','m3'=>'Mar','m4'=>'Apr','m5'=>'May','m6'=>'Jun',
+               'm7'=>'Jul','m8'=>'Aug','m9'=>'Sep','m10'=>'Oct','m11'=>'Nov','m12'=>'Dec']
+            : ['q1'=>'Q1','q2'=>'Q2','q3'=>'Q3','q4'=>'Q4'];
+    }
 
     public function collection(): Collection
     {
@@ -54,10 +64,11 @@ class BudgetExport implements FromCollection, WithHeadings, WithTitle, WithStyle
                 'Department', 'Category', 'Account Code', 'Account Name',
                 'Approved Budget', 'Actual Spend', 'Utilisation %', 'Remaining',
             ],
-            default => [
-                'Category', 'Account Code', 'Account Name',
-                'Q1', 'Q2', 'Q3', 'Q4', 'Total',
-            ],
+            default => array_merge(
+                ['Category', 'Account Code', 'Account Name'],
+                array_values($this->periodCols),
+                ['Total']
+            ),
         };
     }
 
@@ -195,16 +206,16 @@ class BudgetExport implements FromCollection, WithHeadings, WithTitle, WithStyle
 
         foreach ($versions as $version) {
             foreach ($version->lineItems as $item) {
-                $rows->push([
+                $row = [
                     $item->accountCode->category->name,
                     $item->accountCode->code,
                     $item->accountCode->name,
-                    number_format($item->q1_amount, 2),
-                    number_format($item->q2_amount, 2),
-                    number_format($item->q3_amount, 2),
-                    number_format($item->q4_amount, 2),
-                    number_format($item->total_amount, 2),
-                ]);
+                ];
+                foreach (array_keys($this->periodCols) as $pk) {
+                    $row[] = number_format($item->{$pk . '_amount'}, 2);
+                }
+                $row[] = number_format($item->total_amount, 2);
+                $rows->push($row);
             }
         }
 

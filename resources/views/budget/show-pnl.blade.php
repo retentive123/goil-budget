@@ -48,7 +48,9 @@
         @if($budgetVersion->isEditable())
         <span id="save-status" class="text-muted small"></span>
         <button id="save-btn" class="btn btn-outline-primary btn-sm" onclick="saveBudget()">Save</button>
-        <a href="{{ route('budget.confirm', $budgetVersion) }}" class="btn bg-goil-orange btn-sm">
+        <a href="{{ route('budget.confirm', $budgetVersion) }}"
+           id="submit-btn"
+           class="btn bg-goil-orange btn-sm">
             Submit for Approval →
         </a>
         @endif
@@ -162,6 +164,16 @@
 
 <div class="tab-content border border-top-0 rounded-bottom" id="pnlViewTabsContent">
 
+@php
+$isMonthly     = ($entryMode ?? 'quarterly') === 'monthly';
+$periodCols    = $isMonthly
+    ? ['m1'=>'Jan','m2'=>'Feb','m3'=>'Mar','m4'=>'Apr','m5'=>'May','m6'=>'Jun',
+       'm7'=>'Jul','m8'=>'Aug','m9'=>'Sep','m10'=>'Oct','m11'=>'Nov','m12'=>'Dec']
+    : ['q1'=>'Q1','q2'=>'Q2','q3'=>'Q3','q4'=>'Q4'];
+$periodColspan = count($periodCols) + 2;
+$periodColW    = $isMonthly ? '65px' : '90px';
+@endphp
+
 {{-- Tab 1: Income Statement --}}
 <div class="tab-pane fade show active p-0" id="pvtab-is" role="tabpanel">
 <div class="card shadow-sm border-0">
@@ -178,7 +190,7 @@
                 <thead>
                     <tr style="background:#1B2A4A;color:#fff;font-size:12px">
                         <th rowspan="2" style="min-width:220px;vertical-align:middle">Account</th>
-                        <th colspan="6" class="text-center border-start border-secondary py-2">
+                        <th colspan="{{ $periodColspan }}" class="text-center border-start border-secondary py-2">
                             {{ $budgetVersion->period->year }} Budget
                         </th>
                         @if($prevPeriod)
@@ -191,10 +203,9 @@
                         @endif
                     </tr>
                     <tr style="background:#243B55;color:#CBD5E1;font-size:11px">
-                        <th class="text-end border-start border-secondary" style="min-width:90px">Q1</th>
-                        <th class="text-end" style="min-width:90px">Q2</th>
-                        <th class="text-end" style="min-width:90px">Q3</th>
-                        <th class="text-end" style="min-width:90px">Q4</th>
+                        @foreach($periodCols as $pKey => $pLabel)
+                        <th class="text-end{{ $loop->first ? ' border-start border-secondary' : '' }}" style="min-width:{{ $periodColW }}">{{ $pLabel }}</th>
+                        @endforeach
                         <th class="text-end" style="min-width:110px">Total</th>
                         <th class="text-end" style="min-width:60px">CS&nbsp;%</th>
                         @if($prevPeriod)
@@ -229,7 +240,7 @@
                 <thead>
                     <tr style="background:#1B2A4A;color:#fff;font-size:12px">
                         <th rowspan="2" style="min-width:220px;vertical-align:middle">Account</th>
-                        <th colspan="6" class="text-center border-start border-secondary py-2">
+                        <th colspan="{{ $periodColspan }}" class="text-center border-start border-secondary py-2">
                             {{ $budgetVersion->period->year }} Budget
                         </th>
                         @if($prevPeriod)
@@ -242,10 +253,9 @@
                         @endif
                     </tr>
                     <tr style="background:#243B55;color:#CBD5E1;font-size:11px">
-                        <th class="text-end border-start border-secondary" style="min-width:90px">Q1</th>
-                        <th class="text-end" style="min-width:90px">Q2</th>
-                        <th class="text-end" style="min-width:90px">Q3</th>
-                        <th class="text-end" style="min-width:90px">Q4</th>
+                        @foreach($periodCols as $pKey => $pLabel)
+                        <th class="text-end{{ $loop->first ? ' border-start border-secondary' : '' }}" style="min-width:{{ $periodColW }}">{{ $pLabel }}</th>
+                        @endforeach
                         <th class="text-end" style="min-width:110px">Total</th>
                         <th class="text-end" style="min-width:60px">CS&nbsp;%</th>
                         @if($prevPeriod)
@@ -280,7 +290,7 @@
                 <thead>
                     <tr style="background:#1B2A4A;color:#fff;font-size:12px">
                         <th rowspan="2" style="min-width:220px;vertical-align:middle">Account</th>
-                        <th colspan="6" class="text-center border-start border-secondary py-2">
+                        <th colspan="{{ $periodColspan }}" class="text-center border-start border-secondary py-2">
                             {{ $budgetVersion->period->year }} Budget
                         </th>
                         @if($prevPeriod)
@@ -293,10 +303,9 @@
                         @endif
                     </tr>
                     <tr style="background:#243B55;color:#CBD5E1;font-size:11px">
-                        <th class="text-end border-start border-secondary" style="min-width:90px">Q1</th>
-                        <th class="text-end" style="min-width:90px">Q2</th>
-                        <th class="text-end" style="min-width:90px">Q3</th>
-                        <th class="text-end" style="min-width:90px">Q4</th>
+                        @foreach($periodCols as $pKey => $pLabel)
+                        <th class="text-end{{ $loop->first ? ' border-start border-secondary' : '' }}" style="min-width:{{ $periodColW }}">{{ $pLabel }}</th>
+                        @endforeach
                         <th class="text-end" style="min-width:110px">Total</th>
                         <th class="text-end" style="min-width:60px">CS&nbsp;%</th>
                         @if($prevPeriod)
@@ -319,12 +328,19 @@
 
 @push('scripts')
 <script>
-const PNL      = @json($pnlData);
-const HAS_PREV = {{ $prevPeriod ? 'true' : 'false' }};
-const EDITABLE = {{ $budgetVersion->isEditable() ? 'true' : 'false' }};
-const SAVE_URL = "{{ route('budget.save', $budgetVersion) }}";
-const CSRF     = "{{ csrf_token() }}";
-const CUR      = "{{ currency() }}";
+const PNL         = @json($pnlData);
+const HAS_PREV    = {{ $prevPeriod ? 'true' : 'false' }};
+const EDITABLE    = {{ $budgetVersion->isEditable() ? 'true' : 'false' }};
+const SAVE_URL    = "{{ route('budget.save', $budgetVersion) }}";
+const CSRF        = "{{ csrf_token() }}";
+const CUR         = "{{ currency() }}";
+const ENTRY_MODE  = "{{ $entryMode ?? 'quarterly' }}";
+const PERIOD_COLS = ENTRY_MODE === 'monthly'
+    ? ['m1','m2','m3','m4','m5','m6','m7','m8','m9','m10','m11','m12']
+    : ['q1','q2','q3','q4'];
+const PERIOD_LABELS = ENTRY_MODE === 'monthly'
+    ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    : ['Q1','Q2','Q3','Q4'];
 
 let autoSaveTimer = null;
 let isSaving = false;
@@ -430,7 +446,11 @@ function renderSection(type, label) {
         const catId     = `${type}_${catIdx}`;
         const collapsed = cat.items.length > 8;
 
-        // Category row
+        // Category row — period cells built dynamically
+        const catPeriodCells = PERIOD_COLS.map((col, i) =>
+            `<td class="text-end${i===0?' border-start':''}" id="c${col}_${catId}">${numFmt(cat.totals[col])}</td>`
+        ).join('');
+
         html += `<tr class="pnl-cat-row" id="crow_${catId}" data-type="${type}"
                      style="background:${light};cursor:pointer;font-size:12px;font-weight:600"
                      onclick="toggleCat('${catId}')">
@@ -439,10 +459,7 @@ function renderSection(type, label) {
                 ${escHtml(cat.name)}
                 <span class="text-muted fw-normal ms-1" style="font-size:11px">(${cat.items.length})</span>
             </td>
-            <td class="text-end border-start" id="cq1_${catId}">${numFmt(cat.totals.q1)}</td>
-            <td class="text-end" id="cq2_${catId}">${numFmt(cat.totals.q2)}</td>
-            <td class="text-end" id="cq3_${catId}">${numFmt(cat.totals.q3)}</td>
-            <td class="text-end" id="cq4_${catId}">${numFmt(cat.totals.q4)}</td>
+            ${catPeriodCells}
             <td class="text-end fw-bold" id="ceff_${catId}">${numFmt(cat.totals.effective)}</td>
             <td class="text-end text-muted" id="ccs_${catId}">${numFmt(cat.totals.common_size)}%</td>
             ${HAS_PREV ? `
@@ -459,30 +476,28 @@ function renderSection(type, label) {
                 ? `<span class="badge ms-1" style="background:#D1FAE5;color:#065F46;font-size:10px">+${numFmt(item.supp)} supp</span>`
                 : '';
 
-            const q1i = EDITABLE
-                ? `<input type="number" class="form-control form-control-sm q-input q1" value="${item.q1}" min="0" step="0.01" style="min-width:85px;text-align:right">`
-                : `<span class="text-end d-block">${numFmt(item.q1)}</span>`;
-            const q2i = EDITABLE
-                ? `<input type="number" class="form-control form-control-sm q-input q2" value="${item.q2}" min="0" step="0.01" style="min-width:85px;text-align:right">`
-                : `<span class="text-end d-block">${numFmt(item.q2)}</span>`;
-            const q3i = EDITABLE
-                ? `<input type="number" class="form-control form-control-sm q-input q3" value="${item.q3}" min="0" step="0.01" style="min-width:85px;text-align:right">`
-                : `<span class="text-end d-block">${numFmt(item.q3)}</span>`;
-            const q4i = EDITABLE
-                ? `<input type="number" class="form-control form-control-sm q-input q4" value="${item.q4}" min="0" step="0.01" style="min-width:85px;text-align:right">`
-                : `<span class="text-end d-block">${numFmt(item.q4)}</span>`;
             const noteI = EDITABLE
                 ? `<input type="text" class="form-control form-control-sm notes-input" value="${escAttr(item.justification)}" placeholder="Notes">`
                 : (escHtml(item.justification) || '');
+
+            // Build period input/display cells dynamically
+            const itemPeriodCells = PERIOD_COLS.map((col, i) => {
+                const val  = parseFloat(item[col] || 0).toFixed(2);
+                const cell = EDITABLE
+                    ? `<input type="number" class="form-control form-control-sm q-input ${col}" value="${val}" min="0" step="0.01" style="min-width:${ENTRY_MODE==='monthly'?'75px':'85px'};text-align:right">`
+                    : `<span class="text-end d-block">${numFmt(item[col])}</span>`;
+                const tdClass = EDITABLE
+                    ? `p-1${i===0?' border-start':''}`
+                    : `text-end${i===0?' border-start':''}`;
+                return `<td class="${tdClass}">${cell}</td>`;
+            }).join('');
 
             html += `<tr class="pnl-item-row ${collapsed ? 'd-none' : ''}" style="font-size:12px"
                         data-item-id="${item.id}" data-cat-id="${catId}" data-type="${type}" data-supp="${item.supp}">
                 <td style="padding-left:2.2rem" class="small">
                     <code class="text-muted me-1" style="font-size:11px">${escHtml(item.code)}</code>${escHtml(item.name)}${suppBadge}
                 </td>
-                ${EDITABLE
-                    ? `<td class="p-1 border-start">${q1i}</td><td class="p-1">${q2i}</td><td class="p-1">${q3i}</td><td class="p-1">${q4i}</td>`
-                    : `<td class="text-end border-start">${q1i}</td><td class="text-end">${q2i}</td><td class="text-end">${q3i}</td><td class="text-end">${q4i}</td>`}
+                ${itemPeriodCells}
                 <td class="text-end fw-semibold item-effective">${numFmt(item.effective)}</td>
                 <td class="text-end text-muted small item-cs">${numFmt(item.common_size)}%</td>
                 ${HAS_PREV ? `
@@ -498,12 +513,13 @@ function renderSection(type, label) {
     // Section total row
     const t  = sec.totals;
     const { totalBg: bg2 } = getSectionStyle(type);
+    const secPeriodCells = PERIOD_COLS.map((col, i) =>
+        `<td class="text-end${i===0?' border-start border-secondary':''}" id="s${col}_${type}">${numFmt(t[col])}</td>`
+    ).join('');
+
     html += `<tr id="st_${type}" style="background:${bg2};color:#fff;font-weight:700;font-size:12px;border-top:2px solid #fff">
         <td style="padding-left:12px;font-size:13px">TOTAL ${label}</td>
-        <td class="text-end border-start border-secondary" id="sq1_${type}">${numFmt(t.q1)}</td>
-        <td class="text-end" id="sq2_${type}">${numFmt(t.q2)}</td>
-        <td class="text-end" id="sq3_${type}">${numFmt(t.q3)}</td>
-        <td class="text-end" id="sq4_${type}">${numFmt(t.q4)}</td>
+        ${secPeriodCells}
         <td class="text-end" id="seff_${type}">${numFmt(t.effective)}</td>
         <td class="text-end">100%</td>
         ${HAS_PREV ? `
@@ -525,12 +541,13 @@ function renderNetRow() {
     const prevNetA = revT.prev_actual - expT.prev_actual;
     const netColor = net >= 0 ? '#6EE7B7' : '#FCA5A5';
 
+    const netPeriodCells = PERIOD_COLS.map((col, i) =>
+        `<td class="text-end${i===0?' border-start border-secondary':''}" id="ni-${col}">${numFmt((revT[col]||0) - (expT[col]||0))}</td>`
+    ).join('');
+
     return `<tr id="net-row" style="background:#0F172A;color:#fff;font-weight:700;font-size:13px;border-top:3px solid #E2E8F0">
         <td style="padding-left:12px">NET INCOME / (LOSS)</td>
-        <td class="text-end border-start border-secondary" id="ni-q1">${numFmt(revT.q1 - expT.q1)}</td>
-        <td class="text-end" id="ni-q2">${numFmt(revT.q2 - expT.q2)}</td>
-        <td class="text-end" id="ni-q3">${numFmt(revT.q3 - expT.q3)}</td>
-        <td class="text-end" id="ni-q4">${numFmt(revT.q4 - expT.q4)}</td>
+        ${netPeriodCells}
         <td class="text-end fs-6 fw-bold" id="ni-eff" style="color:${netColor}">${numFmt(net)}</td>
         <td class="text-end">—</td>
         ${HAS_PREV ? `
@@ -544,70 +561,71 @@ function renderNetRow() {
 
 // ── Live recalculation ───────────────────────────────────
 function recomputeRow(row) {
-    const q1   = parseFloat(row.querySelector('.q1')?.value) || 0;
-    const q2   = parseFloat(row.querySelector('.q2')?.value) || 0;
-    const q3   = parseFloat(row.querySelector('.q3')?.value) || 0;
-    const q4   = parseFloat(row.querySelector('.q4')?.value) || 0;
-    const supp = parseFloat(row.dataset.supp) || 0;
-    const total     = q1 + q2 + q3 + q4;
-    const effective = total + supp;
-    const el = s => row.querySelector(s);
-    if (el('.item-effective')) el('.item-effective').textContent = numFmt(effective);
+    let total = 0;
+    PERIOD_COLS.forEach(col => {
+        total += parseFloat(row.querySelector(`.${col}`)?.value) || 0;
+    });
+    const effective = total + (parseFloat(row.dataset.supp) || 0);
+    const el = row.querySelector('.item-effective');
+    if (el) el.textContent = numFmt(effective);
 }
 
 function recomputeCategory(catId, type) {
-    let q1=0,q2=0,q3=0,q4=0,effective=0;
+    const pts = {};
+    PERIOD_COLS.forEach(col => pts[col] = 0);
+    let effective = 0;
     document.querySelectorAll(`tr.pnl-item-row[data-cat-id="${catId}"]`).forEach(row => {
-        const rq1 = parseFloat(row.querySelector('.q1')?.value) || 0;
-        const rq2 = parseFloat(row.querySelector('.q2')?.value) || 0;
-        const rq3 = parseFloat(row.querySelector('.q3')?.value) || 0;
-        const rq4 = parseFloat(row.querySelector('.q4')?.value) || 0;
-        const supp = parseFloat(row.dataset.supp) || 0;
-        q1 += rq1; q2 += rq2; q3 += rq3; q4 += rq4;
-        effective += rq1+rq2+rq3+rq4+supp;
+        let rowTotal = 0;
+        PERIOD_COLS.forEach(col => {
+            const v = parseFloat(row.querySelector(`.${col}`)?.value) || 0;
+            pts[col] += v;
+            rowTotal += v;
+        });
+        effective += rowTotal + (parseFloat(row.dataset.supp) || 0);
     });
     const g = id => document.getElementById(id);
-    if (g(`cq1_${catId}`))  g(`cq1_${catId}`).textContent  = numFmt(q1);
-    if (g(`cq2_${catId}`))  g(`cq2_${catId}`).textContent  = numFmt(q2);
-    if (g(`cq3_${catId}`))  g(`cq3_${catId}`).textContent  = numFmt(q3);
-    if (g(`cq4_${catId}`))  g(`cq4_${catId}`).textContent  = numFmt(q4);
+    PERIOD_COLS.forEach(col => {
+        const el = g(`c${col}_${catId}`);
+        if (el) el.textContent = numFmt(pts[col]);
+    });
     if (g(`ceff_${catId}`)) g(`ceff_${catId}`).textContent = numFmt(effective);
 }
 
 function recomputeSection(type) {
-    let q1=0,q2=0,q3=0,q4=0,effective=0;
+    const pts = {};
+    PERIOD_COLS.forEach(col => pts[col] = 0);
+    let effective = 0;
     document.querySelectorAll(`tr.pnl-item-row[data-type="${type}"]`).forEach(row => {
-        const rq1 = parseFloat(row.querySelector('.q1')?.value) || 0;
-        const rq2 = parseFloat(row.querySelector('.q2')?.value) || 0;
-        const rq3 = parseFloat(row.querySelector('.q3')?.value) || 0;
-        const rq4 = parseFloat(row.querySelector('.q4')?.value) || 0;
-        const supp = parseFloat(row.dataset.supp) || 0;
-        q1 += rq1; q2 += rq2; q3 += rq3; q4 += rq4;
-        effective += rq1+rq2+rq3+rq4+supp;
+        let rowTotal = 0;
+        PERIOD_COLS.forEach(col => {
+            const v = parseFloat(row.querySelector(`.${col}`)?.value) || 0;
+            pts[col] += v;
+            rowTotal += v;
+        });
+        effective += rowTotal + (parseFloat(row.dataset.supp) || 0);
     });
 
     const g = id => document.getElementById(id);
-    if (g(`sq1_${type}`))  g(`sq1_${type}`).textContent  = numFmt(q1);
-    if (g(`sq2_${type}`))  g(`sq2_${type}`).textContent  = numFmt(q2);
-    if (g(`sq3_${type}`))  g(`sq3_${type}`).textContent  = numFmt(q3);
-    if (g(`sq4_${type}`))  g(`sq4_${type}`).textContent  = numFmt(q4);
+    PERIOD_COLS.forEach(col => {
+        const el = g(`s${col}_${type}`);
+        if (el) el.textContent = numFmt(pts[col]);
+    });
     if (g(`seff_${type}`)) g(`seff_${type}`).textContent = numFmt(effective);
 
     // Update common size for all items and categories in this section
     if (effective > 0) {
         document.querySelectorAll(`tr.pnl-item-row[data-type="${type}"]`).forEach(row => {
-            const rq1 = parseFloat(row.querySelector('.q1')?.value) || 0;
-            const rq2 = parseFloat(row.querySelector('.q2')?.value) || 0;
-            const rq3 = parseFloat(row.querySelector('.q3')?.value) || 0;
-            const rq4 = parseFloat(row.querySelector('.q4')?.value) || 0;
-            const supp = parseFloat(row.dataset.supp) || 0;
-            const reff = rq1+rq2+rq3+rq4+supp;
+            let rowTotal = 0;
+            PERIOD_COLS.forEach(col => {
+                rowTotal += parseFloat(row.querySelector(`.${col}`)?.value) || 0;
+            });
+            const reff = rowTotal + (parseFloat(row.dataset.supp) || 0);
             const csEl = row.querySelector('.item-cs');
             if (csEl) csEl.textContent = (reff / effective * 100).toFixed(2) + '%';
         });
 
         document.querySelectorAll(`tr.pnl-cat-row[data-type="${type}"]`).forEach(catRow => {
-            const catId = catRow.id.replace('crow_', '');
+            const catId  = catRow.id.replace('crow_', '');
             const ceffEl = document.getElementById(`ceff_${catId}`);
             const ccsEl  = document.getElementById(`ccs_${catId}`);
             if (ceffEl && ccsEl) {
@@ -617,10 +635,10 @@ function recomputeSection(type) {
         });
     }
 
-    // Update summary bar
-    const barRev = type === 'revenue' ? effective : null;
-    const barExp = type === 'expense' ? effective : null;
-    updateSummaryBar(barRev, barExp);
+    updateSummaryBar(
+        type === 'revenue' ? effective : null,
+        type === 'expense' ? effective : null
+    );
 }
 
 function recomputeNetRow() {
@@ -628,20 +646,15 @@ function recomputeNetRow() {
         const el = document.getElementById(id);
         return el ? parseFloat(el.textContent.replace(/,/g,'')) || 0 : 0;
     };
-    const q1  = getNum('sq1_revenue')   - getNum('sq1_expense');
-    const q2  = getNum('sq2_revenue')   - getNum('sq2_expense');
-    const q3  = getNum('sq3_revenue')   - getNum('sq3_expense');
-    const q4  = getNum('sq4_revenue')   - getNum('sq4_expense');
+    PERIOD_COLS.forEach(col => {
+        const el = document.getElementById(`ni-${col}`);
+        if (el) el.textContent = numFmt(getNum(`s${col}_revenue`) - getNum(`s${col}_expense`));
+    });
     const eff = getNum('seff_revenue') - getNum('seff_expense');
-
-    const g = id => document.getElementById(id);
-    if (g('ni-q1'))    g('ni-q1').textContent    = numFmt(q1);
-    if (g('ni-q2'))    g('ni-q2').textContent    = numFmt(q2);
-    if (g('ni-q3'))    g('ni-q3').textContent    = numFmt(q3);
-    if (g('ni-q4'))    g('ni-q4').textContent    = numFmt(q4);
-    if (g('ni-eff')) {
-        g('ni-eff').textContent = numFmt(eff);
-        g('ni-eff').style.color = eff >= 0 ? '#6EE7B7' : '#FCA5A5';
+    const niEff = document.getElementById('ni-eff');
+    if (niEff) {
+        niEff.textContent  = numFmt(eff);
+        niEff.style.color  = eff >= 0 ? '#6EE7B7' : '#FCA5A5';
     }
 }
 
@@ -701,14 +714,13 @@ function collapseAll(type) {
 
 // ── Auto-save ────────────────────────────────────────────
 function collectItems() {
-    return Array.from(document.querySelectorAll('tr[data-item-id]')).map(row => ({
-        id:    row.dataset.itemId,
-        q1:    parseFloat(row.querySelector('.q1')?.value)    || 0,
-        q2:    parseFloat(row.querySelector('.q2')?.value)    || 0,
-        q3:    parseFloat(row.querySelector('.q3')?.value)    || 0,
-        q4:    parseFloat(row.querySelector('.q4')?.value)    || 0,
-        notes: row.querySelector('.notes-input')?.value       || '',
-    }));
+    return Array.from(document.querySelectorAll('tr[data-item-id]')).map(row => {
+        const item = { id: row.dataset.itemId, notes: row.querySelector('.notes-input')?.value || '' };
+        PERIOD_COLS.forEach(col => {
+            item[col] = parseFloat(row.querySelector(`.${col}`)?.value) || 0;
+        });
+        return item;
+    });
 }
 
 function scheduleAutoSave() {
@@ -719,7 +731,7 @@ function scheduleAutoSave() {
 }
 
 async function saveBudget() {
-    if (isSaving) return;
+    if (isSaving) return false;
     isSaving = true;
 
     const btn    = document.getElementById('save-btn');
@@ -736,24 +748,26 @@ async function saveBudget() {
                 'X-CSRF-TOKEN':  CSRF,
                 'Accept':        'application/json',
             },
-            body: JSON.stringify({ items: collectItems() }),
+            body: JSON.stringify({ items: collectItems(), pnl_mode: true }),
         });
-
-        if (!res.ok) {
-            if (status) status.textContent = 'Save failed (' + res.status + ')';
-            return;
-        }
 
         const data = await res.json();
 
-        if (data.success) {
-            if (status) status.textContent = 'Saved at ' + data.saved_at;
-        } else {
-            if (status) status.textContent = 'Save failed.';
+        if (!res.ok) {
+            const msg = data?.error || 'Save failed (' + res.status + ')';
+            if (status) { status.style.color = '#F43F5E'; status.textContent = msg; }
+            return false;
         }
+
+        if (status) {
+            status.style.color = '';
+            status.textContent = data.success ? 'Saved at ' + data.saved_at : 'Save failed.';
+        }
+        return data.success === true;
     } catch (e) {
         console.error('Network error:', e);
-        if (status) status.textContent = 'Network error — not saved.';
+        if (status) { status.style.color = '#F43F5E'; status.textContent = 'Network error — not saved.'; }
+        return false;
     } finally {
         isSaving = false;
         if (btn) btn.disabled = false;
@@ -761,6 +775,37 @@ async function saveBudget() {
 }
 
 document.addEventListener('DOMContentLoaded', renderPnl);
+
+// ── Submit guard: save first, then navigate ──────────────
+document.getElementById('submit-btn')?.addEventListener('click', async function (e) {
+    e.preventDefault();
+    const href = this.href;
+    const btn  = this;
+
+    btn.textContent        = 'Saving…';
+    btn.style.opacity      = '.6';
+    btn.style.pointerEvents = 'none';
+
+    clearTimeout(autoSaveTimer);
+    const saved = await saveBudget();
+
+    if (!saved) {
+        const status = document.getElementById('save-status');
+        const msg    = (status && status.textContent) || 'Save failed.';
+        Swal.fire({
+            icon: 'error',
+            title: 'Save Failed',
+            text: msg,
+            confirmButtonColor: '#E65C00',
+        });
+        btn.textContent        = 'Submit for Approval →';
+        btn.style.opacity      = '';
+        btn.style.pointerEvents = '';
+        return;
+    }
+
+    window.location.href = href;
+});
 </script>
 @endpush
 

@@ -35,7 +35,7 @@
             @include('reports._dept_filter', [
                 'selectedId'          => request('department_id'),
                 'allowEmpty'          => true,
-                'emptyLabel'          => 'Select department…',
+                'emptyLabel'          => 'All Departments',
                 'autoSubmit'          => true,
                 'selectId'            => 'rptDeptDrillSel',
                 'includeSubsidiaries' => false,
@@ -69,24 +69,31 @@
     <input type="hidden" name="budget_basis" value="{{ $basis ?? 'original' }}">
 </form>
 
-@if(!$department)
+@if(!isset($hasData) || (!$hasData && !$department))
 <div class="chart-card text-center py-5 text-muted">
     <i class="bi bi-arrow-left-circle" style="font-size:36px;display:block;margin-bottom:10px;color:#CBD5E1"></i>
-    Select a department or service station above to view its approved budget.
+    Select a department or service station above, or choose All Departments to view aggregate data.
 </div>
-@elseif(!$version)
+@elseif(!$hasData)
 <div class="chart-card text-center py-5 text-muted">
-    No approved budget found for <strong>{{ $department->name }}</strong>
+    No approved budget found for <strong>{{ $department?->name ?? 'the selected filters' }}</strong>
     @if($period) in {{ $period->name }}@endif.
 </div>
 @else
 
-{{-- KPI strip --}}
+{{-- Period configuration --}}
 @php
-    $totalBudget = $quarterSums['total'];
-    $totalOriginal = $quarterSums['original'] ?? $quarterSums['total'];
-    $totalSupplementary = $quarterSums['supplementary'] ?? 0;
+    $isMonthly  = ($entryMode ?? 'quarterly') === 'monthly';
+    $periodCols = $isMonthly
+        ? ['m1'=>'Jan','m2'=>'Feb','m3'=>'Mar','m4'=>'Apr','m5'=>'May','m6'=>'Jun',
+           'm7'=>'Jul','m8'=>'Aug','m9'=>'Sep','m10'=>'Oct','m11'=>'Nov','m12'=>'Dec']
+        : ['q1'=>'Q1','q2'=>'Q2','q3'=>'Q3','q4'=>'Q4'];
+    $totalBudget        = $periodSums['total'];
+    $totalOriginal      = $periodSums['original'] ?? $periodSums['total'];
+    $totalSupplementary = $periodSums['supplementary'] ?? 0;
 @endphp
+
+{{-- KPI strip --}}
 <div class="row g-3 mb-4">
     <div class="col-md-3">
         <div class="stat-card">
@@ -102,29 +109,47 @@
             @endif
         </div>
     </div>
-    @foreach(['q1'=>'Q1','q2'=>'Q2','q3'=>'Q3','q4'=>'Q4'] as $k => $label)
+    @if($isMonthly)
+    <div class="col-md-9">
+        <div class="stat-card" style="padding:12px 16px">
+            <div class="stat-label mb-2">Monthly Breakdown</div>
+            <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px">
+                @foreach($periodCols as $k => $label)
+                @php $pct = $totalBudget > 0 ? round(($periodSums[$k]/$totalBudget)*100,1) : 0; @endphp
+                <div style="padding:5px 8px;background:var(--bg,#F8FAFC);border-radius:6px;border:1px solid var(--border,#E2E8F0)">
+                    <div style="font-size:10px;color:var(--slate);font-weight:600;text-transform:uppercase;letter-spacing:.03em">{{ $label }}</div>
+                    <div style="font-size:12px;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums">{{ number_format($periodSums[$k],0) }}</div>
+                    <div style="font-size:10px;color:var(--slate)">{{ $pct }}%</div>
+                </div>
+                @endforeach
+            </div>
+        </div>
+    </div>
+    @else
+    @foreach($periodCols as $k => $label)
     <div class="col-md-2">
         <div class="stat-card">
             <div class="stat-label">{{ $label }}</div>
             <div class="stat-value" style="font-size:16px">
-                {{ number_format($quarterSums[$k],0) }}
+                {{ number_format($periodSums[$k],0) }}
             </div>
             <div class="stat-sub">
-                @php $pct = $totalBudget > 0 ? round(($quarterSums[$k]/$totalBudget)*100,1) : 0; @endphp
+                @php $pct = $totalBudget > 0 ? round(($periodSums[$k]/$totalBudget)*100,1) : 0; @endphp
                 {{ $pct }}% of total
             </div>
         </div>
     </div>
     @endforeach
+    @endif
 </div>
 
 {{-- Charts --}}
 <div class="row g-3 mb-4">
 
-    {{-- Quarterly bar --}}
+    {{-- Period split bar --}}
     <div class="col-md-5">
         <div class="chart-card h-100">
-            <div class="chart-title">Quarterly Split</div>
+            <div class="chart-title">{{ $isMonthly ? 'Monthly' : 'Quarterly' }} Split</div>
             <canvas id="quarterSplit" height="200"></canvas>
         </div>
     </div>
@@ -155,68 +180,48 @@
 
 {{-- Pre-compute all item data in PHP (avoids calling model methods inside the render loop) --}}
 @php
-    $grandTotal        = $quarterSums['total'];
-    $codeExplorerUrl   = route('reports.code-explorer');
-    $categoriesData    = [];
-    $byType            = [];
-
-    $typeLabels = [
-        'revenue' => 'Revenue',
-        'expense' => 'Expense',
-        'capex'   => 'CapEx',
-        'asset'   => 'Asset',
+    $grandTotal      = $periodSums['total'];
+    $codeExplorerUrl = route('reports.code-explorer');
+    $byType          = [];
+    $typesData       = [];
+    $typeLabels      = [
+        'revenue'   => 'Revenue',
+        'expense'   => 'Expense',
+        'capex'     => 'CapEx',
+        'asset'     => 'Asset',
         'liability' => 'Liability',
     ];
-
-    $typesData = [];
+    $allMonthKeys = ['m1','m2','m3','m4','m5','m6','m7','m8','m9','m10','m11','m12'];
+    $emptyTypePeriod = array_fill_keys(array_merge(['q1','q2','q3','q4'],$allMonthKeys), 0);
 
     foreach ($byCategory as $catName => $catData) {
-        $catSupp  = $catData['supplementary'] ?? 0;
-        $items    = [];
+        $catSupp = $catData['supplementary'] ?? 0;
+        $items   = [];
         foreach ($catData['items'] as $item) {
             $supp = $item->approvedSupplementaryTotal();
             $eff  = $item->effectiveBudget();
             $pct  = $grandTotal > 0 ? round(($eff / $grandTotal) * 100, 1) : 0;
             $type = $typeLabels[$item->line_type ?? 'expense'] ?? ucfirst($item->line_type ?? 'Expense');
             $byType[$type] = ($byType[$type] ?? 0) + $eff;
-            $row = [
-                'code'      => $item->accountCode->code,
-                'name'      => $item->accountCode->name,
-                'code_id'   => $item->account_code_id,
-                'line_type' => $type,
-                'category'  => $catName,
-                'q1'        => $item->q1_amount,
-                'q2'        => $item->q2_amount,
-                'q3'        => $item->q3_amount,
-                'q4'        => $item->q4_amount,
-                'supp'      => $supp,
-                'effective' => $eff,
-                'pct'       => $pct,
-            ];
+            $row = array_merge(
+                ['code'=>$item->accountCode->code,'name'=>$item->accountCode->name,
+                 'code_id'=>$item->account_code_id,'line_type'=>$type,'category'=>$catName,
+                 'q1'=>$item->q1_amount,'q2'=>$item->q2_amount,'q3'=>$item->q3_amount,'q4'=>$item->q4_amount],
+                array_combine($allMonthKeys, array_map(fn($mk) => $item->{$mk.'_amount'}, $allMonthKeys)),
+                ['supp'=>$supp,'effective'=>$eff,'pct'=>$pct]
+            );
             $items[] = $row;
 
-            // Group by type for the type-tabs
             if (!isset($typesData[$type])) {
-                $typesData[$type] = ['name'=>$type,'total'=>0,'supp'=>0,'q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0,'items'=>[]];
+                $typesData[$type] = array_merge(['name'=>$type,'total'=>0,'supp'=>0],$emptyTypePeriod,['items'=>[]]);
             }
             $typesData[$type]['total'] += $eff;
             $typesData[$type]['supp']  += $supp;
-            $typesData[$type]['q1']    += $item->q1_amount;
-            $typesData[$type]['q2']    += $item->q2_amount;
-            $typesData[$type]['q3']    += $item->q3_amount;
-            $typesData[$type]['q4']    += $item->q4_amount;
+            foreach (array_merge(['q1','q2','q3','q4'],$allMonthKeys) as $pk) {
+                $typesData[$type][$pk] += $item->{$pk.'_amount'};
+            }
             $typesData[$type]['items'][] = $row;
         }
-        $categoriesData[] = [
-            'name'  => $catName,
-            'total' => $catData['total'],
-            'supp'  => $catSupp,
-            'q1'    => $catData['q1'],
-            'q2'    => $catData['q2'],
-            'q3'    => $catData['q3'],
-            'q4'    => $catData['q4'],
-            'items' => $items,
-        ];
     }
     $typesData = array_values($typesData);
 @endphp
@@ -280,10 +285,9 @@
                     <th>Code</th>
                     <th>Account Name</th>
                     <th>Category</th>
-                    <th class="text-end">Q1</th>
-                    <th class="text-end">Q2</th>
-                    <th class="text-end">Q3</th>
-                    <th class="text-end">Q4</th>
+                    @foreach($periodCols as $pLabel)
+                    <th class="text-end">{{ $pLabel }}</th>
+                    @endforeach
                     <th class="text-end">Supplementary</th>
                     <th class="text-end">Total</th>
                     <th>Split</th>
@@ -354,10 +358,9 @@
                             <th class="ps-4">Code</th>
                             <th>Account Name</th>
                             <th>Category</th>
-                            <th class="text-end">Q1</th>
-                            <th class="text-end">Q2</th>
-                            <th class="text-end">Q3</th>
-                            <th class="text-end">Q4</th>
+                            @foreach($periodCols as $pLabel)
+                            <th class="text-end">{{ $pLabel }}</th>
+                            @endforeach
                             <th class="text-end">Supplementary</th>
                             <th class="text-end">Total</th>
                             <th>Split</th>
@@ -404,10 +407,9 @@
                     @endif
                 </div>
                 <div style="font-size:11px;color:var(--slate)">
-                    Q1 {{ number_format($catInfo['q1'],0) }}
-                    &nbsp;·&nbsp; Q2 {{ number_format($catInfo['q2'],0) }}
-                    &nbsp;·&nbsp; Q3 {{ number_format($catInfo['q3'],0) }}
-                    &nbsp;·&nbsp; Q4 {{ number_format($catInfo['q4'],0) }}
+                    @foreach($periodCols as $pk => $pl)
+                    {{ $pl }} {{ number_format($catInfo[$pk],0) }}{!! $loop->last ? '' : ' &nbsp;·&nbsp; ' !!}
+                    @endforeach
                 </div>
             </div>
 
@@ -420,10 +422,9 @@
                             <th class="ps-4">Code</th>
                             <th>Account Name</th>
                             <th>Category</th>
-                            <th class="text-end">Q1</th>
-                            <th class="text-end">Q2</th>
-                            <th class="text-end">Q3</th>
-                            <th class="text-end">Q4</th>
+                            @foreach($periodCols as $pLabel)
+                            <th class="text-end">{{ $pLabel }}</th>
+                            @endforeach
                             <th class="text-end">Supplementary</th>
                             <th class="text-end">Total</th>
                             <th>Split</th>
@@ -433,10 +434,9 @@
                     <tfoot style="background:#F8FAFC;font-weight:700;font-size:12px">
                         <tr>
                             <td class="ps-4" colspan="3">Type Total</td>
-                            <td class="text-end">{{ number_format($catInfo['q1'],2) }}</td>
-                            <td class="text-end">{{ number_format($catInfo['q2'],2) }}</td>
-                            <td class="text-end">{{ number_format($catInfo['q3'],2) }}</td>
-                            <td class="text-end">{{ number_format($catInfo['q4'],2) }}</td>
+                            @foreach($periodCols as $pk => $pl)
+                            <td class="text-end">{{ number_format($catInfo[$pk],2) }}</td>
+                            @endforeach
                             <td class="text-end" style="color:{{ $catSupp > 0 ? '#10B981' : 'inherit' }}">
                                 {{ $catSupp > 0 ? '+'.number_format($catSupp,2) : '—' }}
                             </td>
@@ -479,6 +479,13 @@ const DEPT_CATS         = @json($typesData);
 const CODE_EXPLORER_URL = @json($codeExplorerUrl);
 const DEPT_PERIOD_ID    = {{ $period->id }};
 let   pageSize          = 10;
+const ENTRY_MODE        = '{{ $entryMode }}';
+const PERIOD_COLS       = ENTRY_MODE === 'monthly'
+    ? ['m1','m2','m3','m4','m5','m6','m7','m8','m9','m10','m11','m12']
+    : ['q1','q2','q3','q4'];
+const PERIOD_LABELS     = ENTRY_MODE === 'monthly'
+    ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    : ['Q1','Q2','Q3','Q4'];
 
 // Flattened "All" items
 const ALL_ITEMS = [].concat(...DEPT_CATS.map(c => c.items));
@@ -502,19 +509,16 @@ function buildRow(item, showCat) {
     const suppCell = item.supp > 0
         ? `<td class="text-end small" style="color:#10B981">+${numFmt(item.supp)}</td>`
         : `<td class="text-end small text-muted">—</td>`;
-    // In tab panes (showCat undefined): show item.category; in search: showCat is the type label
     const thirdCell = showCat !== undefined
         ? `<td class="small text-muted">${esc(showCat)}</td>`
         : `<td class="small text-muted">${esc(item.category??'')}</td>`;
+    const periodCells = PERIOD_COLS.map(k => `<td class="text-end small">${numFmt(item[k])}</td>`).join('');
     return `<tr>
         <td class="ps-4"><a href="${link}" style="color:var(--navy);font-weight:600;
                 font-size:12px;font-family:monospace">${esc(item.code)}</a></td>
         <td class="small">${esc(item.name)}</td>
         ${thirdCell}
-        <td class="text-end small">${numFmt(item.q1)}</td>
-        <td class="text-end small">${numFmt(item.q2)}</td>
-        <td class="text-end small">${numFmt(item.q3)}</td>
-        <td class="text-end small">${numFmt(item.q4)}</td>
+        ${periodCells}
         ${suppCell}
         <td class="text-end small fw-semibold">${numFmt(item.effective)}</td>
         <td style="min-width:80px">
@@ -675,8 +679,8 @@ function deptExport(format) {
         });
     });
 
-    const headers = ['Category','Code','Account','Q1','Q2','Q3','Q4','Supplementary','Effective Total','% of Dept'];
-    const rowData = r => [r.category, r.code, r.name, r.q1, r.q2, r.q3, r.q4, r.supp, r.effective, r.pct];
+    const headers = ['Category','Code','Account',...PERIOD_LABELS,'Supplementary','Effective Total','% of Dept'];
+    const rowData = r => [r.category, r.code, r.name, ...PERIOD_COLS.map(k => r[k]), r.supp, r.effective, r.pct];
     const datestamp = new Date().toISOString().slice(0, 10);
     const filename  = `dept-report-${datestamp}`;
 
@@ -717,14 +721,22 @@ function dlBlob(content, filename, mime) {
 const COLORS = ['#1B2A4A','#C9A84C','#10B981','#6366F1','#F59E0B',
                 '#EC4899','#14B8A6','#8B5CF6','#F97316','#06B6D4'];
 
-// Quarterly split
+// Period split
+@php
+    $chartLabels = array_values($periodCols);
+    $chartData   = array_map(fn($k) => $periodSums[$k], array_keys($periodCols));
+    $chartColors = $isMonthly
+        ? ['#1B2A4A','#243B55','#2E4C72','#3B6091','#4A74AF','#5A88CC',
+           '#C9A84C','#D4B96A','#DEC987','#E8DAA5','#F2EAC2','#FBF7E0']
+        : ['#1B2A4A','#C9A84C','#10B981','#6366F1'];
+@endphp
 new Chart(document.getElementById('quarterSplit'), {
     type: 'bar',
     data: {
-        labels: ['Q1','Q2','Q3','Q4'],
+        labels: {!! json_encode($chartLabels) !!},
         datasets: [{
-            data: [{{ $quarterSums['q1'] }},{{ $quarterSums['q2'] }},{{ $quarterSums['q3'] }},{{ $quarterSums['q4'] }}],
-            backgroundColor: ['#1B2A4A','#C9A84C','#10B981','#6366F1'],
+            data: {!! json_encode($chartData) !!},
+            backgroundColor: {!! json_encode($chartColors) !!},
             borderRadius: 8, borderSkipped: false,
         }]
     },

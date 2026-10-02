@@ -38,9 +38,10 @@ class BudgetSubmissionController extends Controller
             ?? \App\Models\BudgetPeriod::where('id', '<', $period->id)
                 ->orderByDesc('year')->orderByDesc('id')->first();
 
-        $pnlData = $this->calculator->buildPnlData($budgetVersion, $prevPeriod);
+        $pnlData   = $this->calculator->buildPnlData($budgetVersion, $prevPeriod);
+        $entryMode = $budgetVersion->period->entry_mode ?? 'quarterly';
 
-        return view('budget.confirm', compact('budgetVersion', 'grandTotals', 'prevPeriod', 'pnlData'));
+        return view('budget.confirm', compact('budgetVersion', 'grandTotals', 'prevPeriod', 'pnlData', 'entryMode'));
     }
 
     public function submit(Request $request, BudgetVersion $budgetVersion)

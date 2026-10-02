@@ -18,25 +18,39 @@ use Illuminate\Support\Collection;
 
 class BudgetPnlReadOnlyExport implements FromCollection, WithHeadings, WithTitle, WithStyles, ShouldAutoSize
 {
-    private array $rowTypes = [];
-    private bool  $hasPrev  = false;
-    private int   $colCount = 8; // without prev
+    private array $rowTypes    = [];
+    private bool  $hasPrev     = false;
+    private bool  $isMonthly   = false;
+    private int   $colCount    = 8;
+    private array $periodKeys  = [];
+    private array $periodLabels = [];
 
     public function __construct(
         protected BudgetVersion  $version,
         protected array          $pnlData,
         protected ?BudgetPeriod  $prevPeriod,
-        protected Collection     $actualsPerItem
+        protected Collection     $actualsPerItem,
+        protected string         $entryMode = 'quarterly'
     ) {
-        $this->hasPrev  = $prevPeriod !== null;
-        $this->colCount = $this->hasPrev ? 11 : 8;
+        $this->hasPrev   = $prevPeriod !== null;
+        $this->isMonthly = $entryMode === 'monthly';
+
+        if ($this->isMonthly) {
+            $this->periodKeys   = array_map(fn($n) => "m{$n}", range(1, 12));
+            $this->periodLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            $this->colCount     = $this->hasPrev ? 19 : 16;
+        } else {
+            $this->periodKeys   = ['q1','q2','q3','q4'];
+            $this->periodLabels = ['Q1','Q2','Q3','Q4'];
+            $this->colCount     = $this->hasPrev ? 11 : 8;
+        }
     }
 
     public function title(): string { return 'P&L View'; }
 
     public function headings(): array
     {
-        $h = ['Account', 'Q1', 'Q2', 'Q3', 'Q4', 'Total', 'CS %', 'Actual (YTD)'];
+        $h = array_merge(['Account'], $this->periodLabels, ['Total', 'CS %', 'Actual (YTD)']);
         if ($this->hasPrev) {
             $h[] = "Prev Budget ({$this->prevPeriod->name})";
             $h[] = "Prev Actual ({$this->prevPeriod->name})";
@@ -68,16 +82,15 @@ class BudgetPnlReadOnlyExport implements FromCollection, WithHeadings, WithTitle
                 $catTotals = $cat['totals'];
                 $catActual = (float) collect($cat['items'])->sum(fn($i) => $this->actualsPerItem->get($i['id'], 0));
 
-                $catRow = [
-                    $cat['name'],
-                    (float) $catTotals['q1'],
-                    (float) $catTotals['q2'],
-                    (float) $catTotals['q3'],
-                    (float) $catTotals['q4'],
-                    (float) $catTotals['effective'],
-                    round((float) ($catTotals['common_size'] ?? 0), 2),
-                    $catActual,
-                ];
+                $catRow = array_merge(
+                    [$cat['name']],
+                    array_map(fn($k) => (float) ($catTotals[$k] ?? 0), $this->periodKeys),
+                    [
+                        (float) $catTotals['effective'],
+                        round((float) ($catTotals['common_size'] ?? 0), 2),
+                        $catActual,
+                    ]
+                );
                 if ($this->hasPrev) {
                     $prevBudget = (float) ($catTotals['prev_budget'] ?? 0);
                     $prevActual = (float) ($catTotals['prev_actual'] ?? 0);
@@ -92,16 +105,15 @@ class BudgetPnlReadOnlyExport implements FromCollection, WithHeadings, WithTitle
                 foreach ($cat['items'] as $item) {
                     $effective = (float) ($item['effective'] ?? $item['total']);
                     $actual    = (float) $this->actualsPerItem->get($item['id'], 0);
-                    $itemRow   = [
-                        "{$item['code']} — {$item['name']}",
-                        (float) $item['q1'],
-                        (float) $item['q2'],
-                        (float) $item['q3'],
-                        (float) $item['q4'],
-                        $effective,
-                        round((float) ($item['common_size'] ?? 0), 2),
-                        $actual,
-                    ];
+                    $itemRow = array_merge(
+                        ["{$item['code']} — {$item['name']}"],
+                        array_map(fn($k) => (float) ($item[$k] ?? 0), $this->periodKeys),
+                        [
+                            $effective,
+                            round((float) ($item['common_size'] ?? 0), 2),
+                            $actual,
+                        ]
+                    );
                     if ($this->hasPrev) {
                         $prevBudget = (float) ($item['prev_budget'] ?? 0);
                         $prevActual = (float) ($item['prev_actual'] ?? 0);
@@ -121,16 +133,11 @@ class BudgetPnlReadOnlyExport implements FromCollection, WithHeadings, WithTitle
             foreach ($section['categories'] as $cat) {
                 $secActual += (float) collect($cat['items'])->sum(fn($i) => $this->actualsPerItem->get($i['id'], 0));
             }
-            $secRow = [
-                "Total {$label}",
-                (float) ($section['totals']['q1'] ?? 0),
-                (float) ($section['totals']['q2'] ?? 0),
-                (float) ($section['totals']['q3'] ?? 0),
-                (float) ($section['totals']['q4'] ?? 0),
-                $secEff,
-                '',
-                $secActual,
-            ];
+            $secRow = array_merge(
+                ["Total {$label}"],
+                array_map(fn($k) => (float) ($section['totals'][$k] ?? 0), $this->periodKeys),
+                [$secEff, '', $secActual]
+            );
             if ($this->hasPrev) {
                 $prevB = (float) ($section['totals']['prev_budget'] ?? 0);
                 $prevA = (float) ($section['totals']['prev_actual'] ?? 0);
@@ -148,7 +155,11 @@ class BudgetPnlReadOnlyExport implements FromCollection, WithHeadings, WithTitle
         $expEff = (float) ($expTotals['effective'] ?? 0);
         $netEff = $revEff - $expEff;
 
-        $netRow = ['NET INCOME / (LOSS)', '', '', '', '', $netEff, '', ''];
+        $netRow = array_merge(
+            ['NET INCOME / (LOSS)'],
+            array_fill(0, count($this->periodKeys), ''),
+            [$netEff, '', '']
+        );
         if ($this->hasPrev) {
             $prevNetB  = (float) ($revTotals['prev_budget'] ?? 0) - (float) ($expTotals['prev_budget'] ?? 0);
             $prevNetA  = (float) ($revTotals['prev_actual'] ?? 0) - (float) ($expTotals['prev_actual'] ?? 0);
@@ -264,15 +275,20 @@ class BudgetPnlReadOnlyExport implements FromCollection, WithHeadings, WithTitle
             }
         }
 
-        // Number format for numeric columns: B through lastCol, except G (CS%) and K (Growth%) which use percentage format
-        $lastRow = $sheet->getHighestRow();
-        $numRange   = "B4:{$lastCol}{$lastRow}";
+        // Number format for numeric columns: B through lastCol, except CS% and Growth% which use percentage format
+        $lastRow  = $sheet->getHighestRow();
+        $numRange = "B4:{$lastCol}{$lastRow}";
         $sheet->getStyle($numRange)->getNumberFormat()->setFormatCode('#,##0.00');
 
-        // CS% and Growth% columns as percentage
-        $sheet->getStyle("G4:G{$lastRow}")->getNumberFormat()->setFormatCode('0.00"%"');
+        // CS% column: 1 (account) + period cols + 1 (total) + 1 (CS%) = col index count($periodKeys)+3
+        $csPctColIdx  = count($this->periodKeys) + 3;
+        $csPctCol     = Coordinate::stringFromColumnIndex($csPctColIdx);
+        $sheet->getStyle("{$csPctCol}4:{$csPctCol}{$lastRow}")->getNumberFormat()->setFormatCode('0.00"%"');
         if ($this->hasPrev) {
-            $sheet->getStyle("K4:K{$lastRow}")->getNumberFormat()->setFormatCode('0.00"%"');
+            // Growth% is 3 columns after CS%
+            $growthColIdx = $csPctColIdx + 3;
+            $growthCol    = Coordinate::stringFromColumnIndex($growthColIdx);
+            $sheet->getStyle("{$growthCol}4:{$growthCol}{$lastRow}")->getNumberFormat()->setFormatCode('0.00"%"');
         }
 
         // Right-align numerics

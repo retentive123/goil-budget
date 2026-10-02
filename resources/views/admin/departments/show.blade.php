@@ -148,6 +148,48 @@
                         </a>
                     </div>
                 </div>
+                @if($department->accountCodes->isNotEmpty())
+                @php
+                    $typeLabels = [
+                        'revenue'             => 'Revenue',
+                        'expense'             => 'Expense',
+                        'both'                => 'Rev & Exp',
+                        'capital_expenditure' => 'CapEx',
+                        'assets'              => 'Assets',
+                        'liabilities'         => 'Liabilities',
+                    ];
+                    $typeColors = [
+                        'revenue'             => ['bg'=>'#DCFCE7','color'=>'#166534'],
+                        'expense'             => ['bg'=>'#FFE4E6','color'=>'#9F1239'],
+                        'both'                => ['bg'=>'#CCFBF1','color'=>'#115E59'],
+                        'capital_expenditure' => ['bg'=>'#DBEAFE','color'=>'#1E40AF'],
+                        'assets'              => ['bg'=>'#EDE9FE','color'=>'#5B21B6'],
+                        'liabilities'         => ['bg'=>'#FEF3C7','color'=>'#92400E'],
+                    ];
+                    $presentTypes = $department->accountCodes
+                        ->pluck('category.budget_type')
+                        ->filter()
+                        ->unique()
+                        ->values();
+                @endphp
+                @if($presentTypes->count() > 1)
+                <div class="px-4 py-2 border-bottom d-flex align-items-center gap-2 flex-wrap"
+                     style="background:#FAFAFA;">
+                    <span style="font-size:10px;font-weight:600;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;">Filter</span>
+                    <button class="ac-type-pill active" data-type="all"
+                            style="font-size:11px;padding:2px 10px;border-radius:20px;border:1px solid #CBD5E1;background:#1B2A4A;color:#fff;cursor:pointer;">
+                        All
+                    </button>
+                    @foreach($presentTypes as $bt)
+                    @php $tc = $typeColors[$bt] ?? ['bg'=>'#F1F5F9','color'=>'#475569']; @endphp
+                    <button class="ac-type-pill" data-type="{{ $bt }}"
+                            style="font-size:11px;padding:2px 10px;border-radius:20px;border:1px solid {{ $tc['color'] }}40;background:{{ $tc['bg'] }};color:{{ $tc['color'] }};cursor:pointer;">
+                        {{ $typeLabels[$bt] ?? ucfirst(str_replace('_',' ',$bt)) }}
+                    </button>
+                    @endforeach
+                </div>
+                @endif
+                @endif
                 <div class="card-body p-0" style="max-height:420px;overflow-y:auto;">
                     @if($department->accountCodes->isEmpty())
                         <div class="text-center py-5 text-muted">
@@ -163,7 +205,8 @@
                     @else
                         @php $grouped = $department->accountCodes->groupBy(fn($c) => $c->category?->name ?? 'Uncategorised'); @endphp
                         @foreach($grouped as $catName => $codes)
-                        <div class="px-4 pt-3 pb-1">
+                        @php $catBudgetType = $codes->first()?->category?->budget_type ?? ''; @endphp
+                        <div class="ac-cat-group px-4 pt-3 pb-1" data-type="{{ $catBudgetType }}">
                             <div class="small fw-semibold text-uppercase mb-2"
                                  style="color:#94A3B8;letter-spacing:.5px;font-size:10px;">
                                 {{ $catName }}
@@ -190,6 +233,23 @@
                         @endforeach
                     @endif
                 </div>
+                <script>
+                document.querySelectorAll('.ac-type-pill').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const type = this.dataset.type;
+                        document.querySelectorAll('.ac-type-pill').forEach(b => {
+                            b.style.background  = b.dataset.type === type ? '#1B2A4A' : b.getAttribute('data-orig-bg') || b.style.background;
+                            b.style.color       = b.dataset.type === type ? '#fff'    : b.getAttribute('data-orig-color') || b.style.color;
+                        });
+                        document.querySelectorAll('.ac-cat-group').forEach(g => {
+                            g.style.display = (type === 'all' || g.dataset.type === type) ? '' : 'none';
+                        });
+                    });
+                    // store original colours so we can restore them
+                    btn.setAttribute('data-orig-bg',    btn.style.background);
+                    btn.setAttribute('data-orig-color', btn.style.color);
+                });
+                </script>
             </div>
         </div>
 

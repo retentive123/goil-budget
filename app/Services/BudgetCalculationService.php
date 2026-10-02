@@ -282,13 +282,17 @@ public function isOverBudget(int $departmentId, int $periodId): array
     {
         $items = $version->lineItems()->get();
 
-        return [
+        $result = [
             'q1'    => $items->sum('q1_amount'),
             'q2'    => $items->sum('q2_amount'),
             'q3'    => $items->sum('q3_amount'),
             'q4'    => $items->sum('q4_amount'),
             'total' => $version->effectiveTotal(),
         ];
+        foreach (range(1, 12) as $n) {
+            $result["m{$n}"] = $items->sum("m{$n}_amount");
+        }
+        return $result;
     }
 
     /**
@@ -326,7 +330,12 @@ public function isOverBudget(int $departmentId, int $periodId): array
             }
         }
 
-        $blank = ['q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0,'total'=>0,'effective'=>0,'prev_budget'=>0,'prev_actual'=>0];
+        $blank = [
+            'q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0,
+            'm1'=>0,'m2'=>0,'m3'=>0,'m4'=>0,'m5'=>0,'m6'=>0,
+            'm7'=>0,'m8'=>0,'m9'=>0,'m10'=>0,'m11'=>0,'m12'=>0,
+            'total'=>0,'effective'=>0,'prev_budget'=>0,'prev_actual'=>0,
+        ];
         $sections = [
             'revenue' => ['categories' => [], 'totals' => $blank],
             'expense' => ['categories' => [], 'totals' => $blank],
@@ -351,7 +360,7 @@ public function isOverBudget(int $departmentId, int $periodId): array
                 $sections[$type]['categories'][] = [
                     'name'   => $catName,
                     'items'  => [],
-                    'totals' => ['q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0,'total'=>0,'effective'=>0,'prev_budget'=>0,'prev_actual'=>0,'common_size'=>0],
+                    'totals' => ['q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0,'m1'=>0,'m2'=>0,'m3'=>0,'m4'=>0,'m5'=>0,'m6'=>0,'m7'=>0,'m8'=>0,'m9'=>0,'m10'=>0,'m11'=>0,'m12'=>0,'total'=>0,'effective'=>0,'prev_budget'=>0,'prev_actual'=>0,'common_size'=>0],
                 ];
             }
 
@@ -361,7 +370,11 @@ public function isOverBudget(int $departmentId, int $periodId): array
             $prevB     = $prevBudgets[$codeId] ?? 0.0;
             $prevA     = $prevActuals[$codeId] ?? 0.0;
 
-            $sections[$type]['categories'][$idx]['items'][] = [
+            $monthlyAmounts = [];
+            foreach (range(1, 12) as $n) {
+                $monthlyAmounts["m{$n}"] = (float) $item->{"m{$n}_amount"};
+            }
+            $sections[$type]['categories'][$idx]['items'][] = array_merge([
                 'id'            => $item->id,
                 'code'          => $item->accountCode->code,
                 'name'          => $item->accountCode->name,
@@ -369,6 +382,7 @@ public function isOverBudget(int $departmentId, int $periodId): array
                 'q2'            => (float) $item->q2_amount,
                 'q3'            => (float) $item->q3_amount,
                 'q4'            => (float) $item->q4_amount,
+            ], $monthlyAmounts, [
                 'total'         => (float) $item->total_amount,
                 'supp'          => $supp,
                 'effective'     => $effective,
@@ -377,10 +391,13 @@ public function isOverBudget(int $departmentId, int $periodId): array
                 'justification' => $item->justification ?? '',
                 'line_type'     => $item->line_type,
                 'common_size'   => 0,
-            ];
+            ]);
 
             foreach (['q1','q2','q3','q4'] as $k) {
                 $sections[$type]['totals'][$k] += (float) $item->{$k.'_amount'};
+            }
+            foreach (range(1, 12) as $n) {
+                $sections[$type]['totals']["m{$n}"] += (float) $item->{"m{$n}_amount"};
             }
             $sections[$type]['totals']['total']       += (float) $item->total_amount;
             $sections[$type]['totals']['effective']   += $effective;
@@ -391,12 +408,15 @@ public function isOverBudget(int $departmentId, int $periodId): array
         // Recompute category totals cleanly
         foreach (['revenue','expense','capex','balance'] as $type) {
             foreach ($sections[$type]['categories'] as &$cat) {
-                $cat['totals'] = ['q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0,'total'=>0,'effective'=>0,'prev_budget'=>0,'prev_actual'=>0,'common_size'=>0];
+                $cat['totals'] = ['q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0,'m1'=>0,'m2'=>0,'m3'=>0,'m4'=>0,'m5'=>0,'m6'=>0,'m7'=>0,'m8'=>0,'m9'=>0,'m10'=>0,'m11'=>0,'m12'=>0,'total'=>0,'effective'=>0,'prev_budget'=>0,'prev_actual'=>0,'common_size'=>0];
                 foreach ($cat['items'] as $it) {
                     $cat['totals']['q1']          += $it['q1'];
                     $cat['totals']['q2']          += $it['q2'];
                     $cat['totals']['q3']          += $it['q3'];
                     $cat['totals']['q4']          += $it['q4'];
+                    foreach (range(1, 12) as $n) {
+                        $cat['totals']["m{$n}"] += $it["m{$n}"] ?? 0;
+                    }
                     $cat['totals']['total']       += $it['total'];
                     $cat['totals']['effective']   += $it['effective'];
                     $cat['totals']['prev_budget'] += $it['prev_budget'];

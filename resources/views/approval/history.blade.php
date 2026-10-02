@@ -73,12 +73,16 @@
 @php
     $lineItems = $budgetVersion->lineItems ?? collect();
 
-    $grandTotal = $lineItems->sum('total_amount')
-                + $lineItems->sum(fn($i) => $i->approvedSupplementaryTotal());
+    $grandTotal    = $lineItems->sum('total_amount')
+                   + $lineItems->sum(fn($i) => $i->approvedSupplementaryTotal());
+    $isMonthly     = ($entryMode ?? 'quarterly') === 'monthly';
     $grandQ1 = $lineItems->sum('q1_amount');
     $grandQ2 = $lineItems->sum('q2_amount');
     $grandQ3 = $lineItems->sum('q3_amount');
     $grandQ4 = $lineItems->sum('q4_amount');
+    $grandMonthly  = $isMonthly
+        ? array_map(fn($n) => $lineItems->sum("m{$n}_amount"), range(1, 12))
+        : [];
 
     // Split by section type
     $revItems  = $lineItems->filter(fn($i) => in_array($i->accountCode->category->budget_type, ['revenue','both']));
@@ -107,16 +111,25 @@
     <div style="background:var(--navy);border-radius:12px;padding:16px 20px;color:#fff;margin-bottom:16px">
         <div style="font-size:11px;color:rgba(255,255,255,.5);text-transform:uppercase;
                     letter-spacing:.8px;margin-bottom:10px">Total Budget</div>
-        <div class="row text-center g-0">
-            @foreach(['Q1'=>$grandQ1,'Q2'=>$grandQ2,'Q3'=>$grandQ3,'Q4'=>$grandQ4] as $ql => $qv)
-            <div class="col border-end" style="border-color:rgba(255,255,255,.1)!important">
-                <div style="font-size:10px;color:rgba(255,255,255,.5)">{{ $ql }}</div>
-                <div style="font-size:14px;font-weight:700">GHS {{ number_format($qv, 0) }}</div>
-            </div>
-            @endforeach
-            <div class="col">
+        <div class="row text-center g-0" style="{{ $isMonthly ? 'flex-wrap:nowrap;overflow-x:auto' : '' }}">
+            @if($isMonthly)
+                @foreach(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] as $mi => $ml)
+                <div class="col border-end" style="border-color:rgba(255,255,255,.1)!important;min-width:70px">
+                    <div style="font-size:10px;color:rgba(255,255,255,.5)">{{ $ml }}</div>
+                    <div style="font-size:12px;font-weight:700">{{ number_format($grandMonthly[$mi], 0) }}</div>
+                </div>
+                @endforeach
+            @else
+                @foreach(['Q1'=>$grandQ1,'Q2'=>$grandQ2,'Q3'=>$grandQ3,'Q4'=>$grandQ4] as $ql => $qv)
+                <div class="col border-end" style="border-color:rgba(255,255,255,.1)!important">
+                    <div style="font-size:10px;color:rgba(255,255,255,.5)">{{ $ql }}</div>
+                    <div style="font-size:14px;font-weight:700">GHS {{ number_format($qv, 0) }}</div>
+                </div>
+                @endforeach
+            @endif
+            <div class="col" style="min-width:90px">
                 <div style="font-size:10px;color:var(--gold)">Full Year</div>
-                <div style="font-size:18px;font-weight:700;color:var(--gold)">
+                <div style="font-size:{{ $isMonthly ? '14px' : '18px' }};font-weight:700;color:var(--gold)">
                     GHS {{ number_format($grandTotal, 0) }}
                 </div>
             </div>
@@ -185,7 +198,8 @@
                     ['label' => 'OPERATING EXPENSES',  'bg' => '#7C2D12', 'catBg' => '#FFF7ED', 'totalBg' => '#431407', 'totalLabel' => 'TOTAL EXPENSES',  'byCategory' => $expByCategory, 'sectionTotal' => $expTotal, 'textColor' => '#7C2D12'],
                 ],
                 'grandTotal' => $grandTotal,
-                'netRow' => ['label' => 'NET INCOME / (LOSS)', 'value' => $netTotal, 'color' => $netTotal >= 0 ? '#10B981' : '#F43F5E'],
+                'netRow'     => ['label' => 'NET INCOME / (LOSS)', 'value' => $netTotal, 'color' => $netTotal >= 0 ? '#10B981' : '#F43F5E'],
+                'entryMode'  => $entryMode,
             ])
         </div>
 
@@ -201,7 +215,8 @@
                     ['label' => 'CAPITAL EXPENDITURE', 'bg' => '#78350F', 'catBg' => '#FEF3C7', 'totalBg' => '#92400E', 'totalLabel' => 'TOTAL CAPITAL EXPENDITURE', 'byCategory' => $cxByCategory, 'sectionTotal' => $cxTotal, 'textColor' => '#78350F'],
                 ],
                 'grandTotal' => $grandTotal,
-                'netRow' => null,
+                'netRow'     => null,
+                'entryMode'  => $entryMode,
             ])
         </div>
         @endif
@@ -218,7 +233,8 @@
                     ['label' => 'ASSETS & LIABILITIES', 'bg' => '#4C1D95', 'catBg' => '#EDE9FE', 'totalBg' => '#5B21B6', 'totalLabel' => 'TOTAL ASSETS & LIABILITIES', 'byCategory' => $blByCategory, 'sectionTotal' => $blTotal, 'textColor' => '#4C1D95'],
                 ],
                 'grandTotal' => $grandTotal,
-                'netRow' => null,
+                'netRow'     => null,
+                'entryMode'  => $entryMode,
             ])
         </div>
         @endif

@@ -135,10 +135,14 @@
 
         {{-- Grand totals bar --}}
         @php
+            $isMonthly  = ($entryMode ?? 'quarterly') === 'monthly';
             $grandQ1    = $budgetVersion->lineItems->sum('q1_amount');
             $grandQ2    = $budgetVersion->lineItems->sum('q2_amount');
             $grandQ3    = $budgetVersion->lineItems->sum('q3_amount');
             $grandQ4    = $budgetVersion->lineItems->sum('q4_amount');
+            $grandMonthly = $isMonthly
+                ? array_map(fn($n) => $budgetVersion->lineItems->sum("m{$n}_amount"), range(1,12))
+                : [];
 
             $totalSupplementary = $budgetVersion->lineItems->sum(fn($i) => $i->approvedSupplementaryTotal());
             $grandTotal = $grandTotals['total'] - $totalSupplementary;
@@ -149,15 +153,22 @@
 
         <div style="background:var(--navy);border-radius:12px;padding:16px 20px;
                     color:#fff;margin-bottom:16px">
-            <div class="row g-0 text-center">
-                @foreach(['Q1'=>$grandQ1,'Q2'=>$grandQ2,'Q3'=>$grandQ3,'Q4'=>$grandQ4] as $q=>$val)
-                <div class="col border-end" style="border-color:rgba(255,255,255,.1)!important">
-                    <div style="font-size:10px;color:rgba(255,255,255,.5)">{{ $q }}</div>
-                    <div style="font-size:13px;font-weight:700">
-                        GHS {{ number_format($val,0) }}
+            <div class="row g-0 text-center" style="{{ $isMonthly ? 'flex-wrap:nowrap;overflow-x:auto' : '' }}">
+                @if($isMonthly)
+                    @foreach(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] as $mi => $ml)
+                    <div class="col border-end" style="border-color:rgba(255,255,255,.1)!important;min-width:65px">
+                        <div style="font-size:10px;color:rgba(255,255,255,.5)">{{ $ml }}</div>
+                        <div style="font-size:12px;font-weight:700">{{ number_format($grandMonthly[$mi],0) }}</div>
                     </div>
-                </div>
-                @endforeach
+                    @endforeach
+                @else
+                    @foreach(['Q1'=>$grandQ1,'Q2'=>$grandQ2,'Q3'=>$grandQ3,'Q4'=>$grandQ4] as $q=>$val)
+                    <div class="col border-end" style="border-color:rgba(255,255,255,.1)!important">
+                        <div style="font-size:10px;color:rgba(255,255,255,.5)">{{ $q }}</div>
+                        <div style="font-size:13px;font-weight:700">GHS {{ number_format($val,0) }}</div>
+                    </div>
+                    @endforeach
+                @endif
                 <div class="col border-end" style="border-color:rgba(255,255,255,.1)!important">
                     <div style="font-size:10px;color:var(--gold)">Original Budget</div>
                     <div style="font-size:14px;font-weight:700;color:var(--gold)">
@@ -298,12 +309,18 @@
             @php
                 $tabTotBudget = $tabTotSupp = $tabTotEff = $tabTotAct = 0;
                 $tabTotQ1 = $tabTotQ2 = $tabTotQ3 = $tabTotQ4 = 0;
+                $tabTotMonthly = array_fill(1, 12, 0);
                 foreach ($altab['summary'] as $cd) {
                     $tabTotBudget += $cd['total'];
                     $tabTotQ1 += $cd['items']->sum('q1_amount');
                     $tabTotQ2 += $cd['items']->sum('q2_amount');
                     $tabTotQ3 += $cd['items']->sum('q3_amount');
                     $tabTotQ4 += $cd['items']->sum('q4_amount');
+                    if ($isMonthly) {
+                        for ($mn = 1; $mn <= 12; $mn++) {
+                            $tabTotMonthly[$mn] += $cd['items']->sum("m{$mn}_amount");
+                        }
+                    }
                     foreach ($cd['items'] as $_ti) {
                         $tabTotSupp += $_ti->approvedSupplementaryTotal();
                         $tabTotEff  += $_ti->effectiveBudget();
@@ -351,15 +368,21 @@
             </div>
 
             <div class="table-responsive" style="max-height:520px;overflow-y:auto">
-            <table id="tbl-{{ $altab['id'] }}" class="table table-sm mb-0" style="font-size:12px;min-width:900px">
+            <table id="tbl-{{ $altab['id'] }}" class="table table-sm mb-0" style="font-size:12px;min-width:{{ $isMonthly ? '1500px' : '900px' }}">
                 <thead style="position:sticky;top:0;z-index:2">
                     <tr style="background:{{ $altab['catBg'] }};color:#fff">
                         <th style="min-width:220px">Account</th>
                         <th style="min-width:60px">Type</th>
-                        <th class="text-end" style="min-width:72px">Q1</th>
-                        <th class="text-end" style="min-width:72px">Q2</th>
-                        <th class="text-end" style="min-width:72px">Q3</th>
-                        <th class="text-end" style="min-width:72px">Q4</th>
+                        @if($isMonthly)
+                            @foreach(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] as $ml)
+                            <th class="text-end" style="min-width:65px">{{ $ml }}</th>
+                            @endforeach
+                        @else
+                            <th class="text-end" style="min-width:72px">Q1</th>
+                            <th class="text-end" style="min-width:72px">Q2</th>
+                            <th class="text-end" style="min-width:72px">Q3</th>
+                            <th class="text-end" style="min-width:72px">Q4</th>
+                        @endif
                         <th class="text-end" style="min-width:88px">Original</th>
                         <th class="text-end" style="min-width:80px">Supp.</th>
                         <th class="text-end" style="min-width:88px">Effective</th>
@@ -385,7 +408,7 @@
                 {{-- Category header (clickable) --}}
                 <tr class="cat-hdr" style="background:{{ $altab['catBg'] }};color:#fff;cursor:pointer"
                     onclick="toggleCat('{{ $cid }}',this)">
-                    <td colspan="11" style="padding:7px 12px;font-size:12px">
+                    <td colspan="99" style="padding:7px 12px;font-size:12px">
                         <span class="ct-arr"
                               style="display:inline-block;font-size:10px;margin-right:6px;
                                      transition:transform .15s">▼</span>
@@ -426,10 +449,16 @@
                             {{ ucfirst($item->line_type) }}
                         </span>
                     </td>
-                    <td class="text-end">{{ number_format($item->q1_amount,2) }}</td>
-                    <td class="text-end">{{ number_format($item->q2_amount,2) }}</td>
-                    <td class="text-end">{{ number_format($item->q3_amount,2) }}</td>
-                    <td class="text-end">{{ number_format($item->q4_amount,2) }}</td>
+                    @if($isMonthly)
+                        @foreach(range(1,12) as $mn)
+                        <td class="text-end">{{ number_format($item->{'m'.$mn.'_amount'},2) }}</td>
+                        @endforeach
+                    @else
+                        <td class="text-end">{{ number_format($item->q1_amount,2) }}</td>
+                        <td class="text-end">{{ number_format($item->q2_amount,2) }}</td>
+                        <td class="text-end">{{ number_format($item->q3_amount,2) }}</td>
+                        <td class="text-end">{{ number_format($item->q4_amount,2) }}</td>
+                    @endif
                     <td class="text-end">{{ number_format($item->total_amount,2) }}</td>
                     <td class="text-end" style="color:{{ $iSupp>0?'#10B981':'var(--slate)' }}">
                         {{ $iSupp>0?'+'.number_format($iSupp,2):'—' }}
@@ -449,10 +478,16 @@
                     <td colspan="2" style="padding-left:14px;color:var(--slate)">
                         {{ $catName }} — Subtotal
                     </td>
-                    <td class="text-end">{{ number_format($catData['items']->sum('q1_amount'),2) }}</td>
-                    <td class="text-end">{{ number_format($catData['items']->sum('q2_amount'),2) }}</td>
-                    <td class="text-end">{{ number_format($catData['items']->sum('q3_amount'),2) }}</td>
-                    <td class="text-end">{{ number_format($catData['items']->sum('q4_amount'),2) }}</td>
+                    @if($isMonthly)
+                        @foreach(range(1,12) as $mn)
+                        <td class="text-end">{{ number_format($catData['items']->sum("m{$mn}_amount"),2) }}</td>
+                        @endforeach
+                    @else
+                        <td class="text-end">{{ number_format($catData['items']->sum('q1_amount'),2) }}</td>
+                        <td class="text-end">{{ number_format($catData['items']->sum('q2_amount'),2) }}</td>
+                        <td class="text-end">{{ number_format($catData['items']->sum('q3_amount'),2) }}</td>
+                        <td class="text-end">{{ number_format($catData['items']->sum('q4_amount'),2) }}</td>
+                    @endif
                     <td class="text-end">{{ number_format($cBud,2) }}</td>
                     <td class="text-end" style="color:{{ $cSupp>0?'#10B981':'inherit' }}">
                         {{ $cSupp>0?'+'.number_format($cSupp,2):'—' }}
@@ -464,7 +499,7 @@
                         {{ $cVar>=0?'+':'' }}{{ number_format($cVar,2) }}
                     </td>
                 </tr>
-                <tr style="height:3px;background:#F1F5F9"><td colspan="11"></td></tr>
+                <tr style="height:3px;background:#F1F5F9"><td colspan="99"></td></tr>
 
                 @endforeach
 
@@ -472,10 +507,16 @@
                 <tr style="background:{{ $altab['totalBg'] }};color:#fff;font-weight:700;
                             font-size:13px;border-top:2px solid rgba(255,255,255,.2)">
                     <td colspan="2" style="padding-left:14px">Section Total</td>
-                    <td class="text-end">{{ number_format($tabTotQ1,2) }}</td>
-                    <td class="text-end">{{ number_format($tabTotQ2,2) }}</td>
-                    <td class="text-end">{{ number_format($tabTotQ3,2) }}</td>
-                    <td class="text-end">{{ number_format($tabTotQ4,2) }}</td>
+                    @if($isMonthly)
+                        @foreach(range(1,12) as $mn)
+                        <td class="text-end">{{ number_format($tabTotMonthly[$mn],2) }}</td>
+                        @endforeach
+                    @else
+                        <td class="text-end">{{ number_format($tabTotQ1,2) }}</td>
+                        <td class="text-end">{{ number_format($tabTotQ2,2) }}</td>
+                        <td class="text-end">{{ number_format($tabTotQ3,2) }}</td>
+                        <td class="text-end">{{ number_format($tabTotQ4,2) }}</td>
+                    @endif
                     <td class="text-end">{{ number_format($tabTotBudget,2) }}</td>
                     <td class="text-end"
                         style="color:{{ $tabTotSupp>0?'#6EE7B7':'rgba(255,255,255,.35)' }}">

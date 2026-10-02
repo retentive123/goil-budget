@@ -251,9 +251,10 @@ class BudgetEntryController extends Controller
             ?? \App\Models\BudgetPeriod::where('id', '<', $period->id)
                 ->orderByDesc('year')->orderByDesc('id')->first();
 
-        $pnlData = $this->calculator->buildPnlData($budgetVersion, $prevPeriod);
+        $pnlData   = $this->calculator->buildPnlData($budgetVersion, $prevPeriod);
+        $entryMode = $budgetVersion->period->entry_mode ?? 'quarterly';
 
-        return view('budget.show-pnl', compact('budgetVersion', 'grandTotals', 'prevPeriod', 'pnlData'));
+        return view('budget.show-pnl', compact('budgetVersion', 'grandTotals', 'prevPeriod', 'pnlData', 'entryMode'));
     }
 
     // Save line item amounts (auto-save via AJAX)
@@ -275,8 +276,9 @@ class BudgetEntryController extends Controller
         $adminSetsFreq = $period->adminSetsFreq();
         $manualSplit   = (bool) SystemSetting::get('manual_period_split', false);
         $entryMode     = $period->entry_mode ?? 'quarterly';
+        $pnlMode       = (bool) $request->input('pnl_mode', false);
 
-        if ($calcMode !== 'none') {
+        if ($calcMode !== 'none' && !$pnlMode) {
             // ── Qty × Rate [× Freq] mode ──────────────────────────────────────────
             $baseRules = [
                 'items'          => ['required', 'array'],
@@ -311,42 +313,6 @@ class BudgetEntryController extends Controller
                     ->map(fn($i) => ['rate' => $i->rate, 'frequency' => $i->frequency])
                 : collect();
 
-            // Manual split validation: sum of periods must equal computed total
-            if ($manualSplit) {
-                $errors = [];
-                foreach ($request->items as $idx => $d) {
-                    $snap  = $adminSnapshots->get($d['id']);
-                    $qty   = (float) $d['qty'];
-                    $rate  = $adminSetsRate ? (float) ($snap['rate'] ?? 1) : (float) $d['rate'];
-                    $freq  = $calcMode === 'qty_rate_freq'
-                        ? ($adminSetsFreq ? (float) ($snap['frequency'] ?? 1) : (float) $d['freq'])
-                        : 1.0;
-                    if ($freq <= 0) $freq = 1.0;
-                    $computed = round($qty * $rate * $freq, 2);
-
-                    if ($entryMode === 'monthly') {
-                        $splitSum = round(array_sum(array_map(
-                            fn($mn) => (float) ($d["m{$mn}"] ?? 0), range(1, 12)
-                        )), 2);
-                    } else {
-                        $splitSum = round(
-                            (float)($d['q1'] ?? 0) + (float)($d['q2'] ?? 0) +
-                            (float)($d['q3'] ?? 0) + (float)($d['q4'] ?? 0), 2
-                        );
-                    }
-
-                    if (abs($splitSum - $computed) > 0.02) {
-                        $errors["items.{$idx}.q1"] =
-                            "Period split ({$splitSum}) must equal computed total ({$computed}).";
-                    }
-                }
-                if (!empty($errors)) {
-                    return response()->json([
-                        'error'  => 'One or more line items have period splits that do not balance with their computed total.',
-                        'errors' => $errors,
-                    ], 422);
-                }
-            }
 
             DB::transaction(function () use ($request, $budgetVersion, $calcMode, $entryMode,
                                              $adminSetsRate, $adminSetsFreq, $adminSnapshots, $manualSplit) {

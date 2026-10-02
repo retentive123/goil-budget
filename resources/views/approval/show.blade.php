@@ -130,8 +130,8 @@
                         @endif
                     </span>
                 </div>
-                <div class="card-body p-0">
-                    <table class="table table-sm table-hover mb-0">
+                <div class="card-body p-0" style="overflow-x:auto">
+                    <table class="table table-sm table-hover mb-0" style="{{ $entryMode === 'monthly' ? 'min-width:1400px' : '' }}">
                         <thead class="table-light">
                             <tr>
                                 <th style="width:{{ $calcMode !== 'none' ? '22%' : '30%' }}">Account</th>
@@ -143,10 +143,16 @@
                                 @endif
                                 <th class="text-end" style="color:#6D28D9">Year Total</th>
                                 @endif
-                                <th class="text-end">Q1</th>
-                                <th class="text-end">Q2</th>
-                                <th class="text-end">Q3</th>
-                                <th class="text-end">Q4</th>
+                                @if($entryMode === 'monthly')
+                                    @foreach(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] as $ml)
+                                    <th class="text-end" style="min-width:70px">{{ $ml }}</th>
+                                    @endforeach
+                                @else
+                                    <th class="text-end">Q1</th>
+                                    <th class="text-end">Q2</th>
+                                    <th class="text-end">Q3</th>
+                                    <th class="text-end">Q4</th>
+                                @endif
                                 <th class="text-end">Supplementary</th>
                                 <th class="text-end">Total</th>
                                 @if($canDecide)<th>Decision</th><th>Adjusted</th>@endif
@@ -190,10 +196,16 @@
                                     {{ $itemYearTotal !== null ? number_format($itemYearTotal, 2) : '—' }}
                                 </td>
                                 @endif
-                                <td class="text-end small">{{ number_format($item->q1_amount, 2) }}</td>
-                                <td class="text-end small">{{ number_format($item->q2_amount, 2) }}</td>
-                                <td class="text-end small">{{ number_format($item->q3_amount, 2) }}</td>
-                                <td class="text-end small">{{ number_format($item->q4_amount, 2) }}</td>
+                                @if($entryMode === 'monthly')
+                                    @foreach(range(1,12) as $mn)
+                                    <td class="text-end small">{{ number_format($item->{'m'.$mn.'_amount'}, 2) }}</td>
+                                    @endforeach
+                                @else
+                                    <td class="text-end small">{{ number_format($item->q1_amount, 2) }}</td>
+                                    <td class="text-end small">{{ number_format($item->q2_amount, 2) }}</td>
+                                    <td class="text-end small">{{ number_format($item->q3_amount, 2) }}</td>
+                                    <td class="text-end small">{{ number_format($item->q4_amount, 2) }}</td>
+                                @endif
                                 <td class="text-end small" style="color:{{ $itemSupp > 0 ? '#10B981' : 'inherit' }}">
                                     {{ $itemSupp > 0 ? '+'.number_format($itemSupp, 2) : '—' }}
                                 </td>
@@ -235,10 +247,16 @@
                                     {{ number_format($categoryData['items']->sum('total_amount'), 2) }}
                                 </td>
                                 @endif
-                                <td class="text-end">{{ number_format($categoryData['items']->sum('q1_amount'), 2) }}</td>
-                                <td class="text-end">{{ number_format($categoryData['items']->sum('q2_amount'), 2) }}</td>
-                                <td class="text-end">{{ number_format($categoryData['items']->sum('q3_amount'), 2) }}</td>
-                                <td class="text-end">{{ number_format($categoryData['items']->sum('q4_amount'), 2) }}</td>
+                                @if($entryMode === 'monthly')
+                                    @foreach(range(1,12) as $mn)
+                                    <td class="text-end">{{ number_format($categoryData['items']->sum("m{$mn}_amount"), 2) }}</td>
+                                    @endforeach
+                                @else
+                                    <td class="text-end">{{ number_format($categoryData['items']->sum('q1_amount'), 2) }}</td>
+                                    <td class="text-end">{{ number_format($categoryData['items']->sum('q2_amount'), 2) }}</td>
+                                    <td class="text-end">{{ number_format($categoryData['items']->sum('q3_amount'), 2) }}</td>
+                                    <td class="text-end">{{ number_format($categoryData['items']->sum('q4_amount'), 2) }}</td>
+                                @endif
                                 <td class="text-end" style="color:{{ $catSuppTotal > 0 ? '#10B981' : 'inherit' }}">
                                     {{ $catSuppTotal > 0 ? '+'.number_format($catSuppTotal, 2) : '—' }}
                                 </td>
@@ -345,80 +363,50 @@
         {{-- ── Decision Form ── --}}
         @if($canDecide)
             @php $roleConfig = $approvalService->currentRoleConfig($budgetVersion) ?? null; @endphp
-            <div class="card border-0 shadow-lg mb-4" style="border-radius: 16px; overflow: hidden; border-top: 4px solid #E65C00;">
-                {{-- Card Header --}}
-                <div class="card-header border-0 px-4 py-3" style="background: #E65C00; color: #fff;">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="d-flex align-items-center justify-content-center rounded-circle"
-                                style="width: 40px; height: 40px; background: rgba(255,255,255,0.12); font-size: 18px;">
-                                <i class="bi bi-check-circle"></i>
-                            </div>
-                            <div>
-                                <div style="font-size: 14px; font-weight: 700;">
-                                    Your Decision — {{ $currentStage->name }}
-                                </div>
-                                @if($roleConfig)
-                                <div style="font-size: 11px; color: rgba(255,255,255,0.7); margin-top: 2px;">
-                                    <i class="bi bi-{{ $roleConfig->scope === 'all' ? 'globe2' : 'building' }}"></i>
-                                    Scope: {{ $roleConfig->scope === 'all' ? 'All departments' : 'Own department only' }}
-                                    @if($roleConfig->can_partial_approve)
-                                        · <i class="bi bi-check2-square"></i> Partial approval enabled
-                                    @endif
-                                    @if($roleConfig->can_reduce_amounts)
-                                        · <i class="bi bi-dash-circle"></i> Can reduce amounts
-                                    @endif
-                                </div>
-                                @endif
-                            </div>
-                        </div>
-                        <span class="badge px-3 py-2" style="background: rgba(255,255,255,0.15); color: #fff; font-size: 11px; border-radius: 20px;">
-                            <i class="bi bi-clock"></i> Pending Review
-                        </span>
+            <div class="card border-0 shadow mb-4" style="border-radius:12px;overflow:hidden;border-top:3px solid #E65C00">
+                <div class="card-header border-0 px-3 py-3" style="background:#E65C00;color:#fff">
+                    <div class="fw-bold" style="font-size:14px">Your Decision — {{ $currentStage->name }}</div>
+                    @if($roleConfig)
+                    <div style="font-size:11px;color:rgba(255,255,255,.75);margin-top:3px">
+                        Scope: {{ $roleConfig->scope === 'all' ? 'All departments' : 'Own department only' }}
+                        @if($roleConfig->can_partial_approve) &middot; Partial approval enabled @endif
+                        @if($roleConfig->can_reduce_amounts) &middot; Can reduce amounts @endif
                     </div>
+                    @endif
                 </div>
 
-                {{-- Card Body --}}
-                <div class="card-body p-4">
+                <div class="card-body p-3">
                     <form id="decision-form" method="POST" action="{{ route('approvals.decide', $budgetVersion) }}">
                         @csrf
 
-                        {{-- Decision Radio Buttons --}}
-                        <div class="mb-4">
-                            <label class="form-label fw-semibold" style="color: #1B2A4A; font-size: 13px;">
-                                <i class="bi bi-check2-circle" style="color: #E65C00;"></i> Decision
-                            </label>
-                            <div class="d-flex gap-4">
-                                <div class="form-check">
-                                    <input type="radio" name="decision" value="approved"
-                                        id="dec-approve" class="form-check-input" required
-                                        style="border-color: #10B981;">
-                                    <label for="dec-approve" class="form-check-label fw-semibold" style="color: #10B981;">
-                                        <i class="bi bi-check-circle"></i> Approve
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input type="radio" name="decision" value="rejected"
-                                        id="dec-reject" class="form-check-input"
-                                        style="border-color: #F43F5E;">
-                                    <label for="dec-reject" class="form-check-label fw-semibold" style="color: #F43F5E;">
-                                        <i class="bi bi-x-circle"></i> Reject
-                                    </label>
-                                </div>
+                        {{-- Decision toggle cards --}}
+                        <div class="mb-3">
+                            <div class="small fw-semibold mb-2" style="color:#64748B">Decision</div>
+                            <div class="d-flex gap-2">
+                                <label class="dec-card flex-fill text-center py-2 px-2 rounded-2"
+                                       for="dec-approve" id="lbl-approve"
+                                       style="cursor:pointer;border:2px solid #BBF7D0;background:#F0FDF4;color:#15803D;font-weight:600;font-size:13px;transition:all .15s">
+                                    <input type="radio" name="decision" id="dec-approve" value="approved" class="d-none" required>
+                                    Approve
+                                </label>
+                                <label class="dec-card flex-fill text-center py-2 px-2 rounded-2"
+                                       for="dec-reject" id="lbl-reject"
+                                       style="cursor:pointer;border:2px solid #FECDD3;background:#FFF1F2;color:#BE123C;font-weight:600;font-size:13px;transition:all .15s">
+                                    <input type="radio" name="decision" id="dec-reject" value="rejected" class="d-none">
+                                    Reject
+                                </label>
                             </div>
                         </div>
 
                         {{-- Comments --}}
-                        <div class="mb-4">
-                            <label class="form-label fw-semibold" style="color: #1B2A4A; font-size: 13px;">
-                                <i class="bi bi-chat-dots" style="color: #E65C00;"></i> Comments
-                                <span class="text-danger" id="comments-required" style="display:none;">
-                                    (required for rejection)
-                                </span>
+                        <div class="mb-3">
+                            <label class="small fw-semibold mb-1 d-block" style="color:#64748B">
+                                Comments
+                                <span class="text-danger fw-normal" id="comments-required" style="display:none">(required)</span>
                             </label>
-                            <textarea name="comments" rows="4"
+                            <textarea name="comments" rows="3"
                                     class="form-control @error('comments') is-invalid @enderror"
-                                    style="border-radius: 10px; border-color: #E2E8F0; padding: 12px; resize: vertical;"
+                                    style="border-radius:8px;border-color:#E2E8F0;padding:10px;resize:vertical;font-size:13px"
                                     placeholder="Add comments…">{{ old('comments') }}</textarea>
                             @error('comments')
                                 <div class="invalid-feedback">{{ $message }}</div>
@@ -427,12 +415,10 @@
 
                         {{-- Line Item Controls (Partial Approval) --}}
                         @if($roleConfig?->can_partial_approve)
-                        <div class="mb-4">
-                            <div style="font-size: 12px; font-weight: 600; color: #1B2A4A; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">
-                                <i class="bi bi-list-ul" style="color: #E65C00;"></i> Line Item Decisions
-                                <span style="font-weight: 400; text-transform: none; color: #94A3B8; font-size: 11px;">
-                                    (optional — leave blank to apply overall decision)
-                                </span>
+                        <div class="mb-3">
+                            <div class="small fw-semibold mb-2" style="color:#64748B">
+                                Line Item Decisions
+                                <span style="font-weight:400;color:#94A3B8;font-size:11px">(optional)</span>
                             </div>
 
                             <div style="max-height: 400px; overflow-y: auto; border-radius: 10px; border: 1px solid #E2E8F0;">
@@ -485,8 +471,8 @@
 
                         {{-- Submit Button --}}
                         <button type="button" id="submit-decision-btn" class="btn w-100 py-2 fw-semibold"
-                                style="background: #E65C00; color: #fff; border-radius: 10px; border: none; transition: all 0.3s ease; font-size: 14px;">
-                            <i class="bi bi-send"></i> Submit Decision
+                                style="background:#E65C00;color:#fff;border-radius:8px;border:none;font-size:14px">
+                            Submit Decision
                         </button>
                     </form>
                 </div>
@@ -599,11 +585,26 @@ document.querySelectorAll('.li-decision').forEach(sel => {
     });
 });
 
-// Show comments required hint when rejection is selected
+// Decision toggle cards — highlight selected, show comments hint on reject
 document.querySelectorAll('input[name="decision"]').forEach(radio => {
     radio.addEventListener('change', function () {
-        const hint = document.getElementById('comments-required');
-        hint.style.display = this.value === 'rejected' ? 'inline' : 'none';
+        document.getElementById('comments-required').style.display =
+            this.value === 'rejected' ? 'inline' : 'none';
+        // Active styles
+        const lblApprove = document.getElementById('lbl-approve');
+        const lblReject  = document.getElementById('lbl-reject');
+        if (lblApprove) {
+            const on = this.value === 'approved';
+            lblApprove.style.background = on ? '#16A34A' : '#F0FDF4';
+            lblApprove.style.color      = on ? '#fff'    : '#15803D';
+            lblApprove.style.borderColor= on ? '#16A34A' : '#BBF7D0';
+        }
+        if (lblReject) {
+            const on = this.value === 'rejected';
+            lblReject.style.background = on ? '#BE123C' : '#FFF1F2';
+            lblReject.style.color      = on ? '#fff'    : '#BE123C';
+            lblReject.style.borderColor= on ? '#BE123C' : '#FECDD3';
+        }
     });
 });
 

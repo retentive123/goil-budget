@@ -39,6 +39,8 @@ use App\Http\Controllers\Supplementary\SupplementaryBudgetController;
 use App\Http\Controllers\Admin\DeadlineOverrideController;
 use App\Http\Controllers\Budget\AllBudgetsController;
 use App\Http\Controllers\DocsController;
+use App\Http\Controllers\Admin\RatioConfigController;
+use App\Http\Controllers\Reports\RatioAnalysisController;
 
 
 // Guest routes
@@ -192,8 +194,8 @@ Route::middleware('auth')->group(function () {
             Route::post('deadline-overrides/{override}/revoke', [DeadlineOverrideController::class, 'revoke'])->name('deadline-overrides.revoke');
         });
 
-
-
+        // Ratio configurations
+        Route::resource('ratio-configs', RatioConfigController::class);
 
         });
 
@@ -296,6 +298,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/financial',       [ReportController::class, 'financialStatement'])->name('financial');
     Route::get('/capex',           [ReportController::class, 'capex'])->name('capex');
     Route::get('/subsidiary',      [ReportController::class, 'subsidiaryReport'])->name('subsidiary');
+    Route::get('/ratios',          [RatioAnalysisController::class, 'index'])->name('ratios');
 
     Route::middleware('permission:export reports')->group(function () {
         Route::get('/export/approved',    [ReportController::class, 'exportApproved'])->name('export.approved');

@@ -12,6 +12,13 @@
 
     $hasCapex   = !empty($pnlData['capex']['categories']);
     $hasBalance = !empty($pnlData['balance']['categories']);
+
+    $isMonthly  = ($entryMode ?? 'quarterly') === 'monthly';
+    $periodCols = $isMonthly
+        ? ['m1'=>'Jan','m2'=>'Feb','m3'=>'Mar','m4'=>'Apr','m5'=>'May','m6'=>'Jun',
+           'm7'=>'Jul','m8'=>'Aug','m9'=>'Sep','m10'=>'Oct','m11'=>'Nov','m12'=>'Dec']
+        : ['q1'=>'Q1','q2'=>'Q2','q3'=>'Q3','q4'=>'Q4'];
+    $colWidth = $isMonthly ? '55px' : '70px';
 @endphp
 
 <div class="row justify-content-center">
@@ -186,18 +193,18 @@
             </ul>
 
             <div class="tab-content border border-top-0 rounded-bottom mb-4" id="confirmTabsContent"
-                 style="max-height:380px;overflow-y:auto">
+                 style="max-height:520px;overflow-y:auto">
 
                 {{-- ── Tab 1: Income Statement ── --}}
                 <div class="tab-pane fade show active" id="ctab-is" role="tabpanel">
+                    <div style="overflow-x:auto">
                     <table class="table table-sm mb-0 confirm-table" style="font-size:12px">
                         <thead class="sticky-top" style="top:0">
                             <tr style="background:#1B2A4A;color:#fff">
                                 <th style="min-width:200px">Category</th>
-                                <th class="text-end border-start border-secondary" style="min-width:70px">Q1</th>
-                                <th class="text-end" style="min-width:70px">Q2</th>
-                                <th class="text-end" style="min-width:70px">Q3</th>
-                                <th class="text-end" style="min-width:70px">Q4</th>
+                                @foreach($periodCols as $key => $label)
+                                <th class="text-end {{ $loop->first ? 'border-start border-secondary' : '' }}" style="min-width:{{ $colWidth }}">{{ $label }}</th>
+                                @endforeach
                                 <th class="text-end" style="min-width:100px">Total</th>
                                 @if($hasPrev)
                                 <th class="text-end border-start border-secondary" style="min-width:90px">Prev Budget</th>
@@ -209,163 +216,167 @@
                         <tbody>
                             {{-- Revenue section --}}
                             <tr style="background:#1B2A4A;color:#fff">
-                                <td colspan="99" style="font-size:11px;font-weight:700;letter-spacing:1px;padding:7px 12px">
-                                    REVENUE INCOME
-                                </td>
+                                <td colspan="99" style="font-size:11px;font-weight:700;letter-spacing:1px;padding:7px 12px">REVENUE INCOME</td>
                             </tr>
                             @forelse($pnlData['revenue']['categories'] as $cat)
-                            @php
-                                $t = $cat['totals'];
-                                $growth = ($hasPrev && $t['prev_actual'] > 0)
-                                    ? (($t['effective'] - $t['prev_actual']) / abs($t['prev_actual'])) * 100
-                                    : null;
-                            @endphp
-                            <tr style="background:#EFF3F9">
+                            @php $catId = 'rev-'.$loop->index; $t = $cat['totals'];
+                                $growth = ($hasPrev && $t['prev_actual'] > 0) ? (($t['effective'] - $t['prev_actual']) / abs($t['prev_actual'])) * 100 : null; @endphp
+                            <tr class="cat-row" style="background:#EFF3F9;cursor:pointer" onclick="toggleCatItems(this)" data-cat="{{ $catId }}">
                                 <td style="padding-left:14px;font-weight:600;color:#1B2A4A">
-                                    {{ $cat['name'] }}
-                                    <span class="text-muted fw-normal ms-1" style="font-size:10px">({{ count($cat['items']) }})</span>
+                                    <i class="bi bi-chevron-right cat-chevron" style="font-size:10px;margin-right:5px;color:#94A3B8;transition:transform .15s"></i>{{ $cat['name'] }}<span class="text-muted fw-normal ms-1" style="font-size:10px">({{ count($cat['items']) }})</span>
                                 </td>
-                                <td class="text-end border-start text-muted small">{{ number_format($t['q1'], 2) }}</td>
-                                <td class="text-end text-muted small">{{ number_format($t['q2'], 2) }}</td>
-                                <td class="text-end text-muted small">{{ number_format($t['q3'], 2) }}</td>
-                                <td class="text-end text-muted small">{{ number_format($t['q4'], 2) }}</td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end text-muted small {{ $loop->first ? 'border-start' : '' }}">{{ number_format($t[$key], 2) }}</td>
+                                @endforeach
                                 <td class="text-end fw-semibold" style="color:#1B2A4A">{{ number_format($t['effective'], 2) }}</td>
                                 @if($hasPrev)
                                 <td class="text-end text-muted small border-start">{{ number_format($t['prev_budget'], 2) }}</td>
                                 <td class="text-end text-muted small">{{ number_format($t['prev_actual'], 2) }}</td>
                                 <td class="text-end small">
-                                    @if($growth !== null)
-                                    <span style="color:{{ $growth >= 0 ? '#10B981' : '#F43F5E' }}">
-                                        {{ $growth >= 0 ? '+' : '' }}{{ number_format($growth, 1) }}%
-                                    </span>
-                                    @else <span class="text-muted">—</span> @endif
+                                    @if($growth !== null)<span style="color:{{ $growth >= 0 ? '#10B981' : '#F43F5E' }}">{{ $growth >= 0 ? '+' : '' }}{{ number_format($growth,1) }}%</span>
+                                    @else<span class="text-muted">—</span>@endif
                                 </td>
                                 @endif
                             </tr>
+                            @foreach($cat['items'] as $item)
+                            @php $ig = ($hasPrev && $item['prev_actual'] > 0) ? (($item['effective'] - $item['prev_actual']) / abs($item['prev_actual'])) * 100 : null; @endphp
+                            <tr class="cat-items-{{ $catId }}" style="display:none;background:#F8FAFC">
+                                <td style="padding-left:28px;color:#475569;font-size:11px">
+                                    <code style="font-size:10px;color:#94A3B8;margin-right:4px;background:transparent">{{ $item['code'] }}</code>{{ $item['name'] }}
+                                </td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end small {{ $loop->first ? 'border-start' : '' }}" style="color:#64748B">{{ number_format($item[$key], 2) }}</td>
+                                @endforeach
+                                <td class="text-end small" style="color:#475569">{{ number_format($item['effective'], 2) }}</td>
+                                @if($hasPrev)
+                                <td class="text-end small border-start text-muted">{{ number_format($item['prev_budget'], 2) }}</td>
+                                <td class="text-end small text-muted">{{ number_format($item['prev_actual'], 2) }}</td>
+                                <td class="text-end small">
+                                    @if($ig !== null)<span style="color:{{ $ig >= 0 ? '#10B981' : '#F43F5E' }}">{{ $ig >= 0 ? '+' : '' }}{{ number_format($ig,1) }}%</span>
+                                    @else<span class="text-muted">—</span>@endif
+                                </td>
+                                @endif
+                            </tr>
+                            @endforeach
                             @empty
                             <tr><td colspan="99" class="text-center text-muted py-3 small">No revenue items</td></tr>
                             @endforelse
-                            {{-- Revenue total --}}
                             <tr style="background:#1E3A5F;color:#fff;font-weight:700">
                                 <td style="padding-left:12px">TOTAL REVENUE</td>
-                                <td class="text-end border-start border-secondary">{{ number_format($rev['q1'], 2) }}</td>
-                                <td class="text-end">{{ number_format($rev['q2'], 2) }}</td>
-                                <td class="text-end">{{ number_format($rev['q3'], 2) }}</td>
-                                <td class="text-end">{{ number_format($rev['q4'], 2) }}</td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end {{ $loop->first ? 'border-start border-secondary' : '' }}">{{ number_format($rev[$key], 2) }}</td>
+                                @endforeach
                                 <td class="text-end">{{ number_format($rev['effective'], 2) }}</td>
                                 @if($hasPrev)
                                 <td class="text-end border-start border-secondary">{{ number_format($rev['prev_budget'], 2) }}</td>
                                 <td class="text-end">{{ number_format($rev['prev_actual'], 2) }}</td>
                                 <td class="text-end">
-                                    @if($rev['prev_actual'] > 0)
-                                    @php $g = (($rev['effective'] - $rev['prev_actual']) / abs($rev['prev_actual'])) * 100; @endphp
-                                    <span style="color:{{ $g >= 0 ? '#6EE7B7' : '#FCA5A5' }}">{{ $g >= 0 ? '+' : '' }}{{ number_format($g,1) }}%</span>
-                                    @else <span class="text-muted">—</span> @endif
+                                    @if($rev['prev_actual'] > 0)@php $g=(($rev['effective']-$rev['prev_actual'])/abs($rev['prev_actual']))*100;@endphp
+                                    <span style="color:{{ $g>=0?'#6EE7B7':'#FCA5A5' }}">{{ $g>=0?'+':'' }}{{ number_format($g,1) }}%</span>
+                                    @else<span class="text-muted">—</span>@endif
                                 </td>
                                 @endif
                             </tr>
 
-                            {{-- Spacer --}}
                             <tr style="height:4px;background:#F8FAFC"><td colspan="99"></td></tr>
 
                             {{-- Expense section --}}
                             <tr style="background:#7C2D12;color:#fff">
-                                <td colspan="99" style="font-size:11px;font-weight:700;letter-spacing:1px;padding:7px 12px">
-                                    OPERATING EXPENSES
-                                </td>
+                                <td colspan="99" style="font-size:11px;font-weight:700;letter-spacing:1px;padding:7px 12px">OPERATING EXPENSES</td>
                             </tr>
                             @forelse($pnlData['expense']['categories'] as $cat)
-                            @php
-                                $t = $cat['totals'];
-                                $growth = ($hasPrev && $t['prev_actual'] > 0)
-                                    ? (($t['effective'] - $t['prev_actual']) / abs($t['prev_actual'])) * 100
-                                    : null;
-                            @endphp
-                            <tr style="background:#FFF7ED">
+                            @php $catId = 'exp-'.$loop->index; $t = $cat['totals'];
+                                $growth = ($hasPrev && $t['prev_actual'] > 0) ? (($t['effective'] - $t['prev_actual']) / abs($t['prev_actual'])) * 100 : null; @endphp
+                            <tr class="cat-row" style="background:#FFF7ED;cursor:pointer" onclick="toggleCatItems(this)" data-cat="{{ $catId }}">
                                 <td style="padding-left:14px;font-weight:600;color:#7C2D12">
-                                    {{ $cat['name'] }}
-                                    <span class="text-muted fw-normal ms-1" style="font-size:10px">({{ count($cat['items']) }})</span>
+                                    <i class="bi bi-chevron-right cat-chevron" style="font-size:10px;margin-right:5px;color:#94A3B8;transition:transform .15s"></i>{{ $cat['name'] }}<span class="text-muted fw-normal ms-1" style="font-size:10px">({{ count($cat['items']) }})</span>
                                 </td>
-                                <td class="text-end border-start text-muted small">{{ number_format($t['q1'], 2) }}</td>
-                                <td class="text-end text-muted small">{{ number_format($t['q2'], 2) }}</td>
-                                <td class="text-end text-muted small">{{ number_format($t['q3'], 2) }}</td>
-                                <td class="text-end text-muted small">{{ number_format($t['q4'], 2) }}</td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end text-muted small {{ $loop->first ? 'border-start' : '' }}">{{ number_format($t[$key], 2) }}</td>
+                                @endforeach
                                 <td class="text-end fw-semibold" style="color:#7C2D12">{{ number_format($t['effective'], 2) }}</td>
                                 @if($hasPrev)
                                 <td class="text-end text-muted small border-start">{{ number_format($t['prev_budget'], 2) }}</td>
                                 <td class="text-end text-muted small">{{ number_format($t['prev_actual'], 2) }}</td>
                                 <td class="text-end small">
-                                    @if($growth !== null)
-                                    <span style="color:{{ $growth <= 0 ? '#10B981' : '#F43F5E' }}">
-                                        {{ $growth >= 0 ? '+' : '' }}{{ number_format($growth, 1) }}%
-                                    </span>
-                                    @else <span class="text-muted">—</span> @endif
+                                    @if($growth !== null)<span style="color:{{ $growth<=0?'#10B981':'#F43F5E' }}">{{ $growth>=0?'+':'' }}{{ number_format($growth,1) }}%</span>
+                                    @else<span class="text-muted">—</span>@endif
                                 </td>
                                 @endif
                             </tr>
+                            @foreach($cat['items'] as $item)
+                            @php $ig = ($hasPrev && $item['prev_actual'] > 0) ? (($item['effective'] - $item['prev_actual']) / abs($item['prev_actual'])) * 100 : null; @endphp
+                            <tr class="cat-items-{{ $catId }}" style="display:none;background:#FFFBF5">
+                                <td style="padding-left:28px;color:#475569;font-size:11px">
+                                    <code style="font-size:10px;color:#94A3B8;margin-right:4px;background:transparent">{{ $item['code'] }}</code>{{ $item['name'] }}
+                                </td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end small {{ $loop->first ? 'border-start' : '' }}" style="color:#64748B">{{ number_format($item[$key], 2) }}</td>
+                                @endforeach
+                                <td class="text-end small" style="color:#475569">{{ number_format($item['effective'], 2) }}</td>
+                                @if($hasPrev)
+                                <td class="text-end small border-start text-muted">{{ number_format($item['prev_budget'], 2) }}</td>
+                                <td class="text-end small text-muted">{{ number_format($item['prev_actual'], 2) }}</td>
+                                <td class="text-end small">
+                                    @if($ig !== null)<span style="color:{{ $ig<=0?'#10B981':'#F43F5E' }}">{{ $ig>=0?'+':'' }}{{ number_format($ig,1) }}%</span>
+                                    @else<span class="text-muted">—</span>@endif
+                                </td>
+                                @endif
+                            </tr>
+                            @endforeach
                             @empty
                             <tr><td colspan="99" class="text-center text-muted py-3 small">No expense items</td></tr>
                             @endforelse
-                            {{-- Expense total --}}
                             <tr style="background:#431407;color:#fff;font-weight:700">
                                 <td style="padding-left:12px">TOTAL EXPENSES</td>
-                                <td class="text-end border-start border-secondary">{{ number_format($exp['q1'], 2) }}</td>
-                                <td class="text-end">{{ number_format($exp['q2'], 2) }}</td>
-                                <td class="text-end">{{ number_format($exp['q3'], 2) }}</td>
-                                <td class="text-end">{{ number_format($exp['q4'], 2) }}</td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end {{ $loop->first ? 'border-start border-secondary' : '' }}">{{ number_format($exp[$key], 2) }}</td>
+                                @endforeach
                                 <td class="text-end">{{ number_format($exp['effective'], 2) }}</td>
                                 @if($hasPrev)
                                 <td class="text-end border-start border-secondary">{{ number_format($exp['prev_budget'], 2) }}</td>
                                 <td class="text-end">{{ number_format($exp['prev_actual'], 2) }}</td>
                                 <td class="text-end">
-                                    @if($exp['prev_actual'] > 0)
-                                    @php $g = (($exp['effective'] - $exp['prev_actual']) / abs($exp['prev_actual'])) * 100; @endphp
-                                    <span style="color:{{ $g <= 0 ? '#6EE7B7' : '#FCA5A5' }}">{{ $g >= 0 ? '+' : '' }}{{ number_format($g,1) }}%</span>
-                                    @else <span class="text-muted">—</span> @endif
+                                    @if($exp['prev_actual'] > 0)@php $g=(($exp['effective']-$exp['prev_actual'])/abs($exp['prev_actual']))*100;@endphp
+                                    <span style="color:{{ $g<=0?'#6EE7B7':'#FCA5A5' }}">{{ $g>=0?'+':'' }}{{ number_format($g,1) }}%</span>
+                                    @else<span class="text-muted">—</span>@endif
                                 </td>
                                 @endif
                             </tr>
 
-                            {{-- Net Income --}}
-                            @php
-                                $netPrevB = $rev['prev_budget'] - $exp['prev_budget'];
-                                $netPrevA = $rev['prev_actual'] - $exp['prev_actual'];
-                            @endphp
+                            @php $netPrevB=$rev['prev_budget']-$exp['prev_budget']; $netPrevA=$rev['prev_actual']-$exp['prev_actual']; @endphp
                             <tr style="background:#0F172A;color:#fff;font-weight:700;font-size:13px;border-top:2px solid #E2E8F0">
                                 <td style="padding-left:12px">NET INCOME / (LOSS)</td>
-                                <td class="text-end border-start border-secondary">{{ number_format($rev['q1'] - $exp['q1'], 2) }}</td>
-                                <td class="text-end">{{ number_format($rev['q2'] - $exp['q2'], 2) }}</td>
-                                <td class="text-end">{{ number_format($rev['q3'] - $exp['q3'], 2) }}</td>
-                                <td class="text-end">{{ number_format($rev['q4'] - $exp['q4'], 2) }}</td>
-                                <td class="text-end fs-6" style="color:{{ $net >= 0 ? '#6EE7B7' : '#FCA5A5' }}">
-                                    {{ number_format($net, 2) }}
-                                </td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end {{ $loop->first ? 'border-start border-secondary' : '' }}">{{ number_format($rev[$key] - $exp[$key], 2) }}</td>
+                                @endforeach
+                                <td class="text-end fs-6" style="color:{{ $net>=0?'#6EE7B7':'#FCA5A5' }}">{{ number_format($net,2) }}</td>
                                 @if($hasPrev)
-                                <td class="text-end border-start border-secondary">{{ number_format($netPrevB, 2) }}</td>
-                                <td class="text-end">{{ number_format($netPrevA, 2) }}</td>
+                                <td class="text-end border-start border-secondary">{{ number_format($netPrevB,2) }}</td>
+                                <td class="text-end">{{ number_format($netPrevA,2) }}</td>
                                 <td class="text-end">
-                                    @if($netPrevA != 0)
-                                    @php $g = (($net - $netPrevA) / abs($netPrevA)) * 100; @endphp
-                                    <span style="color:{{ $g >= 0 ? '#6EE7B7' : '#FCA5A5' }}">{{ $g >= 0 ? '+' : '' }}{{ number_format($g,1) }}%</span>
-                                    @else <span class="text-muted">—</span> @endif
+                                    @if($netPrevA!=0)@php $g=(($net-$netPrevA)/abs($netPrevA))*100;@endphp
+                                    <span style="color:{{ $g>=0?'#6EE7B7':'#FCA5A5' }}">{{ $g>=0?'+':'' }}{{ number_format($g,1) }}%</span>
+                                    @else<span class="text-muted">—</span>@endif
                                 </td>
                                 @endif
                             </tr>
                         </tbody>
                     </table>
+                    </div>
                 </div>
 
                 {{-- ── Tab 2: Capital Expenditure ── --}}
                 @if($hasCapex)
                 <div class="tab-pane fade" id="ctab-capex" role="tabpanel">
+                    <div style="overflow-x:auto">
                     <table class="table table-sm mb-0 confirm-table" style="font-size:12px">
                         <thead class="sticky-top" style="top:0">
                             <tr style="background:#1B2A4A;color:#fff">
                                 <th style="min-width:200px">Category</th>
-                                <th class="text-end border-start border-secondary" style="min-width:70px">Q1</th>
-                                <th class="text-end" style="min-width:70px">Q2</th>
-                                <th class="text-end" style="min-width:70px">Q3</th>
-                                <th class="text-end" style="min-width:70px">Q4</th>
+                                @foreach($periodCols as $key => $label)
+                                <th class="text-end {{ $loop->first ? 'border-start border-secondary' : '' }}" style="min-width:{{ $colWidth }}">{{ $label }}</th>
+                                @endforeach
                                 <th class="text-end" style="min-width:100px">Total</th>
                                 @if($hasPrev)
                                 <th class="text-end border-start border-secondary" style="min-width:90px">Prev Budget</th>
@@ -376,74 +387,82 @@
                         </thead>
                         <tbody>
                             <tr style="background:#78350F;color:#fff">
-                                <td colspan="99" style="font-size:11px;font-weight:700;letter-spacing:1px;padding:7px 12px">
-                                    CAPITAL EXPENDITURE
-                                </td>
+                                <td colspan="99" style="font-size:11px;font-weight:700;letter-spacing:1px;padding:7px 12px">CAPITAL EXPENDITURE</td>
                             </tr>
                             @foreach($pnlData['capex']['categories'] as $cat)
-                            @php
-                                $t = $cat['totals'];
-                                $growth = ($hasPrev && $t['prev_actual'] > 0)
-                                    ? (($t['effective'] - $t['prev_actual']) / abs($t['prev_actual'])) * 100
-                                    : null;
-                            @endphp
-                            <tr style="background:#FEF3C7">
+                            @php $catId = 'cpx-'.$loop->index; $t = $cat['totals'];
+                                $growth = ($hasPrev && $t['prev_actual'] > 0) ? (($t['effective'] - $t['prev_actual']) / abs($t['prev_actual'])) * 100 : null; @endphp
+                            <tr class="cat-row" style="background:#FEF3C7;cursor:pointer" onclick="toggleCatItems(this)" data-cat="{{ $catId }}">
                                 <td style="padding-left:14px;font-weight:600;color:#78350F">
-                                    {{ $cat['name'] }}
-                                    <span class="text-muted fw-normal ms-1" style="font-size:10px">({{ count($cat['items']) }})</span>
+                                    <i class="bi bi-chevron-right cat-chevron" style="font-size:10px;margin-right:5px;color:#94A3B8;transition:transform .15s"></i>{{ $cat['name'] }}<span class="text-muted fw-normal ms-1" style="font-size:10px">({{ count($cat['items']) }})</span>
                                 </td>
-                                <td class="text-end border-start text-muted small">{{ number_format($t['q1'], 2) }}</td>
-                                <td class="text-end text-muted small">{{ number_format($t['q2'], 2) }}</td>
-                                <td class="text-end text-muted small">{{ number_format($t['q3'], 2) }}</td>
-                                <td class="text-end text-muted small">{{ number_format($t['q4'], 2) }}</td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end text-muted small {{ $loop->first ? 'border-start' : '' }}">{{ number_format($t[$key], 2) }}</td>
+                                @endforeach
                                 <td class="text-end fw-semibold" style="color:#78350F">{{ number_format($t['effective'], 2) }}</td>
                                 @if($hasPrev)
                                 <td class="text-end text-muted small border-start">{{ number_format($t['prev_budget'], 2) }}</td>
                                 <td class="text-end text-muted small">{{ number_format($t['prev_actual'], 2) }}</td>
                                 <td class="text-end small">
-                                    @if($growth !== null)
-                                    <span style="color:{{ $growth <= 0 ? '#10B981' : '#F43F5E' }}">
-                                        {{ $growth >= 0 ? '+' : '' }}{{ number_format($growth, 1) }}%
-                                    </span>
-                                    @else <span class="text-muted">—</span> @endif
+                                    @if($growth !== null)<span style="color:{{ $growth<=0?'#10B981':'#F43F5E' }}">{{ $growth>=0?'+':'' }}{{ number_format($growth,1) }}%</span>
+                                    @else<span class="text-muted">—</span>@endif
+                                </td>
+                                @endif
+                            </tr>
+                            @foreach($cat['items'] as $item)
+                            @php $ig = ($hasPrev && $item['prev_actual'] > 0) ? (($item['effective'] - $item['prev_actual']) / abs($item['prev_actual'])) * 100 : null; @endphp
+                            <tr class="cat-items-{{ $catId }}" style="display:none;background:#FFFDF0">
+                                <td style="padding-left:28px;color:#475569;font-size:11px">
+                                    <code style="font-size:10px;color:#94A3B8;margin-right:4px;background:transparent">{{ $item['code'] }}</code>{{ $item['name'] }}
+                                </td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end small {{ $loop->first ? 'border-start' : '' }}" style="color:#64748B">{{ number_format($item[$key], 2) }}</td>
+                                @endforeach
+                                <td class="text-end small" style="color:#475569">{{ number_format($item['effective'], 2) }}</td>
+                                @if($hasPrev)
+                                <td class="text-end small border-start text-muted">{{ number_format($item['prev_budget'], 2) }}</td>
+                                <td class="text-end small text-muted">{{ number_format($item['prev_actual'], 2) }}</td>
+                                <td class="text-end small">
+                                    @if($ig !== null)<span style="color:{{ $ig<=0?'#10B981':'#F43F5E' }}">{{ $ig>=0?'+':'' }}{{ number_format($ig,1) }}%</span>
+                                    @else<span class="text-muted">—</span>@endif
                                 </td>
                                 @endif
                             </tr>
                             @endforeach
+                            @endforeach
                             <tr style="background:#92400E;color:#fff;font-weight:700">
                                 <td style="padding-left:12px">TOTAL CAPITAL EXPENDITURE</td>
-                                <td class="text-end border-start border-secondary">{{ number_format($capex['q1'], 2) }}</td>
-                                <td class="text-end">{{ number_format($capex['q2'], 2) }}</td>
-                                <td class="text-end">{{ number_format($capex['q3'], 2) }}</td>
-                                <td class="text-end">{{ number_format($capex['q4'], 2) }}</td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end {{ $loop->first ? 'border-start border-secondary' : '' }}">{{ number_format($capex[$key], 2) }}</td>
+                                @endforeach
                                 <td class="text-end">{{ number_format($capex['effective'], 2) }}</td>
                                 @if($hasPrev)
                                 <td class="text-end border-start border-secondary">{{ number_format($capex['prev_budget'], 2) }}</td>
                                 <td class="text-end">{{ number_format($capex['prev_actual'], 2) }}</td>
                                 <td class="text-end">
-                                    @if($capex['prev_actual'] > 0)
-                                    @php $g = (($capex['effective'] - $capex['prev_actual']) / abs($capex['prev_actual'])) * 100; @endphp
-                                    <span style="color:{{ $g <= 0 ? '#6EE7B7' : '#FCA5A5' }}">{{ $g >= 0 ? '+' : '' }}{{ number_format($g,1) }}%</span>
-                                    @else <span class="text-muted">—</span> @endif
+                                    @if($capex['prev_actual'] > 0)@php $g=(($capex['effective']-$capex['prev_actual'])/abs($capex['prev_actual']))*100;@endphp
+                                    <span style="color:{{ $g<=0?'#6EE7B7':'#FCA5A5' }}">{{ $g>=0?'+':'' }}{{ number_format($g,1) }}%</span>
+                                    @else<span class="text-muted">—</span>@endif
                                 </td>
                                 @endif
                             </tr>
                         </tbody>
                     </table>
+                    </div>
                 </div>
                 @endif
 
                 {{-- ── Tab 3: Assets & Liabilities ── --}}
                 @if($hasBalance)
                 <div class="tab-pane fade" id="ctab-balance" role="tabpanel">
+                    <div style="overflow-x:auto">
                     <table class="table table-sm mb-0 confirm-table" style="font-size:12px">
                         <thead class="sticky-top" style="top:0">
                             <tr style="background:#1B2A4A;color:#fff">
                                 <th style="min-width:200px">Category</th>
-                                <th class="text-end border-start border-secondary" style="min-width:70px">Q1</th>
-                                <th class="text-end" style="min-width:70px">Q2</th>
-                                <th class="text-end" style="min-width:70px">Q3</th>
-                                <th class="text-end" style="min-width:70px">Q4</th>
+                                @foreach($periodCols as $key => $label)
+                                <th class="text-end {{ $loop->first ? 'border-start border-secondary' : '' }}" style="min-width:{{ $colWidth }}">{{ $label }}</th>
+                                @endforeach
                                 <th class="text-end" style="min-width:100px">Total</th>
                                 @if($hasPrev)
                                 <th class="text-end border-start border-secondary" style="min-width:90px">Prev Budget</th>
@@ -454,60 +473,68 @@
                         </thead>
                         <tbody>
                             <tr style="background:#4C1D95;color:#fff">
-                                <td colspan="99" style="font-size:11px;font-weight:700;letter-spacing:1px;padding:7px 12px">
-                                    ASSETS &amp; LIABILITIES
-                                </td>
+                                <td colspan="99" style="font-size:11px;font-weight:700;letter-spacing:1px;padding:7px 12px">ASSETS &amp; LIABILITIES</td>
                             </tr>
                             @foreach($pnlData['balance']['categories'] as $cat)
-                            @php
-                                $t = $cat['totals'];
-                                $growth = ($hasPrev && $t['prev_actual'] > 0)
-                                    ? (($t['effective'] - $t['prev_actual']) / abs($t['prev_actual'])) * 100
-                                    : null;
-                            @endphp
-                            <tr style="background:#EDE9FE">
+                            @php $catId = 'bal-'.$loop->index; $t = $cat['totals'];
+                                $growth = ($hasPrev && $t['prev_actual'] > 0) ? (($t['effective'] - $t['prev_actual']) / abs($t['prev_actual'])) * 100 : null; @endphp
+                            <tr class="cat-row" style="background:#EDE9FE;cursor:pointer" onclick="toggleCatItems(this)" data-cat="{{ $catId }}">
                                 <td style="padding-left:14px;font-weight:600;color:#4C1D95">
-                                    {{ $cat['name'] }}
-                                    <span class="text-muted fw-normal ms-1" style="font-size:10px">({{ count($cat['items']) }})</span>
+                                    <i class="bi bi-chevron-right cat-chevron" style="font-size:10px;margin-right:5px;color:#94A3B8;transition:transform .15s"></i>{{ $cat['name'] }}<span class="text-muted fw-normal ms-1" style="font-size:10px">({{ count($cat['items']) }})</span>
                                 </td>
-                                <td class="text-end border-start text-muted small">{{ number_format($t['q1'], 2) }}</td>
-                                <td class="text-end text-muted small">{{ number_format($t['q2'], 2) }}</td>
-                                <td class="text-end text-muted small">{{ number_format($t['q3'], 2) }}</td>
-                                <td class="text-end text-muted small">{{ number_format($t['q4'], 2) }}</td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end text-muted small {{ $loop->first ? 'border-start' : '' }}">{{ number_format($t[$key], 2) }}</td>
+                                @endforeach
                                 <td class="text-end fw-semibold" style="color:#4C1D95">{{ number_format($t['effective'], 2) }}</td>
                                 @if($hasPrev)
                                 <td class="text-end text-muted small border-start">{{ number_format($t['prev_budget'], 2) }}</td>
                                 <td class="text-end text-muted small">{{ number_format($t['prev_actual'], 2) }}</td>
                                 <td class="text-end small">
-                                    @if($growth !== null)
-                                    <span style="color:{{ $growth <= 0 ? '#10B981' : '#F43F5E' }}">
-                                        {{ $growth >= 0 ? '+' : '' }}{{ number_format($growth, 1) }}%
-                                    </span>
-                                    @else <span class="text-muted">—</span> @endif
+                                    @if($growth !== null)<span style="color:{{ $growth<=0?'#10B981':'#F43F5E' }}">{{ $growth>=0?'+':'' }}{{ number_format($growth,1) }}%</span>
+                                    @else<span class="text-muted">—</span>@endif
+                                </td>
+                                @endif
+                            </tr>
+                            @foreach($cat['items'] as $item)
+                            @php $ig = ($hasPrev && $item['prev_actual'] > 0) ? (($item['effective'] - $item['prev_actual']) / abs($item['prev_actual'])) * 100 : null; @endphp
+                            <tr class="cat-items-{{ $catId }}" style="display:none;background:#F5F3FF">
+                                <td style="padding-left:28px;color:#475569;font-size:11px">
+                                    <code style="font-size:10px;color:#94A3B8;margin-right:4px;background:transparent">{{ $item['code'] }}</code>{{ $item['name'] }}
+                                </td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end small {{ $loop->first ? 'border-start' : '' }}" style="color:#64748B">{{ number_format($item[$key], 2) }}</td>
+                                @endforeach
+                                <td class="text-end small" style="color:#475569">{{ number_format($item['effective'], 2) }}</td>
+                                @if($hasPrev)
+                                <td class="text-end small border-start text-muted">{{ number_format($item['prev_budget'], 2) }}</td>
+                                <td class="text-end small text-muted">{{ number_format($item['prev_actual'], 2) }}</td>
+                                <td class="text-end small">
+                                    @if($ig !== null)<span style="color:{{ $ig<=0?'#10B981':'#F43F5E' }}">{{ $ig>=0?'+':'' }}{{ number_format($ig,1) }}%</span>
+                                    @else<span class="text-muted">—</span>@endif
                                 </td>
                                 @endif
                             </tr>
                             @endforeach
+                            @endforeach
                             <tr style="background:#5B21B6;color:#fff;font-weight:700">
                                 <td style="padding-left:12px">TOTAL ASSETS &amp; LIABILITIES</td>
-                                <td class="text-end border-start border-secondary">{{ number_format($bal['q1'], 2) }}</td>
-                                <td class="text-end">{{ number_format($bal['q2'], 2) }}</td>
-                                <td class="text-end">{{ number_format($bal['q3'], 2) }}</td>
-                                <td class="text-end">{{ number_format($bal['q4'], 2) }}</td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end {{ $loop->first ? 'border-start border-secondary' : '' }}">{{ number_format($bal[$key], 2) }}</td>
+                                @endforeach
                                 <td class="text-end">{{ number_format($bal['effective'], 2) }}</td>
                                 @if($hasPrev)
                                 <td class="text-end border-start border-secondary">{{ number_format($bal['prev_budget'], 2) }}</td>
                                 <td class="text-end">{{ number_format($bal['prev_actual'], 2) }}</td>
                                 <td class="text-end">
-                                    @if($bal['prev_actual'] > 0)
-                                    @php $g = (($bal['effective'] - $bal['prev_actual']) / abs($bal['prev_actual'])) * 100; @endphp
-                                    <span style="color:{{ $g <= 0 ? '#6EE7B7' : '#FCA5A5' }}">{{ $g >= 0 ? '+' : '' }}{{ number_format($g,1) }}%</span>
-                                    @else <span class="text-muted">—</span> @endif
+                                    @if($bal['prev_actual'] > 0)@php $g=(($bal['effective']-$bal['prev_actual'])/abs($bal['prev_actual']))*100;@endphp
+                                    <span style="color:{{ $g<=0?'#6EE7B7':'#FCA5A5' }}">{{ $g>=0?'+':'' }}{{ number_format($g,1) }}%</span>
+                                    @else<span class="text-muted">—</span>@endif
                                 </td>
                                 @endif
                             </tr>
                         </tbody>
                     </table>
+                    </div>
                 </div>
                 @endif
 
@@ -594,5 +621,18 @@
 .tab-content::-webkit-scrollbar-thumb { background:#CBD5E1; border-radius:4px; }
 .tab-content::-webkit-scrollbar-track { background:#F1F5F9; }
 </style>
+
+@push('scripts')
+<script>
+function toggleCatItems(row) {
+    const catId  = row.dataset.cat;
+    const items  = document.querySelectorAll('.cat-items-' + catId);
+    const icon   = row.querySelector('.cat-chevron');
+    const isOpen = items.length > 0 && items[0].style.display !== 'none';
+    items.forEach(r => r.style.display = isOpen ? 'none' : '');
+    if (icon) icon.style.transform = isOpen ? '' : 'rotate(90deg)';
+}
+</script>
+@endpush
 
 @endsection

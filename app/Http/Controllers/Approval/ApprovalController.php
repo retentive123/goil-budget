@@ -71,11 +71,12 @@ class ApprovalController extends Controller
         $calcMode      = $budgetVersion->period->calcMode();
         $adminSetsRate = $budgetVersion->period->adminSetsRate();
         $adminSetsFreq = $budgetVersion->period->adminSetsFreq();
+        $entryMode     = $budgetVersion->period->entry_mode ?? 'quarterly';
 
         return view('approval.show', compact(
             'budgetVersion', 'canDecide', 'currentStage',
             'progress', 'summary', 'grandTotals', 'approvalService',
-            'calcMode', 'adminSetsRate', 'adminSetsFreq'
+            'calcMode', 'adminSetsRate', 'adminSetsFreq', 'entryMode'
         ));
     }
 
@@ -103,12 +104,13 @@ class ApprovalController extends Controller
             ?? BudgetPeriod::where('id', '<', $period->id)
                 ->orderByDesc('year')->orderByDesc('id')->first();
 
-        $pnlData = $this->calculator->buildPnlData($budgetVersion, $prevPeriod);
+        $pnlData   = $this->calculator->buildPnlData($budgetVersion, $prevPeriod);
+        $entryMode = $budgetVersion->period->entry_mode ?? 'quarterly';
 
         return view('approval.show-pnl', compact(
             'budgetVersion', 'canDecide', 'currentStage',
             'progress', 'summary', 'grandTotals', 'approvalService',
-            'pnlData', 'prevPeriod'
+            'pnlData', 'prevPeriod', 'entryMode'
         ));
     }
 
@@ -176,8 +178,9 @@ class ApprovalController extends Controller
             'approvalDecisions.lineItemApprovals.lineItem.accountCode'
         );
 
-        $progress = $this->approvalService->approvalProgress($budgetVersion);
+        $progress  = $this->approvalService->approvalProgress($budgetVersion);
+        $entryMode = $budgetVersion->period->entry_mode ?? 'quarterly';
 
-        return view('approval.history', compact('budgetVersion', 'progress'));
+        return view('approval.history', compact('budgetVersion', 'progress', 'entryMode'));
     }
 }

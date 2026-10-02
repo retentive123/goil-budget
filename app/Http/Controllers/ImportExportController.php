@@ -112,8 +112,10 @@ class ImportExportController extends Controller
 
         \App\Services\AuditLogger::reportExported('budget_pnl_export', 'xlsx', auth()->user());
 
+        $entryMode = $budgetVersion->period->entry_mode ?? 'quarterly';
+
         return Excel::download(
-            new BudgetPnlReadOnlyExport($budgetVersion, $pnlData, $prevPeriod, $actualsPerItem),
+            new BudgetPnlReadOnlyExport($budgetVersion, $pnlData, $prevPeriod, $actualsPerItem, $entryMode),
             $filename
         );
     }

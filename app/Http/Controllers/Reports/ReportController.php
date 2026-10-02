@@ -57,19 +57,21 @@ public function executive(Request $request)
     }
 
     $basis      = request('budget_basis', 'original');
+    $entryMode  = $period->entry_mode ?? 'quarterly';
     $versionIds = $this->effectiveVersionIds($period, $basis);
+    $monthKeys  = ['m1','m2','m3','m4','m5','m6','m7','m8','m9','m10','m11','m12'];
 
     $versions = BudgetVersion::with('department', 'lineItems.accountCode.category')
         ->whereIn('id', $versionIds)
         ->get();
 
     // Dept totals for ranking chart
-    $deptTotals = $versions->map(function($v) {
+    $deptTotals = $versions->map(function($v) use ($monthKeys) {
         $original = $v->lineItems->sum('total_amount');
         $supplementary = $v->lineItems->sum(fn($i) => $i->approvedSupplementaryTotal());
         $effective = $original + $supplementary;
 
-        return [
+        $row = [
             'name'         => $v->department->name,
             'code'         => $v->department->code,
             'q1'           => $v->lineItems->sum('q1_amount'),
@@ -78,11 +80,15 @@ public function executive(Request $request)
             'q4'           => $v->lineItems->sum('q4_amount'),
             'original'     => $original,
             'supplementary'=> $supplementary,
-            'total'        => $effective, // âœ… Effective total
+            'total'        => $effective,
         ];
+        foreach ($monthKeys as $mk) {
+            $row[$mk] = $v->lineItems->sum("{$mk}_amount");
+        }
+        return $row;
     })->sortByDesc('total')->values();
 
-    // âœ… Calculate total supplementary for grand total
+    // Calculate total supplementary for grand total
     $totalSupplementary = $deptTotals->sum('supplementary');
 
     // Budget type breakdown (revenue, expense, capital_expenditure, assets, liabilities, both)
@@ -104,13 +110,14 @@ public function executive(Request $request)
     }
     arsort($budgetTypeTotals);
 
-    // Quarterly trend across all depts
-    $quarterlyTotals = [
-        'q1' => $versions->sum(fn($v) => $v->lineItems->sum('q1_amount')),
-        'q2' => $versions->sum(fn($v) => $v->lineItems->sum('q2_amount')),
-        'q3' => $versions->sum(fn($v) => $v->lineItems->sum('q3_amount')),
-        'q4' => $versions->sum(fn($v) => $v->lineItems->sum('q4_amount')),
-    ];
+    // Period totals (all keys; view selects based on entryMode)
+    $allPeriodKeys = array_merge(['q1','q2','q3','q4'], $monthKeys);
+    $periodTotals  = array_fill_keys($allPeriodKeys, 0);
+    foreach ($versions as $v) {
+        foreach ($allPeriodKeys as $pk) {
+            $periodTotals[$pk] += $v->lineItems->sum("{$pk}_amount");
+        }
+    }
 
     // Submission stats
     $allVersions    = BudgetVersion::where('budget_period_id', $period->id)->get();
@@ -124,16 +131,15 @@ public function executive(Request $request)
         'total'        => $totalDepts,
     ];
 
-    // âœ… Use effectiveTotal() for grand total
     $grandTotal = $versions->sum(fn($v) => $v->effectiveTotal());
 
     $revisionCount = $this->revisionCount($period);
 
     return view('reports.executive', compact(
         'period', 'periods', 'departments',
-        'deptTotals', 'budgetTypeTotals', 'quarterlyTotals',
+        'deptTotals', 'budgetTypeTotals', 'periodTotals',
         'submissionStats', 'grandTotal', 'versions',
-        'totalSupplementary', 'basis', 'revisionCount'
+        'totalSupplementary', 'basis', 'revisionCount', 'entryMode'
     ));
 }
 
@@ -144,85 +150,82 @@ public function department(Request $request)
     $periods     = BudgetPeriod::orderByDesc('year')->get();
     $departments = $this->reportDepartments();
     $categories  = AccountCategory::where('is_active', true)->orderBy('name')->get();
+    $basis       = request('budget_basis', 'original');
+    $entryMode   = $period?->entry_mode ?? 'quarterly';
 
-    $department  = $request->department_id
+    $department = $request->department_id
         ? Department::find($request->department_id)
         : null;
 
-    $basis = request('budget_basis', 'original');
+    $monthKeys = ['m1','m2','m3','m4','m5','m6','m7','m8','m9','m10','m11','m12'];
 
     if (!$period) {
         return view('reports.department', compact(
-            'periods','departments','categories','basis'
-        ) + ['period'=>$period,'department'=>$department,'version'=>null,'revisionCount'=>0]);
+            'periods','departments','categories','basis','entryMode'
+        ) + ['period'=>null,'department'=>$department,'version'=>null,
+             'byCategory'=>[],'periodSums'=>[],'yoyData'=>[],'categoryFilter'=>null,
+             'hasData'=>false,'revisionCount'=>0,'versionHistory'=>collect()]);
     }
 
-    if (!$department) {
-        // No department chosen yet — prompt the user to pick one
-        $revisionCount = $this->revisionCount($period);
-        return view('reports.department', compact(
-            'periods','departments','categories','basis','period','revisionCount'
-        ) + ['department'=>null,'version'=>null]);
+    // Load versions — single dept or all depts aggregated
+    if ($department) {
+        $versionIds  = $this->effectiveVersionIds($period, $basis, $department->id);
+        $allVersions = BudgetVersion::with('lineItems.accountCode.category')
+            ->whereIn('id', $versionIds)->get();
+        $versionHistory = BudgetVersion::where('budget_period_id', $period->id)
+            ->where('department_id', $department->id)
+            ->orderBy('version_number')->get();
+        $yoyData = $this->deptYoY($department->id);
+    } else {
+        $versionIds  = $this->effectiveVersionIds($period, $basis);
+        $allVersions = BudgetVersion::with('lineItems.accountCode.category')
+            ->whereIn('id', $versionIds)->get();
+        $versionHistory = collect();
+        $yoyData = [];
     }
 
-    $versionIds = $this->effectiveVersionIds($period, $basis, $department->id);
+    $version = $allVersions->first();
 
-    $version = BudgetVersion::with('lineItems.accountCode.category')
-        ->whereIn('id', $versionIds)
-        ->first();
+    $emptyRow   = array_fill_keys(array_merge(['q1','q2','q3','q4'], $monthKeys), 0);
+    $byCategory = [];
+    $periodSums = array_merge($emptyRow, ['total'=>0,'supplementary'=>0,'original'=>0]);
 
-    // All versions for history
-    $versionHistory = BudgetVersion::where('budget_period_id', $period->id)
-        ->where('department_id', $department->id)
-        ->orderBy('version_number')
-        ->get();
+    foreach ($allVersions as $v) {
+        foreach ($v->lineItems as $item) {
+            $cat        = $item->accountCode->category->name ?? 'Uncategorised';
+            $budgetType = $item->accountCode->category->budget_type ?? 'expense';
 
-    // Line items grouped by category
-$byCategory = [];
-$quarterSums = ['q1'=>0,'q2'=>0,'q3'=>0,'q4'=>0,'total'=>0, 'supplementary'=>0, 'original'=>0];
+            if (!isset($byCategory[$cat])) {
+                $byCategory[$cat] = array_merge(
+                    ['budget_type'=>$budgetType,'items'=>[]],
+                    $emptyRow,
+                    ['total'=>0,'supplementary'=>0,'original'=>0]
+                );
+            }
 
-if ($version) {
-    foreach ($version->lineItems as $item) {
-        $cat        = $item->accountCode->category->name ?? 'Uncategorised';
-        $budgetType = $item->accountCode->category->budget_type ?? 'expense';
+            $supplementary   = $item->approvedSupplementaryTotal();
+            $effectiveBudget = $item->effectiveBudget();
 
-        if (!isset($byCategory[$cat])) {
-            $byCategory[$cat] = [
-                'budget_type'   => $budgetType,
-                'items'         => [],
-                'q1'            => 0,
-                'q2'            => 0,
-                'q3'            => 0,
-                'q4'            => 0,
-                'total'         => 0,
-                'supplementary' => 0,
-                'original'      => 0,
-            ];
+            $byCategory[$cat]['items'][] = $item;
+            foreach (['q1','q2','q3','q4'] as $qk) {
+                $byCategory[$cat][$qk] += $item->{$qk.'_amount'};
+                $periodSums[$qk]       += $item->{$qk.'_amount'};
+            }
+            foreach ($monthKeys as $mk) {
+                $byCategory[$cat][$mk] += $item->{$mk.'_amount'};
+                $periodSums[$mk]       += $item->{$mk.'_amount'};
+            }
+            $byCategory[$cat]['total']         += $effectiveBudget;
+            $byCategory[$cat]['supplementary'] += $supplementary;
+            $byCategory[$cat]['original']      += $item->total_amount;
+            $periodSums['total']               += $effectiveBudget;
+            $periodSums['supplementary']       += $supplementary;
+            $periodSums['original']            += $item->total_amount;
         }
-
-        $supplementary   = $item->approvedSupplementaryTotal();
-        $effectiveBudget = $item->effectiveBudget();
-
-        $byCategory[$cat]['items'][]        = $item;
-        $byCategory[$cat]['q1']            += $item->q1_amount;
-        $byCategory[$cat]['q2']            += $item->q2_amount;
-        $byCategory[$cat]['q3']            += $item->q3_amount;
-        $byCategory[$cat]['q4']            += $item->q4_amount;
-        $byCategory[$cat]['total']         += $effectiveBudget;
-        $byCategory[$cat]['supplementary'] += $supplementary;
-        $byCategory[$cat]['original']      += $item->total_amount;
-
-        $quarterSums['q1']            += $item->q1_amount;
-        $quarterSums['q2']            += $item->q2_amount;
-        $quarterSums['q3']            += $item->q3_amount;
-        $quarterSums['q4']            += $item->q4_amount;
-        $quarterSums['total']         += $effectiveBudget;
-        $quarterSums['supplementary'] += $supplementary;
-        $quarterSums['original']      += $item->total_amount;
     }
 
-    // Income-first ordering: revenue → both → expense, then alpha within type
-    $typePriority = ['revenue' => 0, 'both' => 1, 'expense' => 2];
+    // Income-first ordering
+    $typePriority = ['revenue'=>0,'both'=>1,'expense'=>2];
     uksort($byCategory, function ($a, $b) use ($byCategory, $typePriority) {
         $pa = $typePriority[$byCategory[$a]['budget_type'] ?? 'expense'] ?? 2;
         $pb = $typePriority[$byCategory[$b]['budget_type'] ?? 'expense'] ?? 2;
@@ -230,7 +233,6 @@ if ($version) {
         return strcasecmp($a, $b);
     });
 
-    // Sort items within each category by account code
     foreach ($byCategory as &$catData) {
         usort($catData['items'], fn($x, $y) => strcmp(
             $x->accountCode->code ?? '',
@@ -238,32 +240,27 @@ if ($version) {
         ));
     }
     unset($catData);
-}
-
-    // Year-over-year for this department across all periods
-    $yoyData = $this->deptYoY($department->id);
 
     // Category filter
     $categoryFilter = $request->category_id;
-    if ($categoryFilter && $version) {
+    if ($categoryFilter) {
         foreach ($byCategory as $cat => $data) {
             $filtered = array_filter(
                 $data['items'],
                 fn($item) => $item->accountCode->account_category_id == $categoryFilter
             );
-            if (empty($filtered)) {
-                unset($byCategory[$cat]);
-            }
+            if (empty($filtered)) unset($byCategory[$cat]);
         }
     }
 
+    $hasData       = !empty($byCategory);
     $revisionCount = $this->revisionCount($period);
 
     return view('reports.department', compact(
         'period','periods','departments','categories',
         'department','version','versionHistory',
-        'byCategory','quarterSums','yoyData','categoryFilter',
-        'basis', 'revisionCount'
+        'byCategory','periodSums','yoyData','categoryFilter',
+        'basis','revisionCount','entryMode','hasData'
     ));
 }
 
@@ -596,7 +593,10 @@ public function deptComparison(Request $request)
             $pct = $approved > 0 ? round(($actual / $approved) * 100, 1) : 0;
 
             // Per-line-item utilisation
-            $lineItems = $v->lineItems->sortBy(fn($i) => $i->accountCode->code ?? '')->map(function ($item) {
+            $lineItems = $v->lineItems->sortBy(fn($i) => [
+                $i->accountCode->category_id ?? PHP_INT_MAX,
+                $i->accountCode->code ?? '',
+            ])->map(function ($item) {
                 $itemActual  = \App\Models\BudgetActual::where('budget_line_item_id', $item->id)
                     ->where('status', 'confirmed')->sum('amount');
                 $itemBudget  = $item->effectiveBudget();
@@ -1031,7 +1031,8 @@ public function codeExplorerExport(Request $request)
         $allowed = ['approved'];
         abort_unless(in_array($type, $allowed, true), 404);
 
-        $period   = $this->resolvePeriod($request);
+        $period    = $this->resolvePeriod($request);
+        $entryMode = $period?->entry_mode ?? 'quarterly';
         $versions = BudgetVersion::with('department','lineItems.accountCode.category')
             ->where('budget_period_id', $period?->id)
             ->where('status','approved')
@@ -1042,7 +1043,7 @@ public function codeExplorerExport(Request $request)
 
         $pdf = Pdf::loadView(
             "reports.pdf.{$type}",
-            compact('period','data','versions')
+            compact('period','data','versions','entryMode')
         )->setPaper('a4','landscape');
 
         return $pdf->download("goil-{$type}-{$period?->year}.pdf");

@@ -1,12 +1,19 @@
+@php $isMonthly = ($entryMode ?? 'quarterly') === 'monthly'; @endphp
 <div class="table-responsive">
-<table class="table table-sm mb-0" style="font-size:12px;min-width:700px">
+<table class="table table-sm mb-0" style="font-size:12px;{{ $isMonthly ? 'min-width:1300px' : 'min-width:700px' }}">
     <thead class="sticky-top" style="top:0;z-index:2">
         <tr style="background:#1B2A4A;color:#fff">
             <th style="min-width:200px">Account</th>
-            <th class="text-end border-start border-secondary" style="min-width:70px">Q1</th>
-            <th class="text-end" style="min-width:70px">Q2</th>
-            <th class="text-end" style="min-width:70px">Q3</th>
-            <th class="text-end" style="min-width:70px">Q4</th>
+            @if($isMonthly)
+                @foreach(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] as $ml)
+                <th class="text-end{{ $loop->first ? ' border-start border-secondary' : '' }}" style="min-width:65px">{{ $ml }}</th>
+                @endforeach
+            @else
+                <th class="text-end border-start border-secondary" style="min-width:70px">Q1</th>
+                <th class="text-end" style="min-width:70px">Q2</th>
+                <th class="text-end" style="min-width:70px">Q3</th>
+                <th class="text-end" style="min-width:70px">Q4</th>
+            @endif
             <th class="text-end" style="min-width:70px">Supp.</th>
             <th class="text-end" style="min-width:100px">Total</th>
             <th style="min-width:80px">Share</th>
@@ -39,7 +46,7 @@
 
         {{-- Category header row --}}
         <tr style="background:{{ $section['catBg'] }}">
-            <td style="padding-left:12px;font-weight:700;color:{{ $section['textColor'] }}" colspan="7">
+            <td style="padding-left:12px;font-weight:700;color:{{ $section['textColor'] }}" colspan="{{ $isMonthly ? 14 : 7 }}">
                 {{ $catName }}
                 <span class="text-muted fw-normal ms-1" style="font-size:10px">({{ $items->count() }})</span>
             </td>
@@ -65,10 +72,16 @@
                 </div>
                 <div style="font-size:11px;color:var(--slate)">{{ $item->accountCode->name }}</div>
             </td>
-            <td class="text-end border-start small">{{ number_format($item->q1_amount, 2) }}</td>
-            <td class="text-end small">{{ number_format($item->q2_amount, 2) }}</td>
-            <td class="text-end small">{{ number_format($item->q3_amount, 2) }}</td>
-            <td class="text-end small">{{ number_format($item->q4_amount, 2) }}</td>
+            @if($isMonthly)
+                @foreach(range(1,12) as $mn)
+                <td class="text-end small{{ $mn === 1 ? ' border-start' : '' }}">{{ number_format($item->{'m'.$mn.'_amount'}, 2) }}</td>
+                @endforeach
+            @else
+                <td class="text-end border-start small">{{ number_format($item->q1_amount, 2) }}</td>
+                <td class="text-end small">{{ number_format($item->q2_amount, 2) }}</td>
+                <td class="text-end small">{{ number_format($item->q3_amount, 2) }}</td>
+                <td class="text-end small">{{ number_format($item->q4_amount, 2) }}</td>
+            @endif
             <td class="text-end small" style="color:{{ $itemSupp > 0 ? '#92400E' : 'inherit' }}">
                 {{ $itemSupp > 0 ? '+'.number_format($itemSupp, 2) : '—' }}
             </td>
@@ -87,10 +100,16 @@
         {{-- Category subtotal --}}
         <tr style="background:#F8FAFC;font-weight:700;font-size:11px">
             <td style="padding-left:12px;color:var(--slate)">{{ $catName }} Subtotal</td>
-            <td class="text-end border-start">{{ number_format($items->sum('q1_amount'), 2) }}</td>
-            <td class="text-end">{{ number_format($items->sum('q2_amount'), 2) }}</td>
-            <td class="text-end">{{ number_format($items->sum('q3_amount'), 2) }}</td>
-            <td class="text-end">{{ number_format($items->sum('q4_amount'), 2) }}</td>
+            @if($isMonthly)
+                @foreach(range(1,12) as $mn)
+                <td class="text-end{{ $mn === 1 ? ' border-start' : '' }}">{{ number_format($items->sum("m{$mn}_amount"), 2) }}</td>
+                @endforeach
+            @else
+                <td class="text-end border-start">{{ number_format($items->sum('q1_amount'), 2) }}</td>
+                <td class="text-end">{{ number_format($items->sum('q2_amount'), 2) }}</td>
+                <td class="text-end">{{ number_format($items->sum('q3_amount'), 2) }}</td>
+                <td class="text-end">{{ number_format($items->sum('q4_amount'), 2) }}</td>
+            @endif
             <td class="text-end" style="color:{{ $catSupp > 0 ? '#92400E' : 'inherit' }}">
                 {{ $catSupp > 0 ? '+'.number_format($catSupp, 2) : '—' }}
             </td>
@@ -102,10 +121,11 @@
         {{-- Section total --}}
         <tr style="background:{{ $section['totalBg'] }};color:#fff;font-weight:700;border-top:2px solid #fff">
             <td style="padding-left:12px;font-size:13px">{{ $section['totalLabel'] }}</td>
-            <td class="text-end border-start border-secondary">—</td>
-            <td class="text-end">—</td>
-            <td class="text-end">—</td>
-            <td class="text-end">—</td>
+            @if($isMonthly)
+                <td class="text-end border-start border-secondary" colspan="12">—</td>
+            @else
+                <td class="text-end border-start border-secondary" colspan="4">—</td>
+            @endif
             <td class="text-end" style="color:{{ $sectionSupp > 0 ? '#FDE68A' : 'rgba(255,255,255,.5)' }}">
                 {{ $sectionSupp > 0 ? '+'.number_format($sectionSupp, 2) : '—' }}
             </td>
@@ -124,7 +144,7 @@
     @if(!empty($netRow))
     <tr style="background:#0F172A;color:#fff;font-weight:700;font-size:13px;border-top:3px solid #E2E8F0">
         <td style="padding-left:12px">{{ $netRow['label'] }}</td>
-        <td class="text-end border-start border-secondary" colspan="5">—</td>
+        <td class="text-end border-start border-secondary" colspan="{{ $isMonthly ? 13 : 5 }}">—</td>
         <td class="text-end fs-6" style="color:{{ $netRow['color'] }}">
             {{ number_format($netRow['value'], 2) }}
         </td>
