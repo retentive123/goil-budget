@@ -79,10 +79,11 @@ Route::middleware('auth')->group(function () {
     // -------------------------------------------------------
     Route::middleware('permission:manage users')->prefix('admin')->name('admin.')->group(function () {
 
-        // Users
-        Route::get('users/import',          [UserController::class, 'importForm'])->name('users.import');
-        Route::post('users/import',         [UserController::class, 'import'])->name('users.import.process');
-        Route::get('users/import/template', [UserController::class, 'importTemplate'])->name('users.import.template');
+        // Users — static routes before resource to avoid {user} wildcard swallowing them
+        Route::get('users/import',            [UserController::class, 'importForm'])->name('users.import');
+        Route::post('users/import',           [UserController::class, 'import'])->name('users.import.process');
+        Route::get('users/import/template',   [UserController::class, 'importTemplate'])->name('users.import.template');
+        Route::delete('users/purge-inactive', [UserController::class, 'purgeInactive'])->name('users.purge-inactive');
         Route::resource('users', UserController::class);
         Route::patch('users/{user}/toggle-active', [UserController::class, 'toggleActive'])->name('users.toggle-active');
         Route::post('users/{user}/assign-role',    [UserController::class, 'assignRole'])->name('users.assign-role');

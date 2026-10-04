@@ -208,6 +208,38 @@ class UserController extends Controller
             ->with('success', 'User deleted successfully.');
     }
 
+    public function purgeInactive(Request $request)
+    {
+        $type = $request->input('type'); // 'never_logged_in' | 'never_active'
+
+        $query = User::where('id', '!=', auth()->id());
+
+        if ($type === 'never_logged_in') {
+            $query->whereNull('last_login_at');
+        } elseif ($type === 'never_active') {
+            $query->whereNull('last_login_at')
+                  ->whereDoesntHave('auditLogs');
+        } else {
+            return back()->with('error', 'Invalid purge type.');
+        }
+
+        $count = $query->count();
+
+        if ($count === 0) {
+            return back()->with('success', 'No matching users found to delete.');
+        }
+
+        $query->delete();
+
+        AuditLogger::record('users_purged', 'admin', 'bulk_delete', [
+            'subject_label' => "Purged {$count} user(s) — type: {$type}",
+            'severity'      => 'warning',
+        ]);
+
+        return redirect()->route('admin.users.index')
+            ->with('success', "{$count} user(s) deleted.");
+    }
+
     public function toggleActive(User $user)
     {
         if ($user->id === auth()->id()) {

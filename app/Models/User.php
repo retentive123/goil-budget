@@ -56,6 +56,11 @@ class User extends Authenticatable
         return $this->belongsTo(Department::class);
     }
 
+    public function auditLogs()
+    {
+        return $this->hasMany(\App\Models\SystemAuditLog::class, 'user_id');
+    }
+
     public function subsidiary()
     {
         return $this->belongsTo(Subsidiary::class);

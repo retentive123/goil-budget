@@ -9,6 +9,10 @@
         <p class="text-muted small mb-0">Manage system users and their access permissions</p>
     </div>
     <div class="d-flex gap-2">
+        <button type="button" onclick="document.getElementById('purgeModal').style.display='flex'"
+                class="btn btn-sm btn-outline-danger" style="border-radius:8px">
+            Purge Inactive
+        </button>
         <a href="{{ route('admin.users.import') }}"
            class="btn btn-sm btn-outline-secondary" style="border-radius:8px">
             Bulk Import CSV
@@ -254,5 +258,118 @@
 .pagination .page-link { color:#1B2A4A; }
 .pagination .page-link:hover { color:#E65C00; }
 </style>
+
+{{-- Purge Inactive Modal --}}
+<div id="purgeModal"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+            z-index:9999;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:460px;
+                padding:32px;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+
+        <h6 class="fw-bold mb-1" style="color:#1B2A4A">Purge Inactive Users</h6>
+        <p class="small text-muted mb-4">
+            Permanently deletes users based on the selected criteria.
+            This action cannot be undone.
+        </p>
+
+        <form id="purgeForm" method="POST" action="{{ route('admin.users.purge-inactive') }}">
+            @csrf
+            @method('DELETE')
+            <input type="hidden" name="type" id="purgeType" value="">
+
+            <div class="d-flex flex-column gap-2 mb-4">
+
+                <label class="d-flex align-items-start gap-3 p-3 rounded-2"
+                       style="border:2px solid #E2E8F0;cursor:pointer"
+                       id="opt-never-logged-in" onclick="selectPurge('never_logged_in')">
+                    <div style="margin-top:2px">
+                        <input type="radio" name="_purge_choice" value="never_logged_in" style="accent-color:#E65C00">
+                    </div>
+                    <div>
+                        <div class="fw-semibold" style="color:#1B2A4A;font-size:13px">Never logged in</div>
+                        <div class="small text-muted">
+                            Users whose <code>last_login_at</code> is null — account was created
+                            but they have never signed in.
+                        </div>
+                    </div>
+                </label>
+
+                <label class="d-flex align-items-start gap-3 p-3 rounded-2"
+                       style="border:2px solid #E2E8F0;cursor:pointer"
+                       id="opt-never-active" onclick="selectPurge('never_active')">
+                    <div style="margin-top:2px">
+                        <input type="radio" name="_purge_choice" value="never_active" style="accent-color:#E65C00">
+                    </div>
+                    <div>
+                        <div class="fw-semibold" style="color:#1B2A4A;font-size:13px">Never logged in + no activity</div>
+                        <div class="small text-muted">
+                            Stricter — never logged in AND no audit log entries at all.
+                        </div>
+                    </div>
+                </label>
+
+            </div>
+
+            <div id="purgeConfirmBox" style="display:none;background:#FEF2F2;border:1px solid #FECACA;
+                 border-radius:8px;padding:12px 14px;font-size:13px;color:#991B1B;margin-bottom:16px">
+                <strong>Warning:</strong> <span id="purgeCount">0</span> user(s) will be permanently deleted.
+                Type <strong>DELETE</strong> to confirm.
+                <input type="text" id="purgeConfirmInput"
+                       class="form-control form-control-sm mt-2"
+                       placeholder="Type DELETE to confirm"
+                       oninput="checkPurgeConfirm()">
+            </div>
+
+            <div class="d-flex gap-2 justify-content-end">
+                <button type="button"
+                        onclick="document.getElementById('purgeModal').style.display='none'"
+                        class="btn btn-sm btn-outline-secondary" style="border-radius:8px">
+                    Cancel
+                </button>
+                <button type="submit" id="purgeSubmitBtn" disabled
+                        class="btn btn-sm btn-danger" style="border-radius:8px">
+                    Delete Users
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const PURGE_COUNTS = {
+    never_logged_in: {{ \App\Models\User::whereNull('last_login_at')->where('id','!=',auth()->id())->count() }},
+    never_active:    {{ \App\Models\User::whereNull('last_login_at')->where('id','!=',auth()->id())->whereDoesntHave('auditLogs')->count() }},
+};
+
+function selectPurge(type) {
+    document.getElementById('purgeType').value = type;
+    ['never_logged_in','never_active'].forEach(t => {
+        const el = document.getElementById('opt-' + t.replace('_','-'));
+        el.style.borderColor = t === type ? '#E65C00' : '#E2E8F0';
+        el.style.background  = t === type ? '#FFF7ED' : '';
+    });
+    const count = PURGE_COUNTS[type] ?? 0;
+    document.getElementById('purgeCount').textContent = count;
+    document.getElementById('purgeConfirmBox').style.display = count > 0 ? 'block' : 'none';
+    document.getElementById('purgeConfirmInput').value = '';
+    document.getElementById('purgeSubmitBtn').disabled = true;
+    if (count === 0) {
+        document.getElementById('purgeConfirmBox').style.display = 'block';
+        document.getElementById('purgeConfirmBox').innerHTML =
+            '<span style="color:#16A34A">✓ No matching users found — nothing to delete.</span>';
+        document.getElementById('purgeSubmitBtn').disabled = true;
+    }
+}
+
+function checkPurgeConfirm() {
+    const val = document.getElementById('purgeConfirmInput')?.value?.trim();
+    document.getElementById('purgeSubmitBtn').disabled = (val !== 'DELETE');
+}
+
+// Close modal on backdrop click
+document.getElementById('purgeModal').addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+});
+</script>
 
 @endsection
