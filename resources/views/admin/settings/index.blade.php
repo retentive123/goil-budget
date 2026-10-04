@@ -334,10 +334,11 @@
 
         {{-- Right column — info + recent changes --}}
         <div class="col-md-4">
+        <div style="position:sticky;top:80px">
 
             {{-- Save card --}}
             <div class="chart-card mb-4"
-                 style="border:2px solid var(--navy);position:sticky;top:80px">
+                 style="border:2px solid var(--navy)">
                 <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:8px">
                     Save Settings
                 </div>
@@ -467,6 +468,7 @@
                 @endforelse
             </div>
 
+        </div>{{-- /sticky wrapper --}}
         </div>
     </div>
 

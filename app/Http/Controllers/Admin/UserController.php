@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use Spatie\Permission\Models\Role;
 use App\Services\AuditLogger;
+use App\Mail\WelcomeUserMail;
+use Illuminate\Support\Facades\Mail;
 
 class UserController extends Controller
 {
@@ -109,6 +111,17 @@ class UserController extends Controller
         $user->assignRole($validated['role']);
 
         AuditLogger::userCreated($user, auth()->user());
+
+        try {
+            $user->load('roles');
+            Mail::to($user->email)->send(new WelcomeUserMail(
+                user:          $user,
+                plainPassword: $validated['password'],
+                loginUrl:      url('/login'),
+            ));
+        } catch (\Exception) {
+            // mail failure must not block user creation
+        }
 
         return redirect()->route('admin.users.index')
             ->with('success', "User {$user->name} created successfully.");
@@ -324,6 +337,18 @@ class UserController extends Controller
 
             $user->assignRole(trim($data['role']));
             AuditLogger::userCreated($user, auth()->user());
+
+            try {
+                $user->load('roles');
+                Mail::to($user->email)->send(new WelcomeUserMail(
+                    user:          $user,
+                    plainPassword: $password,
+                    loginUrl:      url('/login'),
+                ));
+            } catch (\Exception) {
+                // mail failure must not abort the import
+            }
+
             $created++;
         }
 

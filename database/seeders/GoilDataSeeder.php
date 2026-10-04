@@ -174,7 +174,7 @@ class GoilDataSeeder extends Seeder
 
             // Other Personnel Cost
             ['Other Personnel Cost', '61805', 'Training – Frontline'],
-            ['Other Personnel Cost', '62606', 'Seasonal, End of Year Activities'],
+            ['Other Personnel Cost', '62618', 'Seasonal, End of Year Activities'],
             ['Other Personnel Cost', '62607', 'Medical'],
             ['Other Personnel Cost', '62611', 'Staff Welfare'],
             ['Other Personnel Cost', '62613', 'Training – Local'],
