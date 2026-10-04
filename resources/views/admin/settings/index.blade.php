@@ -373,20 +373,18 @@
                     Send a test email to verify your SMTP configuration is working.
                     <strong>Save settings first</strong>, then test.
                 </p>
-                <form method="POST" action="{{ route('admin.settings.test-mail') }}">
-                    @csrf
-                    <div class="mb-2">
-                        <input type="email"
-                               name="test_email"
-                               class="form-control form-control-sm"
-                               value="{{ auth()->user()->email }}"
-                               placeholder="Send test to…">
-                    </div>
-                    <button type="submit" class="btn w-100"
-                            style="background:#0EA5E9;color:#fff;border-radius:8px;font-size:13px">
-                        <i class="bi bi-send-fill me-1"></i>Send Test Email
-                    </button>
-                </form>
+                <div class="mb-2">
+                    <input type="email"
+                           id="test_email_input"
+                           class="form-control form-control-sm"
+                           value="{{ auth()->user()->email }}"
+                           placeholder="Send test to…">
+                </div>
+                <div id="testMailResult" class="mb-2" style="font-size:12px;display:none"></div>
+                <button type="button" onclick="sendTestMail(this)" class="btn w-100"
+                        style="background:#0EA5E9;color:#fff;border-radius:8px;font-size:13px">
+                    <i class="bi bi-send-fill me-1"></i>Send Test Email
+                </button>
             </div>
 
             {{-- Send Approver Reminders (manual trigger) --}}
@@ -399,13 +397,11 @@
                 <p style="font-size:12px;color:var(--slate);margin-bottom:10px">
                     Manually send pending-approval reminders to all active approvers right now.
                 </p>
-                <form method="POST" action="{{ route('admin.settings.send-reminders') }}">
-                    @csrf
-                    <button type="submit" class="btn w-100"
-                            style="background:#6366F1;color:#fff;border-radius:8px;font-size:13px">
-                        <i class="bi bi-send-fill me-1"></i>Send Reminders Now
-                    </button>
-                </form>
+                <div id="remindersResult" class="mb-2" style="font-size:12px;display:none"></div>
+                <button type="button" onclick="sendReminders(this)" class="btn w-100"
+                        style="background:#6366F1;color:#fff;border-radius:8px;font-size:13px">
+                    <i class="bi bi-send-fill me-1"></i>Send Reminders Now
+                </button>
             </div>
             @endif
 
@@ -477,6 +473,62 @@
 </form>
 
 <script>
+const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
+
+async function sendTestMail(btn) {
+    const email  = document.getElementById('test_email_input').value;
+    const result = document.getElementById('testMailResult');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending…';
+    result.style.display = 'none';
+    try {
+        const res = await fetch('{{ route("admin.settings.test-mail") }}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json'},
+            body: JSON.stringify({test_email: email})
+        });
+        const data = await res.json();
+        result.style.display = 'block';
+        if (data.success) {
+            result.style.color = '#16A34A';
+            result.innerHTML = '✓ ' + data.message;
+        } else {
+            result.style.color = '#DC2626';
+            result.innerHTML = '✗ ' + (data.message || 'Failed');
+        }
+    } catch(e) {
+        result.style.display = 'block';
+        result.style.color = '#DC2626';
+        result.innerHTML = '✗ ' + e.message;
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-send-fill me-1"></i>Send Test Email';
+}
+
+async function sendReminders(btn) {
+    const result = document.getElementById('remindersResult');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending…';
+    result.style.display = 'none';
+    try {
+        const res = await fetch('{{ route("admin.settings.send-reminders") }}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json'},
+            body: JSON.stringify({})
+        });
+        const data = await res.json();
+        result.style.display = 'block';
+        result.style.color = data.success ? '#16A34A' : '#DC2626';
+        result.innerHTML = (data.success ? '✓ ' : '✗ ') + (data.message || (data.success ? 'Sent' : 'Failed'));
+    } catch(e) {
+        result.style.display = 'block';
+        result.style.color = '#DC2626';
+        result.innerHTML = '✗ ' + e.message;
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-send-fill me-1"></i>Send Reminders Now';
+}
+
 // Show/hide SMTP-specific settings based on the selected mail driver
 function toggleSmtpFields(driver) {
     const smtpKeys = ['mail_host','mail_port','mail_encryption','mail_username','mail_password'];

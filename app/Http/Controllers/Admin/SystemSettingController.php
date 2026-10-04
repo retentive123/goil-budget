@@ -174,6 +174,15 @@ public function update(Request $request)
                                              : ($encryption === 'tls' ? 'smtp' : null),
                 'mail.from.address'          => $fromAddr,
                 'mail.from.name'             => $fromName,
+
+                'mail.mailers.smtp.stream' => [
+                    'ssl' => [
+                        'allow_self_signed' => true,
+                        'verify_peer'       => false,
+                        'verify_peer_name'  => false,
+                    ],
+                ],
+
             ]);
 
             // Purge any cached SMTP transport so it uses the new config
@@ -193,9 +202,17 @@ public function update(Request $request)
                 'severity'      => 'info',
             ]);
 
-            return back()->with('success', "Test email sent to {$recipient}. Check the inbox.");
+            $msg = "Test email sent to {$recipient}. Check the inbox.";
+            if (request()->wantsJson()) {
+                return response()->json(['success' => true, 'message' => $msg]);
+            }
+            return back()->with('success', $msg);
         } catch (\Exception $e) {
-            return back()->with('error', 'Test email failed: ' . $e->getMessage());
+            $msg = 'Test email failed: ' . $e->getMessage();
+            if (request()->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+            return back()->with('error', $msg);
         }
     }
 
@@ -208,11 +225,13 @@ public function update(Request $request)
             'severity'      => 'info',
         ]);
 
-        return back()->with('success',
-            $sent > 0
-                ? "Reminders sent — {$sent} approver notification(s) created."
-                : 'No pending budgets found requiring reminders.'
-        );
+        $msg = $sent > 0
+            ? "Reminders sent — {$sent} approver notification(s) created."
+            : 'No pending budgets found requiring reminders.';
+        if (request()->wantsJson()) {
+            return response()->json(['success' => true, 'message' => $msg]);
+        }
+        return back()->with('success', $msg);
     }
 
     /**
