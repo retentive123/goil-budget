@@ -15,6 +15,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Protection;
+use App\Models\SystemSetting;
 
 class BudgetTemplateExport implements WithMultipleSheets
 {
@@ -41,6 +42,7 @@ class BudgetDataSheet implements
     protected string $calcMode;
     protected bool   $adminSetsRate;
     protected bool   $adminSetsFreq;
+    protected bool   $manualSplit;
 
     public function __construct(protected BudgetVersion $version)
     {
@@ -49,6 +51,7 @@ class BudgetDataSheet implements
         $this->calcMode      = $period->calcMode();
         $this->adminSetsRate = $period->adminSetsRate();
         $this->adminSetsFreq = $period->adminSetsFreq();
+        $this->manualSplit   = (bool) SystemSetting::get('manual_period_split', false);
     }
 
     public function title(): string { return 'Budget Entry'; }
@@ -64,6 +67,14 @@ class BudgetDataSheet implements
                 $h[] = 'Frequency';
             }
             $h[] = 'Year Total';
+            if ($this->manualSplit) {
+                if ($this->entryMode === 'monthly') {
+                    array_push($h, 'Jan','Feb','Mar','Apr','May','Jun',
+                                   'Jul','Aug','Sep','Oct','Nov','Dec');
+                } else {
+                    array_push($h, 'Q1 (Jan-Mar)','Q2 (Apr-Jun)','Q3 (Jul-Sep)','Q4 (Oct-Dec)');
+                }
+            }
             $h[] = 'Justification';
             return $h;
         }
@@ -109,6 +120,18 @@ class BudgetDataSheet implements
                     $row[] = $this->adminSetsFreq ? ($item->frequency ?? 1) : ($item->frequency ?? '');
                 }
                 $row[] = '';           // Year Total — formula written in styles()
+                if ($this->manualSplit) {
+                    if ($this->entryMode === 'monthly') {
+                        foreach (range(1, 12) as $mn) {
+                            $row[] = $item->{"m{$mn}_amount"} ?? 0;
+                        }
+                    } else {
+                        $row[] = $item->q1_amount ?? 0;
+                        $row[] = $item->q2_amount ?? 0;
+                        $row[] = $item->q3_amount ?? 0;
+                        $row[] = $item->q4_amount ?? 0;
+                    }
+                }
                 $row[] = $item->justification;
                 return $row;
             });
@@ -227,24 +250,35 @@ class BudgetDataSheet implements
     /**
      * Apply styles for Qty × Rate [× Freq] calc mode.
      *
-     * Column layout:
-     *   A=id(hidden)  B=Cat(grey)  C=Code(grey)  D=Name(grey)
-     *   E=Qty(white)
-     *   F=Rate (white if inputter-editable, purple if admin-locked)
-     *   G=Freq (only for qty_rate_freq; same lock logic as Rate)
-     *   G or H = Year Total (green, formula)
-     *   H or I = Justification (white)
+     * Column layout (no manual split):
+     *   A=id(hidden)  B=Cat  C=Code  D=Name  E=Qty  F=Rate  [G=Freq]
+     *   G or H = Year Total   H or I = Justification
+     *
+     * Column layout (manual split, quarterly):
+     *   …same to Year Total… then Q1 Q2 Q3 Q4 = Justification
+     *
+     * Column layout (manual split, monthly):
+     *   …same to Year Total… then Jan–Dec = Justification
      */
     private function styleCalcMode(Worksheet $sheet): void
     {
         $hasFreq  = $this->calcMode === 'qty_rate_freq';
 
-        // Column letters
+        // Helper: advance a column letter by $n positions (A-Z only, which is enough here)
+        $col = fn(string $base, int $n = 0) => chr(ord($base) + $n);
+
         $rateCol  = 'F';
-        $freqCol  = 'G';                         // only used when $hasFreq
+        $freqCol  = $hasFreq ? 'G' : null;
         $totalCol = $hasFreq ? 'H' : 'G';
-        $justCol  = $hasFreq ? 'I' : 'H';
-        $lastCol  = $justCol;
+
+        // Split columns start right after Year Total
+        $splitStartOrd = ord($totalCol) + 1;
+        $splitCount    = 0;
+        if ($this->manualSplit) {
+            $splitCount = $this->entryMode === 'monthly' ? 12 : 4;
+        }
+        $justCol = chr($splitStartOrd + $splitCount);
+        $lastCol = $justCol;
 
         $lastRow = $sheet->getHighestRow();
 
@@ -316,6 +350,21 @@ class BudgetDataSheet implements
             $sheet->setCellValue("{$totalCol}{$row}", $totalFormula($row));
         }
 
+        // ── Manual split columns ──
+        if ($this->manualSplit && $splitCount > 0) {
+            $splitEnd = chr($splitStartOrd + $splitCount - 1);
+            $sheet->getStyle(chr($splitStartOrd)."2:{$splitEnd}{$lastRow}")->applyFromArray([
+                'fill'    => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFEFF6FF']],
+                'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN,
+                                               'color'       => ['argb' => 'FFE2E8F0']]],
+                'font'    => ['color' => ['argb' => 'FF1E40AF']],
+            ]);
+
+            // SUM-check formula: highlight if split doesn't balance (informational, not blocking)
+            // We add a "Split Sum" formula in the total column header area — not a formula cell,
+            // just colour coding by applying a note via the instruction banner below.
+        }
+
         // ── Justification ──
         $sheet->getStyle("{$justCol}2:{$justCol}{$lastRow}")->applyFromArray([
             'fill'    => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFFFFFF']],
@@ -326,6 +375,11 @@ class BudgetDataSheet implements
         // ── Format numbers ──
         $sheet->getStyle("E2:{$totalCol}{$lastRow}")
               ->getNumberFormat()->setFormatCode('#,##0.0000');
+        if ($this->manualSplit && $splitCount > 0) {
+            $splitEnd = chr($splitStartOrd + $splitCount - 1);
+            $sheet->getStyle(chr($splitStartOrd)."2:{$splitEnd}{$lastRow}")
+                  ->getNumberFormat()->setFormatCode('#,##0.00');
+        }
 
         $sheet->getColumnDimension('A')->setVisible(false);
 
@@ -344,6 +398,10 @@ class BudgetDataSheet implements
         if ($hasFreq && $this->adminSetsFreq) {
             $parts[] = 'Frequency (purple) is admin-set — do not change it.';
         }
+        if ($this->manualSplit) {
+            $splitLabel = $this->entryMode === 'monthly' ? 'month' : 'quarter';
+            $parts[] = "Fill in the blue {$splitLabel} columns — they must sum to the Year Total.";
+        }
         $parts[] = 'Do not edit grey columns or add/remove rows. Upload when done.';
 
         $sheet->setCellValue('A1', implode(' ', $parts));
@@ -361,25 +419,25 @@ class BudgetDataSheet implements
               ->getNumberFormat()->setFormatCode('#,##0.0000');
 
         // ── Worksheet protection ──────────────────────────────────────────────
-        // When sheet protection is on, ALL cells are locked by default.
-        // We unlock only the columns the budget inputter is allowed to edit.
         $sheet->getProtection()->setSheet(true);
         $pUnlocked = Protection::PROTECTION_UNPROTECTED;
 
-        // Quantity — always editable
         $sheet->getStyle("E3:E{$newLastRow}")->getProtection()->setLocked($pUnlocked);
 
-        // Rate — editable only when the inputter is allowed to change it
         if (!$this->adminSetsRate) {
             $sheet->getStyle("{$rateCol}3:{$rateCol}{$newLastRow}")->getProtection()->setLocked($pUnlocked);
         }
 
-        // Frequency — editable only when the inputter is allowed to change it
         if ($hasFreq && !$this->adminSetsFreq) {
             $sheet->getStyle("{$freqCol}3:{$freqCol}{$newLastRow}")->getProtection()->setLocked($pUnlocked);
         }
 
-        // Justification — always editable
+        // Split columns — always editable when manual split is on
+        if ($this->manualSplit && $splitCount > 0) {
+            $splitEnd = chr($splitStartOrd + $splitCount - 1);
+            $sheet->getStyle(chr($splitStartOrd)."3:{$splitEnd}{$newLastRow}")->getProtection()->setLocked($pUnlocked);
+        }
+
         $sheet->getStyle("{$justCol}3:{$justCol}{$newLastRow}")->getProtection()->setLocked($pUnlocked);
 
         $sheet->freezePane('E3');
@@ -394,6 +452,7 @@ class BudgetInstructionsSheet implements WithTitle
     protected string $calcMode;
     protected bool   $adminSetsRate;
     protected bool   $adminSetsFreq;
+    protected bool   $manualSplit;
 
     public function __construct(BudgetVersion $version)
     {
@@ -402,6 +461,7 @@ class BudgetInstructionsSheet implements WithTitle
         $this->calcMode      = $period->calcMode();
         $this->adminSetsRate = $period->adminSetsRate();
         $this->adminSetsFreq = $period->adminSetsFreq();
+        $this->manualSplit   = (bool) SystemSetting::get('manual_period_split', false);
     }
 
     public function title(): string { return 'Instructions'; }
@@ -443,13 +503,20 @@ class BudgetInstructionsSheet implements WithTitle
                     : 'How many times per year (e.g. 12 = monthly, 4 = quarterly)'];
             }
 
-            $instructions = array_merge($instructions, [
+            $splitRows = [];
+            if ($this->manualSplit) {
+                $splitLabel = $this->entryMode === 'monthly' ? 'Jan–Dec (monthly split)' : 'Q1–Q4 (quarterly split)';
+                $splitRows  = [[$splitLabel, 'Manually distribute the Year Total across periods — the sum must equal Year Total (shown in blue)']];
+            }
+
+            $instructions = array_merge($instructions, $splitRows, [
                 ['Year Total',    "Calculated: {$formula}"],
                 ['', ''],
                 ['Notes', ''],
                 ['•', 'All amounts must be in Ghana Cedis (GHS)'],
                 ['•', 'Negative values are not allowed'],
                 ['•', 'Purple columns are admin-controlled — values are read-only'],
+                $this->manualSplit ? ['•', 'Blue columns are the period split — they must balance with the Year Total'] : ['•', 'The system distributes the year total evenly across periods'],
                 ['•', 'The system will validate all data before saving'],
             ]);
 

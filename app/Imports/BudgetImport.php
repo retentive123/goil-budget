@@ -4,6 +4,7 @@ namespace App\Imports;
 
 use App\Models\BudgetLineItem;
 use App\Models\BudgetVersion;
+use App\Models\SystemSetting;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\WithValidation;
@@ -22,6 +23,7 @@ class BudgetImport implements
     protected string $calcMode;
     protected bool   $adminSetsRate;
     protected bool   $adminSetsFreq;
+    protected bool   $manualSplit;
     /** Period rate snapshots keyed by account_code_id for fast lookup. */
     protected \Illuminate\Support\Collection $periodCodeRates;
 
@@ -32,6 +34,7 @@ class BudgetImport implements
         $this->calcMode      = $period->calcMode();
         $this->adminSetsRate = $period->adminSetsRate();
         $this->adminSetsFreq = $period->adminSetsFreq();
+        $this->manualSplit   = (bool) SystemSetting::get('manual_period_split', false);
 
         // Pre-load period rate snapshots (keyed by account_code_id) so the
         // null-rate fallback in buildCalcModeUpdate never hits N+1 queries.
@@ -96,12 +99,23 @@ class BudgetImport implements
             $rules = [
                 '*.quantity' => ['nullable', 'numeric', 'min:0'],
             ];
-            // Only validate rate from file if inputters can set it
             if (!$this->adminSetsRate) {
                 $rules['*.rate'] = ['nullable', 'numeric', 'min:0'];
             }
             if ($this->calcMode === 'qty_rate_freq' && !$this->adminSetsFreq) {
                 $rules['*.frequency'] = ['nullable', 'numeric', 'min:0'];
+            }
+            if ($this->manualSplit) {
+                if ($this->entryMode === 'monthly') {
+                    foreach (['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'] as $m) {
+                        $rules["*.$m"] = ['nullable', 'numeric', 'min:0'];
+                    }
+                } else {
+                    $rules['*.q1_jan_mar'] = ['nullable', 'numeric', 'min:0'];
+                    $rules['*.q2_apr_jun'] = ['nullable', 'numeric', 'min:0'];
+                    $rules['*.q3_jul_sep'] = ['nullable', 'numeric', 'min:0'];
+                    $rules['*.q4_oct_dec'] = ['nullable', 'numeric', 'min:0'];
+                }
             }
             return $rules;
         }
@@ -170,20 +184,27 @@ class BudgetImport implements
             $freq = 1.0;
         }
 
-        // Annual total spread equally across 12 months
+        $base = ['quantity' => $qty, 'rate' => $rate, 'frequency' => $freq];
+
+        // When manual split is on, read the period amounts the user filled in
+        if ($this->manualSplit) {
+            if ($this->entryMode === 'monthly') {
+                return array_merge($base, $this->buildMonthlyUpdate($row));
+            }
+            return array_merge($base, $this->buildQuarterlyUpdate($row));
+        }
+
+        // Default: spread the annual total equally across 12 months
         $annual = $qty * $rate * $freq;
         $share  = round($annual / 12, 2);
         $last   = round($annual - $share * 11, 2);
 
-        return [
-            'quantity'    => $qty,
-            'rate'        => $rate,
-            'frequency'   => $freq,
+        return array_merge($base, [
             'm1_amount'   => $share, 'm2_amount'  => $share, 'm3_amount'  => $share,
             'm4_amount'   => $share, 'm5_amount'  => $share, 'm6_amount'  => $share,
             'm7_amount'   => $share, 'm8_amount'  => $share, 'm9_amount'  => $share,
             'm10_amount'  => $share, 'm11_amount' => $share, 'm12_amount' => $last,
-        ];
+        ]);
     }
 
     private function buildMonthlyUpdate(Collection $row): array
