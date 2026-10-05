@@ -8,15 +8,19 @@ class RatioConfig extends Model
 {
     protected $fillable = [
         'name', 'description',
-        'numerator_source', 'numerator_types',
-        'denominator_source', 'denominator_types',
+        'numerator_source', 'numerator_types', 'numerator_codes', 'numerator_category_ids',
+        'denominator_source', 'denominator_types', 'denominator_codes', 'denominator_category_ids',
         'multiply_by', 'unit', 'higher_is_better',
         'is_active', 'sort_order',
     ];
 
     protected $casts = [
-        'numerator_types'   => 'array',
-        'denominator_types' => 'array',
+        'numerator_types'          => 'array',
+        'numerator_codes'          => 'array',
+        'numerator_category_ids'   => 'array',
+        'denominator_types'        => 'array',
+        'denominator_codes'        => 'array',
+        'denominator_category_ids' => 'array',
         'multiply_by'       => 'float',
         'higher_is_better'  => 'boolean',
         'is_active'         => 'boolean',

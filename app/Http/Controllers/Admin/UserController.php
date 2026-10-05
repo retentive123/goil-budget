@@ -12,7 +12,9 @@ use Illuminate\Validation\Rules\Password;
 use Spatie\Permission\Models\Role;
 use App\Services\AuditLogger;
 use App\Mail\WelcomeUserMail;
+use App\Mail\PasswordResetByAdminMail;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class UserController extends Controller
 {
@@ -238,6 +240,42 @@ class UserController extends Controller
 
         return redirect()->route('admin.users.index')
             ->with('success', "{$count} user(s) deleted.");
+    }
+
+    public function resetPassword(Request $request, User $user)
+    {
+        if ($request->filled('password')) {
+            $request->validate([
+                'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
+            ]);
+            $plain = $request->password;
+        } else {
+            $plain = Str::password(12, letters: true, numbers: true, symbols: true, spaces: false);
+        }
+
+        $user->update([
+            'password'             => Hash::make($plain),
+            'must_change_password' => true,
+        ]);
+
+        AuditLogger::record('password_reset_by_admin', 'user', 'update', [
+            'subject_label' => "Admin reset password for {$user->name} ({$user->email})",
+            'severity'      => 'warning',
+        ]);
+
+        try {
+            Mail::to($user->email)->send(new PasswordResetByAdminMail(
+                user:          $user,
+                plainPassword: $plain,
+                loginUrl:      url('/login'),
+                adminName:     auth()->user()->name,
+            ));
+            $note = " A temporary password has been sent to {$user->email}.";
+        } catch (\Exception) {
+            $note = " (Email could not be sent — temporary password: {$plain})";
+        }
+
+        return back()->with('success', "Password reset for {$user->name}.{$note}");
     }
 
     public function toggleActive(User $user)

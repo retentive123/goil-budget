@@ -127,7 +127,7 @@ class BudgetSubmissionController extends Controller
 
             $firstStage = ApprovalStage::where('order', 1)->first();
             if ($firstStage) {
-                $this->notifier->notifyApprovers($budgetVersion, $firstStage);
+                $this->notifier->notifySubmission($budgetVersion, $firstStage);
             }
         });
 

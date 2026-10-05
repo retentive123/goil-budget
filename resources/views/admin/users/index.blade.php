@@ -135,7 +135,7 @@
                         <th class="px-4 py-3" style="color:#1B2A4A;font-weight:600">Role</th>
                         <th class="px-4 py-3" style="color:#1B2A4A;font-weight:600">Status</th>
                         <th class="px-4 py-3" style="color:#1B2A4A;font-weight:600">Last Login</th>
-                        <th class="px-4 py-3" style="color:#1B2A4A;font-weight:600"></th>
+                        <th class="px-4 py-3 text-end" style="color:#1B2A4A;font-weight:600">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -186,29 +186,57 @@
                         <td class="px-4 py-3" style="font-size:12px;color:#64748B">
                             {{ $user->last_login_at ? $user->last_login_at->diffForHumans() : 'Never' }}
                         </td>
-                        <td class="px-4 py-3">
-                            <div class="d-flex gap-2 justify-content-end">
-                                <a href="{{ route('admin.users.show', $user) }}"
-                                   class="btn btn-sm btn-outline-secondary"
-                                   style="border-radius:6px;font-size:11px;padding:3px 10px">
-                                    View
-                                </a>
-                                <a href="{{ route('admin.users.edit', $user) }}"
-                                   class="btn btn-sm btn-outline-primary"
-                                   style="border-radius:6px;font-size:11px;padding:3px 10px">
-                                    Edit
-                                </a>
-                                @if($user->id !== auth()->id())
-                                <form method="POST"
-                                      action="{{ route('admin.users.toggle-active', $user) }}"
-                                      class="d-inline">
-                                    @csrf @method('PATCH')
-                                    <button class="btn btn-sm {{ $user->is_active ? 'btn-outline-warning' : 'btn-outline-success' }}"
-                                            style="border-radius:6px;font-size:11px;padding:3px 10px">
-                                        {{ $user->is_active ? 'Deactivate' : 'Activate' }}
-                                    </button>
-                                </form>
-                                @endif
+                        <td class="px-4 py-3 text-end">
+                            <div class="dropdown">
+                                <button type="button"
+                                        class="btn btn-sm dropdown-toggle"
+                                        data-bs-toggle="dropdown"
+                                        aria-expanded="false"
+                                        style="background:#F1F5F9;color:#475569;border:1px solid #E2E8F0;
+                                               border-radius:8px;font-size:12px;padding:4px 12px">
+                                    Actions
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end shadow-sm"
+                                    style="font-size:13px;border:1px solid #E2E8F0;border-radius:10px;min-width:160px">
+                                    <li>
+                                        <a class="dropdown-item py-2"
+                                           href="{{ route('admin.users.show', $user) }}">
+                                            <i class="fas fa-eye me-2" style="width:14px;opacity:.6"></i>View
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item py-2"
+                                           href="{{ route('admin.users.edit', $user) }}">
+                                            <i class="fas fa-pen me-2" style="width:14px;opacity:.6"></i>Edit
+                                        </a>
+                                    </li>
+                                    @if($user->id !== auth()->id())
+                                    <li><hr class="dropdown-divider my-1"></li>
+                                    <li>
+                                        <form method="POST"
+                                              action="{{ route('admin.users.toggle-active', $user) }}">
+                                            @csrf @method('PATCH')
+                                            <button type="submit"
+                                                    class="dropdown-item py-2"
+                                                    style="color:{{ $user->is_active ? '#D97706' : '#10B981' }}">
+                                                @if($user->is_active)
+                                                    <i class="fas fa-ban me-2" style="width:14px"></i>Deactivate
+                                                @else
+                                                    <i class="fas fa-check-circle me-2" style="width:14px"></i>Activate
+                                                @endif
+                                            </button>
+                                        </form>
+                                    </li>
+                                    <li>
+                                        <button type="button"
+                                                class="dropdown-item py-2"
+                                                style="color:#DC2626"
+                                                onclick="confirmResetPassword({{ $user->id }}, '{{ addslashes($user->name) }}', '{{ route('admin.users.reset-password', $user) }}')">
+                                            <i class="fas fa-key me-2" style="width:14px"></i>Reset Password
+                                        </button>
+                                    </li>
+                                    @endif
+                                </ul>
                             </div>
                         </td>
                     </tr>
@@ -369,6 +397,178 @@ function checkPurgeConfirm() {
 // Close modal on backdrop click
 document.getElementById('purgeModal').addEventListener('click', function(e) {
     if (e.target === this) this.style.display = 'none';
+});
+</script>
+
+{{-- Reset Password confirmation modal --}}
+<div id="resetPwModal"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1060;
+            align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:14px;padding:32px;width:100%;max-width:460px;
+                box-shadow:0 8px 32px rgba(0,0,0,.18)">
+        <div class="d-flex align-items-center gap-2 mb-3">
+            <span style="width:36px;height:36px;border-radius:50%;background:#FEE2E2;
+                         display:flex;align-items:center;justify-content:center;
+                         font-size:18px;flex-shrink:0">🔑</span>
+            <h6 class="mb-0 fw-bold" style="color:#1B2A4A">Reset User Password</h6>
+        </div>
+        <p style="font-size:14px;color:#475569;margin-bottom:4px">Resetting password for:</p>
+        <p id="resetPwUserName" style="font-size:15px;font-weight:700;color:#1B2A4A;margin-bottom:18px"></p>
+
+        <form id="resetPwForm" method="POST">
+            @csrf
+
+            {{-- Mode toggle --}}
+            <div class="d-flex gap-2 mb-3">
+                <button type="button" id="modeAutoBtn" onclick="setPwMode('auto')"
+                        class="btn btn-sm flex-fill fw-semibold"
+                        style="border-radius:8px;font-size:12px">
+                    Auto-generate
+                </button>
+                <button type="button" id="modeManualBtn" onclick="setPwMode('manual')"
+                        class="btn btn-sm flex-fill fw-semibold"
+                        style="border-radius:8px;font-size:12px">
+                    Set manually
+                </button>
+            </div>
+
+            {{-- Auto mode info --}}
+            <div id="pwAutoInfo"
+                 style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;
+                        padding:11px 14px;font-size:13px;color:#166534;margin-bottom:18px">
+                A secure temporary password will be generated and emailed to the user.
+            </div>
+
+            {{-- Manual mode fields --}}
+            <div id="pwManualFields" style="display:none;margin-bottom:18px">
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold" style="color:#1B2A4A">
+                        New Password
+                    </label>
+                    <div class="input-group input-group-sm">
+                        <input type="password" id="resetPwInput" name="password"
+                               class="form-control" placeholder="Min 8 characters"
+                               autocomplete="new-password">
+                        <button type="button" class="btn btn-outline-secondary"
+                                onclick="togglePwVisibility('resetPwInput','resetPwEye')"
+                                style="border-radius:0 6px 6px 0;font-size:12px">
+                            <span id="resetPwEye">👁</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="mb-0">
+                    <label class="form-label small fw-semibold" style="color:#1B2A4A">
+                        Confirm Password
+                    </label>
+                    <input type="password" id="resetPwConfirm" name="password_confirmation"
+                           class="form-control form-control-sm" placeholder="Repeat password"
+                           autocomplete="new-password">
+                    <div id="resetPwMismatch"
+                         style="display:none;color:#DC2626;font-size:12px;margin-top:4px">
+                        Passwords do not match.
+                    </div>
+                </div>
+            </div>
+
+            <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:10px 14px;
+                        font-size:12px;color:#92400E;margin-bottom:20px">
+                The user will be required to change this password before accessing the system.
+            </div>
+
+            <div class="d-flex gap-2 justify-content-end">
+                <button type="button" onclick="closeResetPwModal()"
+                        class="btn btn-sm fw-semibold px-4"
+                        style="background:#F1F5F9;color:#475569;border:1px solid #E2E8F0;border-radius:8px">
+                    Cancel
+                </button>
+                <button type="submit" id="resetPwSubmit"
+                        class="btn btn-sm fw-semibold px-4"
+                        style="background:#DC2626;color:#fff;border:none;border-radius:8px">
+                    Reset Password
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+let _resetPwMode = 'auto';
+
+function setPwMode(mode) {
+    _resetPwMode = mode;
+    const autoInfo    = document.getElementById('pwAutoInfo');
+    const manualFields = document.getElementById('pwManualFields');
+    const autoBtn     = document.getElementById('modeAutoBtn');
+    const manualBtn   = document.getElementById('modeManualBtn');
+    const pwInput     = document.getElementById('resetPwInput');
+    const pwConfirm   = document.getElementById('resetPwConfirm');
+
+    if (mode === 'auto') {
+        autoInfo.style.display    = '';
+        manualFields.style.display = 'none';
+        autoBtn.style.background  = '#1B2A4A';
+        autoBtn.style.color       = '#fff';
+        autoBtn.style.border      = 'none';
+        manualBtn.style.background = '#F1F5F9';
+        manualBtn.style.color      = '#475569';
+        manualBtn.style.border     = '1px solid #E2E8F0';
+        pwInput.required  = false;
+        pwConfirm.required = false;
+        pwInput.value     = '';
+        pwConfirm.value   = '';
+    } else {
+        autoInfo.style.display    = 'none';
+        manualFields.style.display = '';
+        manualBtn.style.background = '#1B2A4A';
+        manualBtn.style.color      = '#fff';
+        manualBtn.style.border     = 'none';
+        autoBtn.style.background  = '#F1F5F9';
+        autoBtn.style.color       = '#475569';
+        autoBtn.style.border      = '1px solid #E2E8F0';
+        pwInput.required  = true;
+        pwConfirm.required = true;
+        document.getElementById('resetPwInput').focus();
+    }
+}
+
+function togglePwVisibility(inputId, eyeId) {
+    const inp = document.getElementById(inputId);
+    inp.type  = inp.type === 'password' ? 'text' : 'password';
+}
+
+function confirmResetPassword(userId, userName, actionUrl) {
+    document.getElementById('resetPwUserName').textContent = userName;
+    document.getElementById('resetPwForm').action = actionUrl;
+    document.getElementById('resetPwMismatch').style.display = 'none';
+    const modal = document.getElementById('resetPwModal');
+    modal.style.display = 'flex';
+    setPwMode('auto'); // always start in auto mode
+}
+
+function closeResetPwModal() {
+    document.getElementById('resetPwModal').style.display = 'none';
+}
+
+// Client-side mismatch check
+document.getElementById('resetPwForm').addEventListener('submit', function(e) {
+    if (_resetPwMode === 'manual') {
+        const pw  = document.getElementById('resetPwInput').value;
+        const pw2 = document.getElementById('resetPwConfirm').value;
+        if (pw !== pw2) {
+            e.preventDefault();
+            document.getElementById('resetPwMismatch').style.display = '';
+            return;
+        }
+    }
+});
+
+document.getElementById('resetPwConfirm').addEventListener('input', function() {
+    const match = this.value === document.getElementById('resetPwInput').value;
+    document.getElementById('resetPwMismatch').style.display = match ? 'none' : '';
+});
+
+document.getElementById('resetPwModal').addEventListener('click', function(e) {
+    if (e.target === this) closeResetPwModal();
 });
 </script>
 

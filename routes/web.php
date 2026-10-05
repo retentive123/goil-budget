@@ -85,8 +85,9 @@ Route::middleware('auth')->group(function () {
         Route::get('users/import/template',   [UserController::class, 'importTemplate'])->name('users.import.template');
         Route::delete('users/purge-inactive', [UserController::class, 'purgeInactive'])->name('users.purge-inactive');
         Route::resource('users', UserController::class);
-        Route::patch('users/{user}/toggle-active', [UserController::class, 'toggleActive'])->name('users.toggle-active');
-        Route::post('users/{user}/assign-role',    [UserController::class, 'assignRole'])->name('users.assign-role');
+        Route::patch('users/{user}/toggle-active',   [UserController::class, 'toggleActive'])->name('users.toggle-active');
+        Route::post('users/{user}/assign-role',      [UserController::class, 'assignRole'])->name('users.assign-role');
+        Route::post('users/{user}/reset-password',   [UserController::class, 'resetPassword'])->name('users.reset-password');
 
         // Departments — mass-assign before resource so literal segment isn't swallowed by {department}
         Route::get('departments/mass-assign',  [DepartmentController::class, 'massAssignForm'])->name('departments.mass-assign');
