@@ -14,13 +14,22 @@ $typeLabels = \App\Models\RatioConfig::allTypes();
         <h5 class="fw-bold mb-0" style="color:#1B2A4A">Ratio Analysis</h5>
         <p class="text-muted small mb-0">Financial ratios based on approved budgets and actuals</p>
     </div>
-    @can('manage users')
-    <a href="{{ route('admin.ratio-configs.index') }}"
-       class="btn btn-sm"
-       style="background:#F1F5F9;color:#475569;border:1px solid #E2E8F0;border-radius:8px;font-size:12px">
-        Configure Ratios
-    </a>
-    @endcan
+    <div class="d-flex gap-2">
+        @if($period && $ratios->isNotEmpty())
+        <a href="{{ route('reports.ratios.export', request()->only(['period_id','department_id','budget_basis'])) }}"
+           class="btn btn-sm"
+           style="background:#F1F5F9;color:#475569;border:1px solid #E2E8F0;border-radius:8px;font-size:12px">
+            <i class="fas fa-download me-1"></i> Export CSV
+        </a>
+        @endif
+        @can('manage users')
+        <a href="{{ route('admin.ratio-configs.index') }}"
+           class="btn btn-sm"
+           style="background:#F1F5F9;color:#475569;border:1px solid #E2E8F0;border-radius:8px;font-size:12px">
+            Configure Ratios
+        </a>
+        @endcan
+    </div>
 </div>
 
 {{-- Filters --}}

@@ -34,8 +34,11 @@ class BudgetPeriodController extends Controller
         $globalAdminSetsRate = SystemSetting::get('admin_sets_rate', false);
         $globalAdminSetsFreq = SystemSetting::get('admin_sets_freq', false);
 
+        // Suggest the current fiscal year based on fiscal_year_start setting
+        $suggestedYear = BudgetPeriod::fiscalYearFor();
+
         return view('admin.budget-periods.create', compact(
-            'globalCalcMode', 'globalAdminSetsRate', 'globalAdminSetsFreq'
+            'globalCalcMode', 'globalAdminSetsRate', 'globalAdminSetsFreq', 'suggestedYear'
         ));
     }
 

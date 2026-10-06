@@ -99,4 +99,35 @@ class BudgetPeriod extends Model
     {
         return self::where('status', 'open')->latest()->first();
     }
+
+    /**
+     * Returns the fiscal year number for a given date (defaults to today),
+     * based on the fiscal_year_start system setting (1 = January).
+     *
+     * Example: fiscal_year_start = 4 (April), date = March 2026
+     *   → fiscal year is 2025 (April 2025 – March 2026)
+     */
+    public static function fiscalYearFor(?\DateTimeInterface $date = null): int
+    {
+        $date       = $date ?? now();
+        $startMonth = max(1, min(12, (int) SystemSetting::get('fiscal_year_start', 1)));
+
+        // If fiscal year starts in January, calendar year = fiscal year
+        if ($startMonth === 1) {
+            return (int) $date->format('Y');
+        }
+
+        $month = (int) $date->format('n');
+        $year  = (int) $date->format('Y');
+
+        return $month >= $startMonth ? $year : $year - 1;
+    }
+
+    /**
+     * The fiscal year the period's start_date falls in.
+     */
+    public function fiscalYear(): int
+    {
+        return self::fiscalYearFor($this->start_date ?? now());
+    }
 }

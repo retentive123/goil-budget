@@ -23,6 +23,7 @@ use App\Models\CapexConfig;
 use App\Services\AuditLogger;
 use App\Models\Subsidiary;
 use App\Models\SubsidiaryCategory;
+use App\Models\SystemAuditLog;
 
 class ReportController extends Controller
 {
@@ -1159,8 +1160,615 @@ public function codeExplorerExport(Request $request)
         ));
     }
 
-    // â”€â”€ Private helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Consolidated Group Report ─────────────────────────────────────────────
+    public function consolidated(Request $request)
+    {
+        $periods = BudgetPeriod::orderByDesc('year')->get();
+        $period    = $this->resolvePeriod($request);
+        $basis     = $request->input('budget_basis', 'original');
+        $entryMode = $period?->entry_mode ?? \App\Models\SystemSetting::get('budget_entry_mode', 'quarterly');
 
+        if (!$period) {
+            return view('reports.consolidated', compact('periods') + [
+                'period' => null, 'rows' => collect(), 'grandTotals' => [],
+                'basis' => $basis, 'entryMode' => $entryMode,
+            ]);
+        }
+
+        $deptVersionIds = $this->effectiveVersionIds($period, $basis);
+        $deptVersions   = BudgetVersion::with('department', 'lineItems')
+            ->whereIn('id', $deptVersionIds)
+            ->whereNotNull('department_id')
+            ->get();
+
+        $subVersions = BudgetVersion::with('subsidiary', 'lineItems')
+            ->where('budget_period_id', $period->id)
+            ->whereNotNull('subsidiary_id')
+            ->where('status', 'approved')
+            ->where('is_revision', false)
+            ->get();
+
+        $buildRow = function ($type, $name, $code, $lineItems, $status) use ($entryMode) {
+            $row = [
+                'type'   => $type,
+                'name'   => $name,
+                'code'   => $code,
+                'total'  => $lineItems->sum('total_amount'),
+                'supp'   => $lineItems->sum(fn($i) => $i->approvedSupplementaryTotal()),
+                'status' => $status,
+            ];
+            if ($entryMode === 'monthly') {
+                foreach (range(1, 12) as $m) {
+                    $row['m' . $m] = $lineItems->sum('m' . $m . '_amount');
+                }
+            } else {
+                $row['q1'] = $lineItems->sum('q1_amount');
+                $row['q2'] = $lineItems->sum('q2_amount');
+                $row['q3'] = $lineItems->sum('q3_amount');
+                $row['q4'] = $lineItems->sum('q4_amount');
+            }
+            return $row;
+        };
+
+        $rows = collect();
+
+        foreach ($deptVersions as $v) {
+            $rows->push($buildRow(
+                'department',
+                $v->department?->name ?? '—',
+                $v->department?->code ?? '—',
+                $v->lineItems,
+                $v->status
+            ));
+        }
+
+        foreach ($subVersions as $v) {
+            $rows->push($buildRow(
+                'subsidiary',
+                $v->subsidiary?->name ?? '—',
+                $v->subsidiary?->code ?? '—',
+                $v->lineItems,
+                $v->status
+            ));
+        }
+
+        $rows = $rows->sortByDesc('total')->values();
+
+        $grandTotals = ['total' => $rows->sum('total'), 'supp' => $rows->sum('supp')];
+        if ($entryMode === 'monthly') {
+            foreach (range(1, 12) as $m) {
+                $grandTotals['m' . $m] = $rows->sum('m' . $m);
+            }
+        } else {
+            $grandTotals['q1'] = $rows->sum('q1');
+            $grandTotals['q2'] = $rows->sum('q2');
+            $grandTotals['q3'] = $rows->sum('q3');
+            $grandTotals['q4'] = $rows->sum('q4');
+        }
+
+        if ($request->get('export') === 'csv') {
+            $filename = 'consolidated-' . str_replace(' ', '_', $period->name ?? $period->year) . '.csv';
+            return response()->streamDownload(function () use ($rows, $grandTotals, $period, $basis, $entryMode) {
+                $out = fopen('php://output', 'w');
+                fwrite($out, "\xEF\xBB\xBF");
+                fputcsv($out, ['Consolidated Group Report']);
+                fputcsv($out, ['Period', $period->name ?? $period->year]);
+                fputcsv($out, ['Budget Basis', ucfirst($basis)]);
+                fputcsv($out, ['Generated', now()->format('d M Y H:i')]);
+                fputcsv($out, []);
+                $cols = ['Entity', 'Code', 'Type'];
+                if ($entryMode === 'monthly') {
+                    foreach (['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] as $m) { $cols[] = $m; }
+                } else {
+                    $cols = array_merge($cols, ['Q1','Q2','Q3','Q4']);
+                }
+                $cols = array_merge($cols, ['Original','Supplementary','Effective Total']);
+                fputcsv($out, $cols);
+                foreach ($rows as $row) {
+                    $r = [$row['name'], $row['code'], ucfirst($row['type'])];
+                    if ($entryMode === 'monthly') {
+                        foreach (range(1,12) as $m) { $r[] = $row['m'.$m] ?? 0; }
+                    } else {
+                        $r = array_merge($r, [$row['q1'],$row['q2'],$row['q3'],$row['q4']]);
+                    }
+                    $r = array_merge($r, [$row['total'], $row['supp'], $row['total']+$row['supp']]);
+                    fputcsv($out, $r);
+                }
+                $r = ['Grand Total', '', ''];
+                if ($entryMode === 'monthly') {
+                    foreach (range(1,12) as $m) { $r[] = $grandTotals['m'.$m] ?? 0; }
+                } else {
+                    $r = array_merge($r, [$grandTotals['q1'],$grandTotals['q2'],$grandTotals['q3'],$grandTotals['q4']]);
+                }
+                $r = array_merge($r, [$grandTotals['total'],$grandTotals['supp'],$grandTotals['total']+$grandTotals['supp']]);
+                fputcsv($out, $r);
+                fclose($out);
+            }, $filename, ['Content-Type' => 'text/csv']);
+        }
+
+        return view('reports.consolidated', compact(
+            'period', 'periods', 'rows', 'grandTotals', 'basis', 'entryMode'
+        ));
+    }
+
+    // ── Budget Compliance Report ───────────────────────────────────────────────
+    public function compliance(Request $request)
+    {
+        $periods     = BudgetPeriod::orderByDesc('year')->get();
+        $period      = $this->resolvePeriod($request);
+        $departments = $this->reportDepartments();
+
+        if (!$period) {
+            return view('reports.compliance', compact('periods', 'departments') + [
+                'period' => null, 'rows' => collect(), 'summary' => [],
+            ]);
+        }
+
+        $versions = BudgetVersion::with('department')
+            ->where('budget_period_id', $period->id)
+            ->whereNotNull('department_id')
+            ->get()
+            ->groupBy('department_id');
+
+        $rows = $departments->where('is_active', true)->map(function ($dept) use ($versions, $period) {
+            $deptVersions = $versions->get($dept->id, collect());
+            $latest       = $deptVersions->sortByDesc('version_number')->first();
+
+            $submittedAt  = $latest?->submitted_at;
+            $daysToSubmit = $submittedAt && $period->opened_at
+                ? (int) $period->opened_at->diffInDays($submittedAt)
+                : null;
+
+            $approvedVersion = $deptVersions->where('status', 'approved')->sortByDesc('version_number')->first();
+            $approvalDays    = ($approvedVersion && $approvedVersion->submitted_at && $approvedVersion->updated_at)
+                ? (int) $approvedVersion->submitted_at->diffInDays($approvedVersion->updated_at)
+                : null;
+
+            $deadlineDays = $period->end_date && $period->opened_at
+                ? (int) $period->opened_at->diffInDays($period->end_date)
+                : null;
+
+            $onTime = $daysToSubmit !== null && $deadlineDays !== null
+                ? $daysToSubmit <= $deadlineDays
+                : null;
+
+            return [
+                'department'     => $dept,
+                'status'         => $latest?->status ?? 'not_submitted',
+                'submitted_at'   => $submittedAt,
+                'days_to_submit' => $daysToSubmit,
+                'deadline_days'  => $deadlineDays,
+                'on_time'        => $onTime,
+                'approval_days'  => $approvalDays,
+                'revisions'      => $deptVersions->where('is_revision', true)->count(),
+            ];
+        })->values();
+
+        $summary = [
+            'total'         => $rows->count(),
+            'approved'      => $rows->where('status', 'approved')->count(),
+            'pending'       => $rows->whereIn('status', ['submitted', 'under_review'])->count(),
+            'not_submitted' => $rows->whereIn('status', ['not_submitted', 'draft'])->count(),
+            'on_time'       => $rows->where('on_time', true)->count(),
+            'late'          => $rows->where('on_time', false)->count(),
+            'avg_days'      => round($rows->filter(fn($r) => $r['days_to_submit'] !== null)->avg('days_to_submit') ?? 0, 1),
+            'avg_approval'  => round($rows->filter(fn($r) => $r['approval_days'] !== null)->avg('approval_days') ?? 0, 1),
+        ];
+
+        if ($request->get('export') === 'csv') {
+            $filename = 'compliance-' . str_replace(' ', '_', $period->name ?? $period->year) . '.csv';
+            return response()->streamDownload(function () use ($rows, $summary, $period) {
+                $out = fopen('php://output', 'w');
+                fwrite($out, "\xEF\xBB\xBF");
+                fputcsv($out, ['Budget Compliance Report']);
+                fputcsv($out, ['Period', $period->name ?? $period->year]);
+                fputcsv($out, ['Generated', now()->format('d M Y H:i')]);
+                fputcsv($out, []);
+                fputcsv($out, ['Department','Status','Submitted At','Days to Submit','On Time?','Approval Days','Revisions']);
+                foreach ($rows as $row) {
+                    fputcsv($out, [
+                        $row['department']->name,
+                        str_replace('_', ' ', ucfirst($row['status'])),
+                        $row['submitted_at'] ? $row['submitted_at']->format('d M Y') : '—',
+                        $row['days_to_submit'] ?? '—',
+                        $row['on_time'] === null ? '—' : ($row['on_time'] ? 'Yes' : 'No'),
+                        $row['approval_days'] ?? '—',
+                        $row['revisions'],
+                    ]);
+                }
+                fputcsv($out, []);
+                fputcsv($out, ['Summary']);
+                foreach ($summary as $k => $v) { fputcsv($out, [ucwords(str_replace('_',' ',$k)), $v]); }
+                fclose($out);
+            }, $filename, ['Content-Type' => 'text/csv']);
+        }
+
+        return view('reports.compliance', compact(
+            'period', 'periods', 'departments', 'rows', 'summary'
+        ));
+    }
+
+    // ── Departmental Ranking ──────────────────────────────────────────────────
+    public function ranking(Request $request)
+    {
+        $periods = BudgetPeriod::orderByDesc('year')->get();
+        $period  = $this->resolvePeriod($request);
+
+        if (!$period) {
+            return view('reports.ranking', compact('periods') + [
+                'period' => null, 'rows' => collect(),
+            ]);
+        }
+
+        $versions = BudgetVersion::with('department', 'lineItems')
+            ->where('budget_period_id', $period->id)
+            ->whereNotNull('department_id')
+            ->where('status', 'approved')
+            ->where('is_revision', false)
+            ->get();
+
+        $rows = $versions->map(function ($v) use ($period) {
+            $approved  = $v->lineItems->sum('total_amount');
+            $supp      = $v->lineItems->sum(fn($i) => $i->approvedSupplementaryTotal());
+            $effective = $approved + $supp;
+
+            $actuals = \App\Models\BudgetActual::where('budget_period_id', $period->id)
+                ->where('department_id', $v->department_id)
+                ->where('status', 'confirmed')
+                ->sum('amount');
+
+            $utilPct  = $effective > 0 ? round(($actuals / $effective) * 100, 1) : null;
+            $varPct   = $effective > 0 ? round((($effective - $actuals) / $effective) * 100, 1) : null;
+
+            $daysToSubmit = $v->submitted_at && $period->opened_at
+                ? (int) $period->opened_at->diffInDays($v->submitted_at)
+                : null;
+
+            $virementCount = Virement::where('budget_period_id', $period->id)
+                ->where('department_id', $v->department_id)
+                ->where('status', 'approved')
+                ->count();
+
+            return [
+                'department'    => $v->department,
+                'approved'      => $approved,
+                'supplementary' => $supp,
+                'effective'     => $effective,
+                'actuals'       => $actuals,
+                'variance'      => $effective - $actuals,
+                'util_pct'      => $utilPct,
+                'var_pct'       => $varPct,
+                'days_to_submit'=> $daysToSubmit,
+                'virements'     => $virementCount,
+            ];
+        })->sortByDesc('effective')->values();
+
+        if ($request->get('export') === 'csv') {
+            $filename = 'dept-ranking-' . str_replace(' ', '_', $period->name ?? $period->year) . '.csv';
+            return response()->streamDownload(function () use ($rows, $period) {
+                $out = fopen('php://output', 'w');
+                fwrite($out, "\xEF\xBB\xBF");
+                fputcsv($out, ['Departmental Ranking Report']);
+                fputcsv($out, ['Period', $period->name ?? $period->year]);
+                fputcsv($out, ['Generated', now()->format('d M Y H:i')]);
+                fputcsv($out, []);
+                fputcsv($out, ['Rank','Department','Code','Approved Budget','Supplementary','Effective','Actuals','Variance','Utilisation %','Variance %','Days to Submit','Virements']);
+                foreach ($rows as $i => $row) {
+                    fputcsv($out, [
+                        $i + 1,
+                        $row['department']?->name ?? '—',
+                        $row['department']?->code ?? '—',
+                        number_format($row['approved'], 2),
+                        number_format($row['supplementary'], 2),
+                        number_format($row['effective'], 2),
+                        number_format($row['actuals'], 2),
+                        number_format($row['variance'], 2),
+                        $row['util_pct'] !== null ? $row['util_pct'] . '%' : '—',
+                        $row['var_pct'] !== null ? $row['var_pct'] . '%' : '—',
+                        $row['days_to_submit'] ?? '—',
+                        $row['virements'],
+                    ]);
+                }
+                fclose($out);
+            }, $filename, ['Content-Type' => 'text/csv']);
+        }
+
+        return view('reports.ranking', compact('period', 'periods', 'rows'));
+    }
+
+    // ── Virement Impact Report ────────────────────────────────────────────────
+    public function virementImpact(Request $request)
+    {
+        $periods     = BudgetPeriod::orderByDesc('year')->get();
+        $period      = $this->resolvePeriod($request);
+        $departments = $this->reportDepartments();
+        $deptId      = $request->department_id ? (int) $request->department_id : null;
+
+        if (!$period) {
+            return view('reports.virement-impact', compact('periods', 'departments') + [
+                'period' => null, 'rows' => collect(), 'summary' => [], 'deptId' => $deptId,
+            ]);
+        }
+
+        $virements = Virement::with(
+                'department',
+                'fromLineItem.accountCode',
+                'toLineItem.accountCode',
+                'requestedBy',
+                'approvedBy'
+            )
+            ->where('budget_period_id', $period->id)
+            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->orderBy('department_id')
+            ->orderByDesc('created_at')
+            ->get();
+
+        $rows = $virements->groupBy('department_id')->map(function ($deptVirements) {
+            $dept     = $deptVirements->first()->department;
+            $approved = $deptVirements->where('status', 'approved');
+            $pending  = $deptVirements->whereIn('status', ['submitted', 'under_review']);
+            $rejected = $deptVirements->where('status', 'rejected');
+
+            $netImpact = [];
+            foreach ($approved as $v) {
+                $fromCode = $v->fromLineItem?->accountCode?->code ?? '—';
+                $toCode   = $v->toLineItem?->accountCode?->code ?? '—';
+                $netImpact[$fromCode] = ($netImpact[$fromCode] ?? 0) - $v->amount;
+                $netImpact[$toCode]   = ($netImpact[$toCode]   ?? 0) + $v->amount;
+            }
+
+            return [
+                'department' => $dept,
+                'all'        => $deptVirements,
+                'approved'   => $approved,
+                'pending'    => $pending,
+                'rejected'   => $rejected,
+                'net_impact' => $netImpact,
+                'total_moved'=> $approved->sum('amount'),
+            ];
+        })->values();
+
+        $summary = [
+            'total'        => $virements->count(),
+            'approved'     => $virements->where('status', 'approved')->count(),
+            'pending'      => $virements->whereIn('status', ['submitted', 'under_review'])->count(),
+            'rejected'     => $virements->where('status', 'rejected')->count(),
+            'total_amount' => $virements->where('status', 'approved')->sum('amount'),
+        ];
+
+        if ($request->get('export') === 'csv') {
+            $filename = 'virement-impact-' . str_replace(' ', '_', $period->name ?? $period->year) . '.csv';
+            return response()->streamDownload(function () use ($rows, $summary, $period) {
+                $out = fopen('php://output', 'w');
+                fwrite($out, "\xEF\xBB\xBF");
+                fputcsv($out, ['Virement Impact Report']);
+                fputcsv($out, ['Period', $period->name ?? $period->year]);
+                fputcsv($out, ['Generated', now()->format('d M Y H:i')]);
+                fputcsv($out, []);
+                fputcsv($out, ['Department','Total Virements','Approved','Pending','Rejected','Total Amount Moved']);
+                foreach ($rows as $row) {
+                    fputcsv($out, [
+                        $row['department']?->name ?? '—',
+                        $row['all']->count(),
+                        $row['approved']->count(),
+                        $row['pending']->count(),
+                        $row['rejected']->count(),
+                        number_format($row['total_moved'], 2),
+                    ]);
+                }
+                fputcsv($out, []);
+                fputcsv($out, ['Net Account Code Impact']);
+                fputcsv($out, ['Department','Account Code','Net Movement']);
+                foreach ($rows as $row) {
+                    foreach ($row['net_impact'] as $code => $net) {
+                        fputcsv($out, [$row['department']?->name ?? '—', $code, number_format($net, 2)]);
+                    }
+                }
+                fclose($out);
+            }, $filename, ['Content-Type' => 'text/csv']);
+        }
+
+        return view('reports.virement-impact', compact(
+            'period', 'periods', 'departments', 'deptId', 'rows', 'summary'
+        ));
+    }
+
+    // ── Service Station Performance Report ───────────────────────────────────
+    public function stationPerformance(Request $request)
+    {
+        $periods  = BudgetPeriod::orderByDesc('year')->get();
+        $period   = $this->resolvePeriod($request);
+        $stations = Department::where('is_active', true)
+            ->where('entity_type', 'service_station')
+            ->with('zone')
+            ->orderBy('name')
+            ->get();
+
+        if (!$period || $stations->isEmpty()) {
+            return view('reports.station-performance', compact('periods', 'stations') + [
+                'period' => null, 'rows' => collect(), 'grandTotals' => [], 'zoneGroups' => collect(),
+            ]);
+        }
+
+        $rows = $stations->map(function ($station) use ($period) {
+            $version = BudgetVersion::with('lineItems')
+                ->where('budget_period_id', $period->id)
+                ->where('department_id', $station->id)
+                ->where('status', 'approved')
+                ->where('is_revision', false)
+                ->first();
+
+            $approved  = $version ? $version->lineItems->sum('total_amount') : 0;
+            $supp      = $version ? $version->lineItems->sum(fn($i) => $i->approvedSupplementaryTotal()) : 0;
+            $effective = $approved + $supp;
+
+            $actuals = \App\Models\BudgetActual::where('budget_period_id', $period->id)
+                ->where('department_id', $station->id)
+                ->where('status', 'confirmed')
+                ->sum('amount');
+
+            $utilPct  = $effective > 0 ? round(($actuals / $effective) * 100, 1) : null;
+            $variance = $effective - $actuals;
+
+            $virAmt = Virement::where('budget_period_id', $period->id)
+                ->where('department_id', $station->id)
+                ->where('status', 'approved')
+                ->sum('amount');
+
+            return [
+                'station'   => $station,
+                'zone'      => $station->zone?->name ?? 'Unzoned',
+                'approved'  => $approved,
+                'supp'      => $supp,
+                'effective' => $effective,
+                'actuals'   => $actuals,
+                'variance'  => $variance,
+                'util_pct'  => $utilPct,
+                'virements' => $virAmt,
+                'status'    => $version?->status ?? 'not_submitted',
+            ];
+        })->sortByDesc('effective')->values();
+
+        $grandTotals = [
+            'approved'  => $rows->sum('approved'),
+            'supp'      => $rows->sum('supp'),
+            'effective' => $rows->sum('effective'),
+            'actuals'   => $rows->sum('actuals'),
+            'variance'  => $rows->sum('variance'),
+            'virements' => $rows->sum('virements'),
+        ];
+
+        $zoneGroups = $rows->groupBy('zone');
+
+        if ($request->get('export') === 'csv') {
+            $filename = 'station-performance-' . str_replace(' ', '_', $period->name ?? $period->year) . '.csv';
+            return response()->streamDownload(function () use ($rows, $grandTotals, $period) {
+                $out = fopen('php://output', 'w');
+                fwrite($out, "\xEF\xBB\xBF");
+                fputcsv($out, ['Service Station Performance Report']);
+                fputcsv($out, ['Period', $period->name ?? $period->year]);
+                fputcsv($out, ['Generated', now()->format('d M Y H:i')]);
+                fputcsv($out, []);
+                fputcsv($out, ['Station','Zone','Status','Approved Budget','Supplementary','Effective','Actuals','Variance','Utilisation %','Virements Moved']);
+                foreach ($rows as $row) {
+                    fputcsv($out, [
+                        $row['station']->name,
+                        $row['zone'],
+                        str_replace('_', ' ', ucfirst($row['status'])),
+                        number_format($row['approved'], 2),
+                        number_format($row['supp'], 2),
+                        number_format($row['effective'], 2),
+                        number_format($row['actuals'], 2),
+                        number_format($row['variance'], 2),
+                        $row['util_pct'] !== null ? $row['util_pct'] . '%' : '—',
+                        number_format($row['virements'], 2),
+                    ]);
+                }
+                fputcsv($out, ['Grand Total','','',
+                    number_format($grandTotals['approved'],2),
+                    number_format($grandTotals['supp'],2),
+                    number_format($grandTotals['effective'],2),
+                    number_format($grandTotals['actuals'],2),
+                    number_format($grandTotals['variance'],2),
+                    '—',
+                    number_format($grandTotals['virements'],2),
+                ]);
+                fclose($out);
+            }, $filename, ['Content-Type' => 'text/csv']);
+        }
+
+        return view('reports.station-performance', compact(
+            'period', 'periods', 'stations', 'rows', 'grandTotals', 'zoneGroups'
+        ));
+    }
+
+    // ── Approver Activity Report ──────────────────────────────────────────────
+    public function approverActivity(Request $request)
+    {
+        $periods = BudgetPeriod::orderByDesc('year')->get();
+        $period  = $this->resolvePeriod($request);
+
+        $approvers = \App\Models\User::role(
+                ['department_head', 'finance_reviewer', 'gceo', 'board', 'bdu_admin', 'super_admin']
+            )
+            ->where('is_active', true)
+            ->get();
+
+        if (!$period) {
+            return view('reports.approver-activity', compact('periods', 'approvers') + [
+                'period' => null, 'rows' => collect(), 'summary' => [],
+            ]);
+        }
+
+        $rows = $approvers->map(function ($approver) use ($period) {
+            $from = $period->opened_at ?? now()->subYear();
+            $to   = $period->closed_at ?? now();
+
+            $approved = \App\Models\SystemAuditLog::where('user_id', $approver->id)
+                ->where('action', 'like', '%approv%')
+                ->whereBetween('created_at', [$from, $to])
+                ->count();
+
+            $rejected = \App\Models\SystemAuditLog::where('user_id', $approver->id)
+                ->where('action', 'like', '%reject%')
+                ->whereBetween('created_at', [$from, $to])
+                ->count();
+
+            $pending = BudgetVersion::where('budget_period_id', $period->id)
+                ->whereIn('status', ['submitted', 'under_review'])
+                ->count();
+
+            return [
+                'approver'      => $approver,
+                'roles'         => $approver->getRoleNames()->implode(', '),
+                'approved'      => $approved,
+                'rejected'      => $rejected,
+                'total_actions' => $approved + $rejected,
+                'pending'       => $pending,
+            ];
+        })->sortByDesc('total_actions')->values();
+
+        $summary = [
+            'total_approvers' => $approvers->count(),
+            'total_actions'   => $rows->sum('total_actions'),
+            'total_approved'  => $rows->sum('approved'),
+            'total_rejected'  => $rows->sum('rejected'),
+        ];
+
+        if ($request->get('export') === 'csv') {
+            $filename = 'approver-activity-' . str_replace(' ', '_', $period->name ?? $period->year) . '.csv';
+            return response()->streamDownload(function () use ($rows, $summary, $period) {
+                $out = fopen('php://output', 'w');
+                fwrite($out, "\xEF\xBB\xBF");
+                fputcsv($out, ['Approver Activity Report']);
+                fputcsv($out, ['Period', $period->name ?? $period->year]);
+                fputcsv($out, ['Generated', now()->format('d M Y H:i')]);
+                fputcsv($out, []);
+                fputcsv($out, ['Approver','Email','Roles','Approvals','Rejections','Total Actions','Pending Items']);
+                foreach ($rows as $row) {
+                    fputcsv($out, [
+                        $row['approver']->name,
+                        $row['approver']->email,
+                        $row['roles'],
+                        $row['approved'],
+                        $row['rejected'],
+                        $row['total_actions'],
+                        $row['pending'],
+                    ]);
+                }
+                fputcsv($out, []);
+                fputcsv($out, ['Summary']);
+                foreach ($summary as $k => $v) { fputcsv($out, [ucwords(str_replace('_',' ',$k)), $v]); }
+                fclose($out);
+            }, $filename, ['Content-Type' => 'text/csv']);
+        }
+
+        return view('reports.approver-activity', compact(
+            'period', 'periods', 'approvers', 'rows', 'summary'
+        ));
+    }
+
+    // Private helpers
     private function reportDepartments(): \Illuminate\Database\Eloquent\Collection
     {
         return Department::where('is_active', true)

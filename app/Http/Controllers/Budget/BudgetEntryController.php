@@ -204,11 +204,13 @@ class BudgetEntryController extends Controller
             $this->calculator->populateLineItems($budgetVersion);
         }
 
-        $budgetVersion->load('lineItems.accountCode.category', 'period', 'department', 'subsidiary.category', 'originalVersion');
+        $budgetVersion->load('lineItems.accountCode.category', 'lineItems.customValues', 'period', 'department', 'subsidiary.category', 'originalVersion');
 
-        $summary     = $this->calculator->summaryByCategory($budgetVersion);
-        $grandTotals = $this->calculator->grandTotals($budgetVersion);
-        $entryMode   = $budgetVersion->period->entry_mode ?? 'quarterly';
+        $summary      = $this->calculator->summaryByCategory($budgetVersion);
+        $grandTotals  = $this->calculator->grandTotals($budgetVersion);
+        $entryMode    = $budgetVersion->period->entry_mode ?? 'quarterly';
+        $customFields = \App\Models\CustomBudgetField::where('is_active', true)
+            ->orderBy('display_order')->orderBy('label')->get();
 
         // Calc mode settings — read from the budget period's own snapshot
         $period        = $budgetVersion->period;
@@ -228,7 +230,7 @@ class BudgetEntryController extends Controller
 
         return view('budget.show', compact(
             'budgetVersion', 'summary', 'grandTotals', 'entryMode',
-            'calcMode', 'adminSetsRate', 'adminSetsFreq', 'manualSplit'
+            'calcMode', 'adminSetsRate', 'adminSetsFreq', 'manualSplit', 'customFields'
         ));
     }
 
@@ -432,6 +434,27 @@ class BudgetEntryController extends Controller
                     }
                 });
             }
+        }
+
+        // Save custom field values if any were submitted
+        $customData = $request->input('custom_fields', []);
+        if (!empty($customData)) {
+            \DB::transaction(function () use ($customData, $budgetVersion) {
+                foreach ($customData as $itemId => $fields) {
+                    // Verify this item belongs to the version
+                    $exists = \App\Models\BudgetLineItem::where('id', $itemId)
+                        ->where('budget_version_id', $budgetVersion->id)
+                        ->exists();
+                    if (!$exists) continue;
+
+                    foreach ($fields as $fieldId => $value) {
+                        \App\Models\BudgetLineItemCustomValue::updateOrCreate(
+                            ['budget_line_item_id' => $itemId, 'custom_budget_field_id' => $fieldId],
+                            ['value' => $value]
+                        );
+                    }
+                }
+            });
         }
 
         $grandTotals = $this->calculator->grandTotals($budgetVersion->fresh());

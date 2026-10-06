@@ -10,6 +10,7 @@ use App\Models\BudgetLineItem;
 use App\Models\Department;
 use App\Models\SupplementaryBudget;
 use App\Models\BudgetNotification;
+use App\Services\WebhookService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -650,6 +651,17 @@ class ActualController extends Controller
         if ($count === 0) {
             return back()->with('error', "No head-confirmed entries found for {$monthName}.");
         }
+
+        try {
+            (new WebhookService())->fire('actuals_confirmed', [
+                'period_id'     => $request->period_id,
+                'department_id' => $request->department_id,
+                'month'         => $monthName,
+                'year'          => $request->year,
+                'count'         => $count,
+                'confirmed_by'  => auth()->user()->name,
+            ]);
+        } catch (\Exception) {}
 
         return redirect()->route('actuals.entry', [
             'period_id'     => $request->period_id,

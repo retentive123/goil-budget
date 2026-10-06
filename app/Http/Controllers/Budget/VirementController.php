@@ -8,6 +8,7 @@ use App\Models\BudgetVersion;
 use App\Models\BudgetLineItem;
 use App\Models\BudgetPeriod;
 use App\Services\NotificationService;
+use App\Services\WebhookService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Services\AuditLogger;
@@ -41,6 +42,11 @@ class VirementController extends Controller
     // Show the create virement form
     public function create()
     {
+        if (!\App\Models\SystemSetting::get('allow_virement_after_approval', true)) {
+            return redirect()->route('virements.index')
+                ->with('error', 'Virement requests are currently disabled by the administrator.');
+        }
+
         $user          = auth()->user();
         $currentPeriod = BudgetPeriod::current();
 
@@ -71,6 +77,10 @@ class VirementController extends Controller
     // Store a new virement request
     public function store(Request $request)
     {
+        if (!\App\Models\SystemSetting::get('allow_virement_after_approval', true)) {
+            return back()->with('error', 'Virement requests are currently disabled by the administrator.');
+        }
+
         $user          = auth()->user();
         $currentPeriod = BudgetPeriod::current();
 
@@ -138,6 +148,16 @@ class VirementController extends Controller
             // Notify finance reviewers
             $this->notifyFinance($virement);
         });
+
+        // Fire virement_submitted webhook outside the transaction
+        try {
+            $v = Virement::with('department')->latest()->where('department_id', auth()->user()->department_id)->first();
+            (new WebhookService())->fire('virement_submitted', [
+                'virement_id' => $v?->id,
+                'department'  => $v?->department?->name,
+                'amount'      => $request->amount,
+            ]);
+        } catch (\Exception) {}
 
         return redirect()->route('virements.index')
             ->with('success', 'Virement request submitted successfully. Finance has been notified.');
@@ -221,6 +241,15 @@ class VirementController extends Controller
 
         AuditLogger::virementApproved($virement->fresh()->load('department'));
 
+        try {
+            (new WebhookService())->fire('virement_approved', [
+                'virement_id' => $virement->id,
+                'department'  => $virement->department?->name,
+                'amount'      => $virement->amount,
+                'approved_by' => auth()->user()->name,
+            ]);
+        } catch (\Exception) {}
+
         return redirect()->route('virements.pending')
             ->with('success', 'Virement approved and budget adjusted.');
     }
@@ -254,6 +283,15 @@ class VirementController extends Controller
         $this->notifyDepartmentVirement($virement, 'rejected');
 
         AuditLogger::virementRejected($virement->fresh()->load('department'));
+
+        try {
+            (new WebhookService())->fire('virement_rejected', [
+                'virement_id' => $virement->id,
+                'department'  => $virement->department?->name,
+                'amount'      => $virement->amount,
+                'rejected_by' => auth()->user()->name,
+            ]);
+        } catch (\Exception) {}
 
         return redirect()->route('virements.pending')
             ->with('success', 'Virement rejected. Department has been notified.');

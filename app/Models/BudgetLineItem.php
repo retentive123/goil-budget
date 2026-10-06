@@ -67,6 +67,11 @@ class BudgetLineItem extends Model
     return $this->hasMany(BudgetActual::class);
 }
 
+    public function customValues()
+    {
+        return $this->hasMany(BudgetLineItemCustomValue::class);
+    }
+
 public function actualTotal(): float
 {
     return $this->actuals()->where('status','confirmed')->sum('amount');

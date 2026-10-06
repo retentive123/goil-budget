@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Support\Facades\Auth;
+use App\Models\WidgetSetting;
 use App\Models\BudgetPeriod;
 use App\Models\BudgetVersion;
 use App\Models\BudgetActual;
@@ -65,6 +66,9 @@ class DashboardController extends Controller
         if ($user->hasAnyRole(['finance_reviewer', 'gceo', 'board', 'bdu_admin', 'super_admin'])) {
             $data = array_merge($data, $this->getFinanceData($currentPeriod, $user, $isAllPeriods));
         }
+
+        $role = $user->roles->first()?->name ?? 'department_head';
+        $data['widgets'] = WidgetSetting::visibilityFor($role);
 
         return view('dashboard', $data);
     }

@@ -21,18 +21,15 @@ Artisan::command('inspire', function () {
 // BACKUPS
 // ══════════════════════════════════════════════════════════════════════════════
 
+// Fires daily at 02:00 — the command checks backup_frequency (daily/weekly/monthly)
+// and skips if today is not the right day for the chosen setting.
 Schedule::command('backup:run --type=scheduled')
     ->dailyAt('02:00')
     ->withoutOverlapping()
     ->runInBackground()
-    ->emailOutputOnFailure(config('mail.from.address'));
-
-// Weekly full backup on Sunday at 1am
-Schedule::command('backup:run --type=scheduled')
-    ->weekly()
-    ->sundays()
-    ->at('01:00')
-    ->withoutOverlapping();
+    ->emailOutputOnFailure(
+        SystemSetting::get('backup_notify_email') ?: config('mail.from.address')
+    );
 
 // ══════════════════════════════════════════════════════════════════════════════
 // APPROVER REMINDERS
@@ -134,13 +131,21 @@ Artisan::command('budget:send-deadline-reminders', function () {
 
     $daysLeft = (int) now()->startOfDay()->diffInDays($period->end_date->startOfDay(), false);
 
-    // Only act on the 7-day and 1-day warnings
-    if (!in_array($daysLeft, [7, 1])) {
-        $this->info("Deadline is in {$daysLeft} day(s) — no reminder sent today.");
+    // Reminder days are configurable via the deadline_reminder_days system setting.
+    $reminderDays = array_filter(
+        array_map('intval', explode(',', SystemSetting::get('deadline_reminder_days', '7,1'))),
+        fn($d) => $d > 0
+    );
+    if (empty($reminderDays)) {
+        $reminderDays = [7, 1];
+    }
+
+    if (!in_array($daysLeft, $reminderDays)) {
+        $this->info("Deadline is in {$daysLeft} day(s) — no reminder sent today (configured days: " . implode(', ', $reminderDays) . ").");
         return;
     }
 
-    $label    = $daysLeft === 1 ? 'tomorrow' : 'in 7 days';
+    $label = $daysLeft === 1 ? 'tomorrow' : "in {$daysLeft} days";
     $deadline = $period->end_date->format('d M Y');
 
     // Departments that have already submitted, are under review, or are approved

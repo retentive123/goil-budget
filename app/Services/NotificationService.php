@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\ApprovalStage;
 use App\Models\BudgetNotification;
 use App\Models\BudgetVersion;
+use App\Models\EmailTemplate;
 use App\Models\User;
+use App\Services\WebhookService;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Mail\Message;
 
@@ -58,11 +60,25 @@ class NotificationService
         // ── Email: first stage only ───────────────────────────────────────────
         foreach ($this->stageApprovers($firstStage, $version) as $approver) {
             $this->sendEmail(
-                to:      $approver->email,
-                subject: "Budget pending your approval — {$ownerName}",
-                body:    "Dear {$approver->name},\n\n{$ownerName} has submitted their budget (Version {$version->version_number}) for {$version->period->name}.\n\nPlease log in to the GOIL Budget Tool to review and approve or reject it.\n\nThis is an automated notification."
+                to:       $approver->email,
+                subject:  "Budget pending your approval — {$ownerName}",
+                body:     "Dear {$approver->name},\n\n{$ownerName} has submitted their budget (Version {$version->version_number}) for {$version->period->name}.\n\nPlease log in to the GOIL Budget Tool to review and approve or reject it.",
+                eventKey: 'budget_submitted',
+                vars:     [
+                    'approver_name' => $approver->name,
+                    'dept_name'     => $ownerName,
+                    'period_name'   => $version->period->name,
+                    'version'       => $version->version_number,
+                ]
             );
         }
+
+        $this->fireWebhooks('budget_submitted', [
+            'version_id'  => $version->id,
+            'dept'        => $ownerName,
+            'period'      => $version->period->name,
+            'version_no'  => $version->version_number,
+        ]);
     }
 
     /**
@@ -72,7 +88,7 @@ class NotificationService
      */
     public function notifyApprovers(BudgetVersion $version, ApprovalStage $stage): void
     {
-        if (!\App\Models\SystemSetting::get('notify_on_submission', true)) {
+        if (!\App\Models\SystemSetting::get('notify_on_approval', true)) {
             return;
         }
 
@@ -89,11 +105,25 @@ class NotificationService
             ]);
 
             $this->sendEmail(
-                to:      $approver->email,
-                subject: "Action required: budget awaiting your approval — {$ownerName}",
-                body:    "Dear {$approver->name},\n\n{$ownerName}'s budget (Version {$version->version_number}) for {$version->period->name} has reached your approval stage.\n\nPlease log in to the GOIL Budget Tool to review and take action.\n\nThis is an automated notification."
+                to:       $approver->email,
+                subject:  "Action required: budget awaiting your approval — {$ownerName}",
+                body:     "Dear {$approver->name},\n\n{$ownerName}'s budget (Version {$version->version_number}) for {$version->period->name} has reached your approval stage.\n\nPlease log in to the GOIL Budget Tool to review and take action.",
+                eventKey: 'budget_stage_reached',
+                vars:     [
+                    'approver_name' => $approver->name,
+                    'dept_name'     => $ownerName,
+                    'period_name'   => $version->period->name,
+                    'version'       => $version->version_number,
+                ]
             );
         }
+
+        $this->fireWebhooks('budget_stage_reached', [
+            'version_id' => $version->id,
+            'dept'       => $ownerName,
+            'period'     => $version->period->name,
+            'stage'      => $stage->name,
+        ]);
     }
 
     /**
@@ -129,11 +159,27 @@ class NotificationService
             ]);
 
             $this->sendEmail(
-                to:      $member->email,
-                subject: $subject,
-                body:    "Dear {$member->name},\n\n{$message}\n\nPlease log in to the GOIL Budget Tool for details.\n\nThis is an automated notification."
+                to:       $member->email,
+                subject:  $subject,
+                body:     "Dear {$member->name},\n\n{$message}\n\nPlease log in to the GOIL Budget Tool for details.",
+                eventKey: "budget_{$decision}",
+                vars:     [
+                    'dept_name'   => $version->ownerName(),
+                    'period_name' => $version->period->name,
+                    'version'     => $version->version_number,
+                    'comments'    => $comments,
+                    'member_name' => $member->name,
+                ]
             );
         }
+
+        $this->fireWebhooks("budget_{$decision}", [
+            'version_id' => $version->id,
+            'dept'       => $version->ownerName(),
+            'period'     => $version->period->name,
+            'decision'   => $decision,
+            'comments'   => $comments,
+        ]);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -174,18 +220,56 @@ class NotificationService
                    ->get();
     }
 
-    private function sendEmail(string $to, string $subject, string $body): void
-    {
+    /**
+     * Send an email, using a DB template if one exists for the given event key.
+     * Falls back to the provided subject/body if no template is found.
+     *
+     * @param string      $to
+     * @param string      $subject   Fallback subject
+     * @param string      $body      Fallback body
+     * @param string|null $eventKey  Looks up EmailTemplate::forEvent($eventKey) if provided
+     * @param array       $vars      Template variable substitutions e.g. ['approver_name' => 'Kwame']
+     */
+    private function sendEmail(
+        string $to,
+        string $subject,
+        string $body,
+        ?string $eventKey = null,
+        array $vars = []
+    ): void {
         if (!\App\Models\SystemSetting::get('email_notifications_enabled', true)) {
             return;
         }
 
+        // Use custom DB template if one is configured for this event
+        if ($eventKey) {
+            $template = EmailTemplate::forEvent($eventKey);
+            if ($template) {
+                $rendered = $template->render($vars);
+                $subject  = $rendered['subject'];
+                $body     = $rendered['body'];
+            }
+        }
+
+        $signature = \App\Models\SystemSetting::get('email_signature', "Regards,\nGOIL Budget System");
+        $fullBody  = $body . "\n\n" . $signature;
+
         try {
-            Mail::raw($body, function (Message $message) use ($to, $subject) {
+            Mail::raw($fullBody, function (Message $message) use ($to, $subject) {
                 $message->to($to)->subject($subject);
             });
         } catch (\Exception $e) {
             \Log::error("Budget notification email failed: {$e->getMessage()}");
+        }
+    }
+
+    /** Fire webhooks for a budget event. */
+    private function fireWebhooks(string $event, array $payload): void
+    {
+        try {
+            (new WebhookService())->fire($event, $payload);
+        } catch (\Exception $e) {
+            \Log::error("Webhook fire failed: {$e->getMessage()}");
         }
     }
 }

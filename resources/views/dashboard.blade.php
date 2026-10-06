@@ -185,6 +185,7 @@
 </div>
 
 {{-- ── Budget Health ─────────────────────────────────────────────── --}}
+@if($widgets['budget_health'] ?? true)
 <div class="health-bar-wrap mb-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div class="health-bar-title mb-0">
@@ -212,8 +213,10 @@
         <div class="health-legend-item"><div class="health-legend-dot" style="background:rgba(255,255,255,.25)"></div>Not Started ({{ $periodStats['not_started'] }})</div>
     </div>
 </div>
+@endif
 
 {{-- ── Section: Financial Overview ──────────────────────────────── --}}
+@if($widgets['financial_overview'] ?? true)
 <div class="d-flex align-items-center gap-3 mb-3">
     <span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;
                  font-weight:700;color:var(--slate);white-space:nowrap">
@@ -384,7 +387,10 @@
 </div>
 @endif
 
+@endif
+
 {{-- ── Section: Analytics ────────────────────────────────────────── --}}
+@if($widgets['analytics'] ?? true)
 <div class="d-flex align-items-center gap-3 mb-3 mt-2">
     <span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;
                  font-weight:700;color:var(--slate);white-space:nowrap">
@@ -473,7 +479,10 @@
 </div>
 @endif
 
+@endif
+
 {{-- ── Section: Submissions & Approvals ─────────────────────────── --}}
+@if($widgets['submissions_table'] ?? true)
 <div class="d-flex align-items-center gap-3 mb-3 mt-2">
     <span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;
                  font-weight:700;color:var(--slate);white-space:nowrap">
@@ -562,6 +571,8 @@
         </div>
     </div>
 </div>
+
+@endif
 
 {{-- ── Section: Recent Activity ──────────────────────────────────── --}}
 @if($recentNotifs->count())

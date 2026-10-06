@@ -12,12 +12,9 @@ class EnforceSessionTimeout
     public function handle(Request $request, Closure $next)
     {
         if (Auth::check()) {
-            $timeoutMinutes = (int) SystemSetting::get('session_timeout_minutes', 60);
-
-            // Sync the cookie lifetime so the browser cookie expiry matches the admin setting.
-            // StartSession stamps the cookie on the response after this middleware runs,
-            // so updating the config here is picked up before the cookie is written.
-            config(['session.lifetime' => $timeoutMinutes]);
+            // config('session.lifetime') is already set correctly by AppServiceProvider
+            // before StartSession runs, so GC and cookie lifetime are both correct.
+            $timeoutMinutes = (int) config('session.lifetime', 120);
 
             $lastActivity = session('last_activity_at');
 

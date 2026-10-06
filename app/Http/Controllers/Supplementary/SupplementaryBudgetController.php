@@ -47,6 +47,11 @@ class SupplementaryBudgetController extends Controller
 
     public function create(Request $request)
     {
+        if (!SystemSetting::get('allow_supplementary_budget', true)) {
+            return redirect()->route('supplementary.index')
+                ->with('error', 'Supplementary budget requests are currently disabled by the administrator.');
+        }
+
         $user          = auth()->user();
         $currentPeriod = $request->period_id
             ? BudgetPeriod::find($request->period_id)
@@ -96,6 +101,11 @@ class SupplementaryBudgetController extends Controller
 
     public function store(Request $request)
     {
+        if (!SystemSetting::get('allow_supplementary_budget', true)) {
+            return redirect()->route('supplementary.index')
+                ->with('error', 'Supplementary budget requests are currently disabled by the administrator.');
+        }
+
         $request->validate([
             'budget_period_id'              => ['required','exists:budget_periods,id'],
             'department_id'                 => ['required','exists:departments,id'],
@@ -143,6 +153,31 @@ class SupplementaryBudgetController extends Controller
 
         if (!empty($blockErrors)) {
             return back()->withInput()->with('error', implode(' ', $blockErrors));
+        }
+
+        // Board approval threshold check
+        $boardThreshold = (int) SystemSetting::get('board_approval_threshold', 0);
+        $totalRequested = collect($request->items)->sum(fn($i) => (float) $i['requested_amount']);
+        if ($boardThreshold > 0 && $totalRequested > $boardThreshold) {
+            session(['supplementary_requires_board_approval' => true]);
+        }
+
+        // Supplementary cap check
+        $capPct = (int) SystemSetting::get('supplementary_budget_limit_pct', 0);
+        if ($capPct > 0) {
+            foreach ($request->items as $data) {
+                $lineItem = BudgetLineItem::find($data['budget_line_item_id']);
+                if ($lineItem && $lineItem->total_amount > 0) {
+                    $pct = (($data['requested_amount'] / $lineItem->total_amount) * 100);
+                    if ($pct > $capPct) {
+                        $code = $lineItem->accountCode->code ?? '—';
+                        return back()->withInput()->with(
+                            'error',
+                            "Requested amount for {$code} exceeds the {$capPct}% supplementary cap."
+                        );
+                    }
+                }
+            }
         }
 
         $batchId = (string) \Illuminate\Support\Str::uuid();

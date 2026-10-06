@@ -41,6 +41,10 @@ use App\Http\Controllers\Budget\AllBudgetsController;
 use App\Http\Controllers\DocsController;
 use App\Http\Controllers\Admin\RatioConfigController;
 use App\Http\Controllers\Reports\RatioAnalysisController;
+use App\Http\Controllers\Admin\EmailTemplateController;
+use App\Http\Controllers\Admin\WebhookController;
+use App\Http\Controllers\Admin\WidgetSettingController;
+use App\Http\Controllers\Admin\CustomBudgetFieldController;
 
 
 // Guest routes
@@ -199,6 +203,24 @@ Route::middleware('auth')->group(function () {
         // Ratio configurations
         Route::resource('ratio-configs', RatioConfigController::class);
 
+        // Email templates
+        Route::get('email-templates',                     [EmailTemplateController::class, 'index'])->name('email-templates.index');
+        Route::get('email-templates/{emailTemplate}/edit',[EmailTemplateController::class, 'edit'])->name('email-templates.edit');
+        Route::put('email-templates/{emailTemplate}',     [EmailTemplateController::class, 'update'])->name('email-templates.update');
+        Route::post('email-templates/reset',              [EmailTemplateController::class, 'reset'])->name('email-templates.reset');
+
+        // Webhooks
+        Route::resource('webhooks', WebhookController::class);
+        Route::post('webhooks/{webhook}/test', [WebhookController::class, 'test'])->name('webhooks.test');
+
+        // Dashboard widget visibility
+        Route::get('widget-settings',  [WidgetSettingController::class, 'index'])->name('widget-settings.index');
+        Route::put('widget-settings',  [WidgetSettingController::class, 'update'])->name('widget-settings.update');
+
+        // Custom budget fields
+        Route::resource('custom-budget-fields', CustomBudgetFieldController::class)
+            ->parameters(['custom-budget-fields' => 'customBudgetField']);
+
         });
 
         // All Budgets — for finance, admin, GCEO, board
@@ -301,6 +323,15 @@ Route::middleware('auth')->group(function () {
     Route::get('/capex',           [ReportController::class, 'capex'])->name('capex');
     Route::get('/subsidiary',      [ReportController::class, 'subsidiaryReport'])->name('subsidiary');
     Route::get('/ratios',          [RatioAnalysisController::class, 'index'])->name('ratios');
+    Route::get('/ratios/export',   [RatioAnalysisController::class, 'export'])->name('ratios.export');
+
+    // ── New analytical reports ────────────────────────────────────────────────
+    Route::get('/consolidated',        [ReportController::class, 'consolidated'])->name('consolidated');
+    Route::get('/compliance',          [ReportController::class, 'compliance'])->name('compliance');
+    Route::get('/ranking',             [ReportController::class, 'ranking'])->name('ranking');
+    Route::get('/virement-impact',     [ReportController::class, 'virementImpact'])->name('virement-impact');
+    Route::get('/station-performance', [ReportController::class, 'stationPerformance'])->name('station-performance');
+    Route::get('/approver-activity',   [ReportController::class, 'approverActivity'])->name('approver-activity');
 
     Route::middleware('permission:export reports')->group(function () {
         Route::get('/export/approved',    [ReportController::class, 'exportApproved'])->name('export.approved');

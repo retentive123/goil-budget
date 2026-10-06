@@ -43,6 +43,107 @@ class RatioAnalysisController extends Controller
         ));
     }
 
+    public function export(Request $request)
+    {
+        $periods    = BudgetPeriod::orderByDesc('year')->get();
+        $period     = $request->period_id
+            ? BudgetPeriod::find($request->period_id)
+            : BudgetPeriod::current() ?? $periods->first();
+
+        $department = $request->department_id
+            ? Department::find($request->department_id)
+            : null;
+
+        $basis   = $request->input('budget_basis', 'original');
+        $ratios  = RatioConfig::active()->get();
+
+        $prevPeriod = $period
+            ? (BudgetPeriod::where('year', $period->year - 1)->orderByDesc('id')->first()
+               ?? BudgetPeriod::where('id', '<', $period->id)->orderByDesc('year')->orderByDesc('id')->first())
+            : null;
+
+        $results    = $this->computeRatios($ratios, $period, $prevPeriod, $department, $basis);
+        $typeLabels = RatioConfig::allTypes();
+
+        $trendLabel = [
+            'good-up'   => 'Improved ↑',
+            'bad-up'    => 'Worsened ↑',
+            'good-down' => 'Worsened ↓',
+            'bad-down'  => 'Improved ↓',
+            'flat'      => 'No change →',
+        ];
+
+        $filename = 'ratio-analysis'
+            . ($period    ? '-' . str_replace(' ', '_', $period->name ?? $period->year)    : '')
+            . ($department ? '-' . str_replace(' ', '_', $department->name) : '')
+            . '.csv';
+
+        $headers = [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ];
+
+        $callback = function () use ($ratios, $results, $period, $prevPeriod, $department, $basis, $typeLabels, $trendLabel) {
+            $out = fopen('php://output', 'w');
+
+            // UTF-8 BOM so Excel opens the file correctly without mojibake
+            fwrite($out, "\xEF\xBB\xBF");
+
+            // Meta rows
+            fputcsv($out, ['Ratio Analysis Report']);
+            fputcsv($out, ['Period',       $period    ? ($period->name    ?? $period->year)    : '-']);
+            fputcsv($out, ['Department',   $department ? $department->name                      : 'All']);
+            fputcsv($out, ['Budget Basis', $basis === 'revised' ? 'Latest Approved' : 'Original Budget']);
+            fputcsv($out, ['Generated',    now()->format('d M Y H:i')]);
+            fputcsv($out, []);
+
+            // Column headers
+            $cols = ['Ratio', 'Description', 'Unit', 'Value (' . ($period?->name ?? $period?->year ?? '—') . ')'];
+            if ($prevPeriod) {
+                $cols[] = 'Value (' . ($prevPeriod->name ?? $prevPeriod->year) . ')';
+                $cols[] = 'Change';
+                $cols[] = 'Trend';
+            }
+            $cols = array_merge($cols, ['Numerator Source', 'Denominator Source', 'Raw Numerator', 'Raw Denominator']);
+            fputcsv($out, $cols);
+
+            foreach ($ratios as $ratio) {
+                $r     = $results[$ratio->id] ?? null;
+                $val   = $r['value']      ?? null;
+                $prev  = $r['prev_value'] ?? null;
+                $trend = $r['trend']      ?? null;
+
+                $numTypes = collect($ratio->numerator_types)  ->map(fn($t) => $typeLabels[$t] ?? $t)->join(', ');
+                $denTypes = collect($ratio->denominator_types)->map(fn($t) => $typeLabels[$t] ?? $t)->join(', ');
+
+                $row = [
+                    $ratio->name,
+                    $ratio->description ?? '',
+                    $ratio->unit,
+                    $val !== null ? number_format($val, 2) : '-',
+                ];
+
+                if ($prevPeriod) {
+                    $delta  = ($val !== null && $prev !== null) ? $val - $prev : null;
+                    $row[]  = $prev !== null ? number_format($prev, 2) : '-';
+                    $row[]  = $delta !== null ? number_format($delta, 2) : '-';
+                    $row[]  = ($trend && isset($trendLabel[$trend])) ? $trendLabel[$trend] : '-';
+                }
+
+                $row[] = ucfirst($ratio->numerator_source)   . ': ' . $numTypes;
+                $row[] = ucfirst($ratio->denominator_source) . ': ' . $denTypes;
+                $row[] = $r ? number_format($r['numerator'],   2) : '-';
+                $row[] = $r ? number_format($r['denominator'], 2) : '-';
+
+                fputcsv($out, $row);
+            }
+
+            fclose($out);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
     private function computeRatios(Collection $ratios, ?BudgetPeriod $period, ?BudgetPeriod $prevPeriod, ?Department $department, string $basis): array
     {
         $results = [];

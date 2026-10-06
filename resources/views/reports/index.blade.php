@@ -273,5 +273,102 @@
         </div>
     </div>
 
+    {{-- ── New analytical reports ────────────────────────────── --}}
+    <div class="col-12 mt-2">
+        <h6 class="fw-semibold text-muted mb-3" style="font-size:.8rem;letter-spacing:.05em;text-transform:uppercase">
+            Analytical &amp; Performance Reports
+        </h6>
+    </div>
+
+    <div class="col-md-4">
+        <div class="chart-card h-100 d-flex flex-column">
+            <h6 class="fw-bold mb-1">Consolidated Group Report</h6>
+            <p class="text-muted small flex-grow-1">
+                All departments and subsidiaries rolled up into a single group-level
+                budget view. Quarterly breakdown with supplementary totals.
+            </p>
+            <a href="{{ route('reports.consolidated') }}"
+               class="btn btn-sm"
+               style="background:#E65C00;color:#fff;border-radius:8px">
+                Open Report →
+            </a>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="chart-card h-100 d-flex flex-column">
+            <h6 class="fw-bold mb-1">Budget Compliance Report</h6>
+            <p class="text-muted small flex-grow-1">
+                Submission timeliness, approval duration, and revision count per department.
+                Instantly see who submitted on time and who is lagging.
+            </p>
+            <a href="{{ route('reports.compliance') }}"
+               class="btn btn-sm"
+               style="background:#E65C00;color:#fff;border-radius:8px">
+                Open Report →
+            </a>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="chart-card h-100 d-flex flex-column">
+            <h6 class="fw-bold mb-1">Departmental Ranking</h6>
+            <p class="text-muted small flex-grow-1">
+                League table ranking departments by budget size, utilisation rate,
+                variance percentage, submission speed, and virement activity.
+            </p>
+            <a href="{{ route('reports.ranking') }}"
+               class="btn btn-sm"
+               style="background:#E65C00;color:#fff;border-radius:8px">
+                Open Report →
+            </a>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="chart-card h-100 d-flex flex-column">
+            <h6 class="fw-bold mb-1">Virement Impact Report</h6>
+            <p class="text-muted small flex-grow-1">
+                Aggregate effect of all virements per period. Net movement per account code,
+                department-level totals, and individual virement details.
+            </p>
+            <a href="{{ route('reports.virement-impact') }}"
+               class="btn btn-sm"
+               style="background:#E65C00;color:#fff;border-radius:8px">
+                Open Report →
+            </a>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="chart-card h-100 d-flex flex-column">
+            <h6 class="fw-bold mb-1">Service Station Performance</h6>
+            <p class="text-muted small flex-grow-1">
+                GOIL-specific station comparison. Budget vs actuals per station,
+                grouped by zone, with utilisation and virement amounts.
+            </p>
+            <a href="{{ route('reports.station-performance') }}"
+               class="btn btn-sm"
+               style="background:#E65C00;color:#fff;border-radius:8px">
+                Open Report →
+            </a>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="chart-card h-100 d-flex flex-column">
+            <h6 class="fw-bold mb-1">Approver Activity Report</h6>
+            <p class="text-muted small flex-grow-1">
+                Review times, approval/rejection counts, and pending workload per approver.
+                Identify bottlenecks in the approval pipeline.
+            </p>
+            <a href="{{ route('reports.approver-activity') }}"
+               class="btn btn-sm"
+               style="background:#E65C00;color:#fff;border-radius:8px">
+                Open Report →
+            </a>
+        </div>
+    </div>
+
 </div>
 @endsection

@@ -837,6 +837,36 @@
                 <i class="bi bi-percent nav-icon"></i>
                 <span class="link-text">Ratio Analysis</span>
             </a>
+            <a href="{{ route('reports.consolidated') }}"
+               class="sidebar-link {{ request()->routeIs('reports.consolidated') ? 'active' : '' }}">
+                <i class="bi bi-layers nav-icon"></i>
+                <span class="link-text">Consolidated</span>
+            </a>
+            <a href="{{ route('reports.compliance') }}"
+               class="sidebar-link {{ request()->routeIs('reports.compliance') ? 'active' : '' }}">
+                <i class="bi bi-check2-circle nav-icon"></i>
+                <span class="link-text">Compliance</span>
+            </a>
+            <a href="{{ route('reports.ranking') }}"
+               class="sidebar-link {{ request()->routeIs('reports.ranking') ? 'active' : '' }}">
+                <i class="bi bi-trophy nav-icon"></i>
+                <span class="link-text">Dept Ranking</span>
+            </a>
+            <a href="{{ route('reports.virement-impact') }}"
+               class="sidebar-link {{ request()->routeIs('reports.virement-impact') ? 'active' : '' }}">
+                <i class="bi bi-arrow-left-right nav-icon"></i>
+                <span class="link-text">Virement Impact</span>
+            </a>
+            <a href="{{ route('reports.station-performance') }}"
+               class="sidebar-link {{ request()->routeIs('reports.station-performance') ? 'active' : '' }}">
+                <i class="bi bi-fuel-pump nav-icon"></i>
+                <span class="link-text">Station Performance</span>
+            </a>
+            <a href="{{ route('reports.approver-activity') }}"
+               class="sidebar-link {{ request()->routeIs('reports.approver-activity') ? 'active' : '' }}">
+                <i class="bi bi-person-check nav-icon"></i>
+                <span class="link-text">Approver Activity</span>
+            </a>
         </div>
         @endcan
         {{-- ════════════════════════════════════════════════ --}}
@@ -981,6 +1011,29 @@
             class="sidebar-link {{ request()->routeIs('admin.backups.*') ? 'active' : '' }}">
                 <i class="bi bi-database-add"></i>
                 <span class="link-text">Backups</span>
+            </a>
+            @endcan
+
+            @can('manage system settings')
+            <a href="{{ route('admin.email-templates.index') }}"
+               class="sidebar-link {{ request()->routeIs('admin.email-templates.*') ? 'active' : '' }}">
+                <i class="bi bi-envelope-paper nav-icon"></i>
+                <span class="link-text">Email Templates</span>
+            </a>
+            <a href="{{ route('admin.webhooks.index') }}"
+               class="sidebar-link {{ request()->routeIs('admin.webhooks.*') ? 'active' : '' }}">
+                <i class="bi bi-send nav-icon"></i>
+                <span class="link-text">Webhooks</span>
+            </a>
+            <a href="{{ route('admin.widget-settings.index') }}"
+               class="sidebar-link {{ request()->routeIs('admin.widget-settings.*') ? 'active' : '' }}">
+                <i class="bi bi-grid nav-icon"></i>
+                <span class="link-text">Widget Visibility</span>
+            </a>
+            <a href="{{ route('admin.custom-budget-fields.index') }}"
+               class="sidebar-link {{ request()->routeIs('admin.custom-budget-fields.*') ? 'active' : '' }}">
+                <i class="bi bi-input-cursor-text nav-icon"></i>
+                <span class="link-text">Custom Fields</span>
             </a>
             @endcan
 
@@ -1455,7 +1508,13 @@ window.NAV_ITEMS = [
     { label:'Financial Statements', keywords:['financial','pnl','income','balance'],   icon:'fas fa-file-invoice-dollar',   section:'Reports',         url:'{{ route('reports.financial') }}' },
     { label:'Capital Expenditure',  keywords:['capex','capital','expenditure','report'],icon:'fas fa-hard-hat',              section:'Reports',         url:'{{ route('reports.capex') }}' },
     { label:'Subsidiary Report',   keywords:['subsidiary','subsidiaries','report','entity budget'],icon:'bi bi-building',      section:'Reports',         url:'{{ route('reports.subsidiary') }}' },
-    { label:'Ratio Analysis',      keywords:['ratio','ratios','analysis','utilisation rate','kpi','efficiency','intensity'], icon:'bi bi-percent', section:'Reports', url:'{{ route('reports.ratios') }}' },
+    { label:'Ratio Analysis',      keywords:['ratio','ratios','analysis','utilisation rate','kpi','efficiency','intensity'], icon:'bi bi-percent',           section:'Reports', url:'{{ route('reports.ratios') }}' },
+    { label:'Consolidated Report', keywords:['consolidated','group','rollup','multi-department','all departments'],            icon:'bi bi-layers',            section:'Reports', url:'{{ route('reports.consolidated') }}' },
+    { label:'Compliance Report',   keywords:['compliance','timeliness','submission','on time','deadline'],                     icon:'bi bi-check2-circle',     section:'Reports', url:'{{ route('reports.compliance') }}' },
+    { label:'Dept Ranking',        keywords:['ranking','league table','performance','best department','worst'],                icon:'bi bi-trophy',            section:'Reports', url:'{{ route('reports.ranking') }}' },
+    { label:'Virement Impact',     keywords:['virement','impact','movement','account code','transfers'],                       icon:'bi bi-arrow-left-right',  section:'Reports', url:'{{ route('reports.virement-impact') }}' },
+    { label:'Station Performance', keywords:['station','performance','service station','zone','fuel pump'],                    icon:'bi bi-fuel-pump',         section:'Reports', url:'{{ route('reports.station-performance') }}' },
+    { label:'Approver Activity',   keywords:['approver','activity','approved','rejected','action count'],                      icon:'bi bi-person-check',      section:'Reports', url:'{{ route('reports.approver-activity') }}' },
     @endcan
 
     // ── Administration ────────────────────────────────────
@@ -1484,6 +1543,10 @@ window.NAV_ITEMS = [
     @can('manage system settings')
     { label:'System Settings',      keywords:['settings','system','configuration'],     icon:'fas fa-sliders-h',             section:'Administration',  url:'{{ route('admin.settings.index') }}' },
     { label:'Backups',              keywords:['backup','backups','database'],           icon:'bi bi-database-add',           section:'Administration',  url:'{{ route('admin.backups.index') }}' },
+    { label:'Email Templates',      keywords:['email','template','notification','mail'],icon:'bi bi-envelope-paper',         section:'Administration',  url:'{{ route('admin.email-templates.index') }}' },
+    { label:'Webhooks',             keywords:['webhook','api','integration','events'],  icon:'bi bi-send',                   section:'Administration',  url:'{{ route('admin.webhooks.index') }}' },
+    { label:'Widget Visibility',    keywords:['widget','dashboard','visibility','role'],icon:'bi bi-grid',                   section:'Administration',  url:'{{ route('admin.widget-settings.index') }}' },
+    { label:'Custom Budget Fields', keywords:['custom','field','column','extra'],       icon:'bi bi-input-cursor-text',      section:'Administration',  url:'{{ route('admin.custom-budget-fields.index') }}' },
     @endcan
 
     // ── Help ──────────────────────────────────────────────

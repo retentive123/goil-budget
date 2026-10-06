@@ -22,9 +22,13 @@ class SystemSettingController extends Controller
         // Preferred key order within each group (keys not listed fall to the end alphabetically)
         $keyOrder = [
             'general' => [
-                'app_name', 'company_name', 'currency_symbol', 'fiscal_year_start',
+                'app_name', 'company_name', 'company_logo',
+                'currency_symbol', 'currency_position', 'fiscal_year_start',
+                'report_decimal_places', 'report_footer_text',
+                'login_page_message',
             ],
             'budget' => [
+                'budget_entry_mode',
                 'max_budget_versions', 'budget_entry_deadline_days',
                 // Calculation mode first, then the settings that depend on it
                 'line_item_calc_mode', 'admin_sets_rate', 'admin_sets_freq',
@@ -35,12 +39,17 @@ class SystemSettingController extends Controller
                 'allow_revision_of_revision',
                 'allow_virement_after_approval', 'virement_limit_pct',
                 'supplementary_approval_mode',
+                'allow_supplementary_budget', 'supplementary_budget_limit_pct',
+                'budget_variance_alert_pct', 'board_approval_threshold',
+                'budget_carry_forward', 'require_cost_center_code',
             ],
             'notifications' => [
                 'email_notifications_enabled',
                 'notify_on_submission', 'notify_on_approval', 'notify_on_rejection',
                 'notify_on_virement', 'notify_finance_on_virement',
+                'notify_on_variance_breach',
                 'approver_reminder_mode', 'approver_reminder_frequency_days',
+                'deadline_reminder_days', 'email_signature',
                 'audit_retain_info_months', 'audit_retain_warning_months', 'audit_log_keep_critical',
             ],
             'security' => [
@@ -85,10 +94,26 @@ class SystemSettingController extends Controller
 
 public function update(Request $request)
 {
+    // Handle company logo file upload separately
+    if ($request->hasFile('logo_upload') && $request->file('logo_upload')->isValid()) {
+        $file = $request->file('logo_upload');
+        $path = $file->storeAs('logos', 'company_logo.' . $file->getClientOriginalExtension(), 'public');
+        $logoSetting = SystemSetting::where('key', 'company_logo')->first();
+        if ($logoSetting) {
+            $logoSetting->update(['value' => 'storage/' . $path]);
+            Cache::forget('setting:company_logo');
+        }
+    }
+
     $settings = SystemSetting::all();
     $changed  = [];
 
+    // Settings handled separately (not via the settings[] form array)
+    $skipKeys = ['company_logo'];
+
     foreach ($settings as $setting) {
+        if (in_array($setting->key, $skipKeys)) continue;
+
         if ($setting->type === 'boolean') {
             $newValue = $request->has("settings.{$setting->key}") ? '1' : '0';
 

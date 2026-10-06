@@ -53,6 +53,18 @@ class AppServiceProvider extends ServiceProvider
             \Illuminate\Support\Facades\URL::forceScheme('https');
         }
 
+        // ── Apply session lifetime from the database (overrides .env) ──────────
+        try {
+            if (Schema::hasTable('system_settings')) {
+                $sessionMinutes = (int) SystemSetting::get('session_timeout_minutes', 120);
+                if ($sessionMinutes > 0) {
+                    config(['session.lifetime' => $sessionMinutes]);
+                }
+            }
+        } catch (\Exception) {
+            // DB unavailable — fall back to .env value silently
+        }
+
         // ── Apply mail settings from the database (overrides .env) ────────────
         // Wrapped in try/catch so the app still boots if the DB isn't available
         // (e.g. during migrations or first-run setup).

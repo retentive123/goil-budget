@@ -610,10 +610,19 @@
 <div class="right-panel">
     <div class="login-box">
 
-        <div class="login-greeting">Welcome back 👋</div>
+        <div class="login-greeting">Welcome back</div>
         <div class="login-subtext">
             Sign in to your account to continue
         </div>
+
+        {{-- Admin announcement banner --}}
+        @php $loginMsg = \App\Models\SystemSetting::get('login_page_message', ''); @endphp
+        @if($loginMsg)
+        <div class="alert-msg" style="background:#FFF7ED;border:1px solid #FDBA74;color:#9A3412;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;display:flex;align-items:flex-start;gap:8px;">
+            <i class="bi bi-megaphone-fill" style="margin-top:1px;flex-shrink:0;"></i>
+            <span>{{ $loginMsg }}</span>
+        </div>
+        @endif
 
         {{-- Status messages --}}
         @if(session('status'))

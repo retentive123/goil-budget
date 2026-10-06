@@ -76,7 +76,7 @@ class BackupController extends Controller
     {
         $frequency = \App\Models\SystemSetting::get('backup_frequency', 'daily');
         return match($frequency) {
-            'weekly'  => 'Next Sunday at 01:00',
+            'weekly'  => 'Next Sunday at 02:00',
             'monthly' => 'Next 1st of month at 02:00',
             default   => 'Tonight at 02:00',
         };

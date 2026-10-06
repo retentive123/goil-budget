@@ -340,6 +340,9 @@
                         @if($budgetVersion->isEditable())
                         <th>Notes</th>
                         @endif
+                        @foreach($customFields ?? [] as $cf)
+                        <th style="min-width:110px">{{ $cf->label }}@if($cf->is_required)<span class="text-danger ms-1">*</span>@endif</th>
+                        @endforeach
                     </tr>
                 </thead>
                 <tbody>
@@ -375,6 +378,8 @@
                         $displayQ2 = $item->q2_amount;
                         $displayQ3 = $item->q3_amount;
                         $displayQ4 = $item->q4_amount;
+                        // Map custom field id → saved value for this line item
+                        $cvMap = $item->customValues->keyBy('custom_budget_field_id');
                     @endphp
                     <tr data-item-id="{{ $item->id }}" data-supp="{{ $itemSupp }}" data-cat="{{ $catIdx }}">
                         <td class="small">
@@ -551,6 +556,39 @@
                                     placeholder="Optional note"
                                     onkeyup="scheduleAutoSave()">
                             </td>
+                            @foreach($customFields ?? [] as $cf)
+                            <td>
+                                @php $cvVal = $cvMap[$cf->id]->value ?? '' @endphp
+                                @if($cf->field_type === 'select')
+                                <select class="form-select form-select-sm custom-field-input"
+                                    data-field-id="{{ $cf->id }}"
+                                    onchange="scheduleAutoSave()">
+                                    <option value="">—</option>
+                                    @foreach($cf->options ?? [] as $opt)
+                                    <option value="{{ $opt }}" {{ $cvVal === $opt ? 'selected' : '' }}>{{ $opt }}</option>
+                                    @endforeach
+                                </select>
+                                @elseif($cf->field_type === 'boolean')
+                                <input type="checkbox" class="form-check-input custom-field-input"
+                                    data-field-id="{{ $cf->id }}"
+                                    {{ $cvVal ? 'checked' : '' }}
+                                    onchange="scheduleAutoSave()">
+                                @elseif($cf->field_type === 'number')
+                                <input type="number" class="form-control form-control-sm custom-field-input text-end"
+                                    data-field-id="{{ $cf->id }}"
+                                    value="{{ $cvVal }}"
+                                    placeholder="{{ $cf->placeholder ?? '0' }}"
+                                    step="any" min="0"
+                                    oninput="scheduleAutoSave()">
+                                @else
+                                <input type="text" class="form-control form-control-sm custom-field-input"
+                                    data-field-id="{{ $cf->id }}"
+                                    value="{{ $cvVal }}"
+                                    placeholder="{{ $cf->placeholder ?? '' }}"
+                                    oninput="scheduleAutoSave()">
+                                @endif
+                            </td>
+                            @endforeach
 
                         {{-- ════════════════════════════════════════════
                              EDITABLE — Direct amount (monthly) mode
@@ -573,6 +611,23 @@
                                 value="{{ $item->justification }}"
                                 placeholder="Optional note"
                                 onkeyup="scheduleAutoSave()"></td>
+                            @foreach($customFields ?? [] as $cf)
+                            <td>
+                                @php $cvVal = $cvMap[$cf->id]->value ?? '' @endphp
+                                @if($cf->field_type === 'select')
+                                <select class="form-select form-select-sm custom-field-input" data-field-id="{{ $cf->id }}" onchange="scheduleAutoSave()">
+                                    <option value="">—</option>
+                                    @foreach($cf->options ?? [] as $opt)<option value="{{ $opt }}" {{ $cvVal === $opt ? 'selected' : '' }}>{{ $opt }}</option>@endforeach
+                                </select>
+                                @elseif($cf->field_type === 'boolean')
+                                <input type="checkbox" class="form-check-input custom-field-input" data-field-id="{{ $cf->id }}" {{ $cvVal ? 'checked' : '' }} onchange="scheduleAutoSave()">
+                                @elseif($cf->field_type === 'number')
+                                <input type="number" class="form-control form-control-sm custom-field-input text-end" data-field-id="{{ $cf->id }}" value="{{ $cvVal }}" placeholder="{{ $cf->placeholder ?? '0' }}" step="any" min="0" oninput="scheduleAutoSave()">
+                                @else
+                                <input type="text" class="form-control form-control-sm custom-field-input" data-field-id="{{ $cf->id }}" value="{{ $cvVal }}" placeholder="{{ $cf->placeholder ?? '' }}" oninput="scheduleAutoSave()">
+                                @endif
+                            </td>
+                            @endforeach
 
                         {{-- ════════════════════════════════════════════
                              EDITABLE — Direct amount (quarterly) mode
@@ -601,6 +656,23 @@
                                 value="{{ $item->justification }}"
                                 placeholder="Optional note"
                                 onkeyup="scheduleAutoSave()"></td>
+                            @foreach($customFields ?? [] as $cf)
+                            <td>
+                                @php $cvVal = $cvMap[$cf->id]->value ?? '' @endphp
+                                @if($cf->field_type === 'select')
+                                <select class="form-select form-select-sm custom-field-input" data-field-id="{{ $cf->id }}" onchange="scheduleAutoSave()">
+                                    <option value="">—</option>
+                                    @foreach($cf->options ?? [] as $opt)<option value="{{ $opt }}" {{ $cvVal === $opt ? 'selected' : '' }}>{{ $opt }}</option>@endforeach
+                                </select>
+                                @elseif($cf->field_type === 'boolean')
+                                <input type="checkbox" class="form-check-input custom-field-input" data-field-id="{{ $cf->id }}" {{ $cvVal ? 'checked' : '' }} onchange="scheduleAutoSave()">
+                                @elseif($cf->field_type === 'number')
+                                <input type="number" class="form-control form-control-sm custom-field-input text-end" data-field-id="{{ $cf->id }}" value="{{ $cvVal }}" placeholder="{{ $cf->placeholder ?? '0' }}" step="any" min="0" oninput="scheduleAutoSave()">
+                                @else
+                                <input type="text" class="form-control form-control-sm custom-field-input" data-field-id="{{ $cf->id }}" value="{{ $cvVal }}" placeholder="{{ $cf->placeholder ?? '' }}" oninput="scheduleAutoSave()">
+                                @endif
+                            </td>
+                            @endforeach
 
                         {{-- ════════════════════════════════════════════
                              READ-ONLY views
@@ -639,6 +711,9 @@
                                 {{ $itemSupp > 0 ? '+'.number_format($itemSupp, 2) : '—' }}
                             </td>
                             <td class="text-end small fw-semibold">{{ number_format($itemEffective, 2) }}</td>
+                            @foreach($customFields ?? [] as $cf)
+                            <td class="small text-muted">{{ $cvMap[$cf->id]->value ?? '—' }}</td>
+                            @endforeach
                         @endif
                     </tr>
                     @endforeach
@@ -680,6 +755,9 @@
         @if($budgetVersion->isEditable())
         <td></td>
         @endif
+        @foreach($customFields ?? [] as $cf)
+        <td></td>
+        @endforeach
     </tr>
     @empty
     @endforelse
@@ -1058,6 +1136,20 @@
         if (el('gt-effective')) el('gt-effective').textContent = fmt(orig + totalSupp);
     }
 
+    function collectCustomFields() {
+        const custom = {};
+        document.querySelectorAll('tr[data-item-id]').forEach(row => {
+            const itemId = row.dataset.itemId;
+            row.querySelectorAll('.custom-field-input').forEach(input => {
+                const fieldId = input.dataset.fieldId;
+                if (!fieldId) return;
+                if (!custom[itemId]) custom[itemId] = {};
+                custom[itemId][fieldId] = input.type === 'checkbox' ? (input.checked ? '1' : '0') : input.value;
+            });
+        });
+        return custom;
+    }
+
     function collectItems() {
         return Array.from(document.querySelectorAll('tr[data-item-id]')).map(row => {
             const notes = row.querySelector('.notes-input')?.value || '';
@@ -1123,7 +1215,7 @@
                     'X-CSRF-TOKEN': CSRF,
                     'Accept':       'application/json',
                 },
-                body: JSON.stringify({ items: collectItems() }),
+                body: JSON.stringify({ items: collectItems(), custom_fields: collectCustomFields() }),
             });
 
             const data = await res.json();
