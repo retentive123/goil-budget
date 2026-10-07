@@ -154,6 +154,41 @@
   }
   .back-link:hover { color: #1B2A4A; }
 
+  /* ── DDL code blocks ── */
+  .ddl-wrap { overflow-x: auto; border-radius: 8px; margin: 14px 0 6px; border: 1px solid #1E293B; }
+  pre.ddl {
+    background: #0F172A;
+    color: #CBD5E1;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    padding: 18px 22px;
+    margin: 0;
+    min-width: 520px;
+    tab-size: 2;
+  }
+  .ddl .kw  { color: #67E8F9; font-weight: 600; }
+  .ddl .ty  { color: #A5B4FC; }
+  .ddl .cmt { color: #475569; font-style: italic; }
+  .ddl .str { color: #86EFAC; }
+  .ddl .nm  { color: #FDE68A; }
+
+  /* ── Table classification badges ── */
+  .tb { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; white-space: nowrap; margin-left: 8px; vertical-align: middle; }
+  .tb-master  { background: #D1FAE5; color: #065F46; }
+  .tb-finance { background: #FEF3C7; color: #92400E; }
+  .tb-lookup  { background: #EDE9FE; color: #5B21B6; }
+  .tb-transact{ background: #FEE2E2; color: #991B1B; }
+
+  /* ── Sage mapping callout ── */
+  .sage-map {
+    background: #EFF6FF; border-left: 3px solid #3B82F6;
+    padding: 10px 14px; border-radius: 0 6px 6px 0;
+    font-size: 13px; color: #1E40AF; margin: 12px 0 4px;
+  }
+  .sage-map strong { color: #1E40AF; }
+  .sage-map code { font-family: 'Courier New', Courier, monospace; font-size: 11.5px; background: #DBEAFE; color: #1E3A8A; padding: 1px 5px; border-radius: 3px; }
+
   @media (max-width: 900px) {
     .docs-nav { display: none; }
     .docs-content { padding-left: 0; }
@@ -180,6 +215,7 @@
       <a class="docs-nav-link" href="#s9">Sandbox &amp; Testing</a>
       <a class="docs-nav-link" href="#s10">Support Contacts</a>
       <a class="docs-nav-link" href="#handoff">Handoff Summary</a>
+      <a class="docs-nav-link" href="#schema">Database Schema</a>
     </div>
     <div class="docs-nav-group" style="margin-top:8px">
       <span class="docs-nav-label">Other Docs</span>
@@ -210,7 +246,7 @@
         </div>
         <div class="docs-hero-meta-item">
           <strong>Requirement areas</strong>
-          10 categories
+          10 categories + DB schema
         </div>
         <div class="docs-hero-meta-item">
           <strong>Updated</strong>
@@ -898,6 +934,288 @@
         Get it in writing before any development begins.
       </div>
     </div>
+
+    {{-- ══════════════════════════════════════════════════════ --}}
+    {{-- Database Schema --}}
+    {{-- ══════════════════════════════════════════════════════ --}}
+    <div class="doc-section" id="schema">
+      <div class="doc-eyebrow">Reference</div>
+      <div class="doc-title">Database Schema — Integration Tables</div>
+      <div class="doc-lead">
+        The eight tables the Sage team may read for a database-level integration. All other tables are internal and should not be shared. Fields marked <code class="sk">FK</code> in the comments are foreign keys — Sage only needs the value, not the referenced row.
+      </div>
+
+      <div class="doc-note" style="max-width:none">
+        <strong>Read-only access only.</strong> These tables should be exposed via a dedicated read-only MySQL user. No INSERT, UPDATE, or DELETE should be granted. The recommended access method is a Sage ODBC connection or scheduled SQL SELECT pull, not direct application-level writes.
+      </div>
+
+      {{-- 1. account_categories ───────────────── --}}
+      <div class="doc-sub">
+        <div class="doc-sub-title">
+          account_categories
+          <span class="tb tb-master">Master Data</span>
+        </div>
+        <p>Groups of GL accounts (e.g. "Staff Costs", "Fuel Revenue"). Each account code belongs to one category. <code class="sk">budget_type</code> drives P&amp;L vs Balance Sheet classification.</p>
+        <div class="sage-map"><strong>Sage mapping:</strong> Map <code>code</code> to your Sage GL account group / nominal code prefix. <code>budget_type</code> tells you whether to post on the revenue or expense side.</div>
+        <div class="ddl-wrap">
+<pre class="ddl"><span class="kw">CREATE TABLE</span> <span class="nm">account_categories</span> (
+  <span class="nm">id</span>                      <span class="ty">BIGINT UNSIGNED</span>  <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+  <span class="nm">name</span>                    <span class="ty">VARCHAR(255)</span>     <span class="kw">NOT NULL</span>,             <span class="cmt">-- Display name e.g. "Staff Costs"</span>
+  <span class="nm">code</span>                    <span class="ty">VARCHAR(255)</span>     <span class="kw">NOT NULL UNIQUE</span>,      <span class="cmt">-- Short code used in GL mapping</span>
+  <span class="nm">description</span>             <span class="ty">TEXT</span>                     <span class="kw">NULL</span>,
+  <span class="nm">default_rate</span>            <span class="ty">DECIMAL(15,4)</span>            <span class="kw">NULL</span>,             <span class="cmt">-- Default unit rate for budgeting</span>
+  <span class="nm">default_frequency</span>       <span class="ty">DECIMAL(10,4)</span>            <span class="kw">NULL</span>,             <span class="cmt">-- Default occurrences per year</span>
+  <span class="nm">is_active</span>               <span class="ty">TINYINT(1)</span>       <span class="kw">NOT NULL DEFAULT 1</span>,   <span class="cmt">-- 1=active 0=archived</span>
+  <span class="nm">budget_type</span>             <span class="ty">ENUM</span>(<span class="str">'revenue'</span>,<span class="str">'expense'</span>,<span class="str">'both'</span>,
+                              <span class="str">'capital_expenditure'</span>,<span class="str">'assets'</span>,
+                              <span class="str">'liabilities'</span>,<span class="str">'ex_pump_item'</span>) <span class="kw">NOT NULL</span>,
+  <span class="nm">account_sub_category_id</span> <span class="ty">BIGINT UNSIGNED</span>          <span class="kw">NULL</span>,             <span class="cmt">-- FK internal grouping</span>
+  <span class="nm">created_at</span>              <span class="ty">TIMESTAMP</span>                <span class="kw">NULL</span>,
+  <span class="nm">updated_at</span>              <span class="ty">TIMESTAMP</span>                <span class="kw">NULL</span>,
+  <span class="kw">PRIMARY KEY</span> (<span class="nm">id</span>)
+) <span class="kw">ENGINE</span>=InnoDB;</pre>
+        </div>
+      </div>
+
+      {{-- 2. account_codes ───────────────────── --}}
+      <div class="doc-sub">
+        <div class="doc-sub-title">
+          account_codes
+          <span class="tb tb-master">Master Data</span>
+        </div>
+        <p>Individual GL line items (e.g. "Basic Salary", "Diesel Purchases"). Each code belongs to a category and carries its own calculation rules.</p>
+        <div class="sage-map"><strong>Sage mapping:</strong> <code>code</code> is the <strong>primary join key</strong> to Sage nominal / GL codes. <code>calc_type</code> explains how GOIL derives the budget amount (flat / rate×qty / rate×qty×freq). <code>unit</code> names the quantity unit (litres, kwh, etc.).</div>
+        <div class="ddl-wrap">
+<pre class="ddl"><span class="kw">CREATE TABLE</span> <span class="nm">account_codes</span> (
+  <span class="nm">id</span>                  <span class="ty">BIGINT UNSIGNED</span>  <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+  <span class="nm">account_category_id</span> <span class="ty">BIGINT UNSIGNED</span>  <span class="kw">NOT NULL</span>,              <span class="cmt">-- FK → account_categories.id</span>
+  <span class="nm">code</span>                <span class="ty">VARCHAR(255)</span>     <span class="kw">NOT NULL UNIQUE</span>,       <span class="cmt">-- GL code — PRIMARY join to Sage</span>
+  <span class="nm">name</span>                <span class="ty">VARCHAR(255)</span>     <span class="kw">NOT NULL</span>,              <span class="cmt">-- e.g. "Diesel Purchases"</span>
+  <span class="nm">description</span>         <span class="ty">TEXT</span>                     <span class="kw">NULL</span>,
+  <span class="nm">unit</span>                <span class="ty">VARCHAR(50)</span>              <span class="kw">NULL</span>,              <span class="cmt">-- Unit of measure: litres, kwh…</span>
+  <span class="nm">calc_type</span>           <span class="ty">VARCHAR(20)</span>      <span class="kw">NOT NULL</span>,              <span class="cmt">-- 'flat'|'rate_qty'|'rate_qty_freq'</span>
+  <span class="nm">calc_config</span>         <span class="ty">JSON</span>                     <span class="kw">NULL</span>,              <span class="cmt">-- Calculation parameters</span>
+  <span class="nm">sort_order</span>          <span class="ty">SMALLINT</span>         <span class="kw">NOT NULL DEFAULT 0</span>,
+  <span class="nm">default_rate</span>        <span class="ty">DECIMAL(15,4)</span>            <span class="kw">NULL</span>,
+  <span class="nm">default_frequency</span>   <span class="ty">DECIMAL(10,4)</span>            <span class="kw">NULL</span>,
+  <span class="nm">is_active</span>           <span class="ty">TINYINT(1)</span>       <span class="kw">NOT NULL DEFAULT 1</span>,
+  <span class="nm">deleted_at</span>          <span class="ty">TIMESTAMP</span>                <span class="kw">NULL</span>,              <span class="cmt">-- Soft-delete; NULL=active</span>
+  <span class="nm">created_at</span>          <span class="ty">TIMESTAMP</span>                <span class="kw">NULL</span>,
+  <span class="nm">updated_at</span>          <span class="ty">TIMESTAMP</span>                <span class="kw">NULL</span>,
+  <span class="kw">PRIMARY KEY</span> (<span class="nm">id</span>)
+) <span class="kw">ENGINE</span>=InnoDB;</pre>
+        </div>
+      </div>
+
+      {{-- 3. budget_periods ─────────────────── --}}
+      <div class="doc-sub">
+        <div class="doc-sub-title">
+          budget_periods
+          <span class="tb tb-lookup">Reference</span>
+        </div>
+        <p>One row per financial year (e.g. "FY 2026"). All budget and actuals data ties back to a period.</p>
+        <div class="sage-map"><strong>Sage mapping:</strong> Match <code>year</code> + <code>start_date</code> / <code>end_date</code> to a Sage financial year. Only periods with <code>status = 'approved'</code> or <code>'closed'</code> hold finalised data suitable for posting to Sage GL.</div>
+        <div class="ddl-wrap">
+<pre class="ddl"><span class="kw">CREATE TABLE</span> <span class="nm">budget_periods</span> (
+  <span class="nm">id</span>         <span class="ty">BIGINT UNSIGNED</span>                                    <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+  <span class="nm">name</span>       <span class="ty">VARCHAR(255)</span>                                       <span class="kw">NOT NULL</span>,  <span class="cmt">-- e.g. "FY 2026"</span>
+  <span class="nm">year</span>       <span class="ty">YEAR</span>                                               <span class="kw">NOT NULL</span>,  <span class="cmt">-- 4-digit year</span>
+  <span class="nm">start_date</span> <span class="ty">DATE</span>                                               <span class="kw">NOT NULL</span>,
+  <span class="nm">end_date</span>   <span class="ty">DATE</span>                                               <span class="kw">NOT NULL</span>,
+  <span class="nm">status</span>     <span class="ty">ENUM</span>(<span class="str">'draft'</span>,<span class="str">'open'</span>,<span class="str">'closed'</span>,<span class="str">'approved'</span>)          <span class="kw">NOT NULL</span>,  <span class="cmt">-- Lifecycle state</span>
+  <span class="nm">opened_at</span>  <span class="ty">TIMESTAMP</span>                                                  <span class="kw">NULL</span>,
+  <span class="nm">closed_at</span>  <span class="ty">TIMESTAMP</span>                                                  <span class="kw">NULL</span>,
+  <span class="nm">entry_mode</span> <span class="ty">VARCHAR(10)</span>                                        <span class="kw">NOT NULL</span>,  <span class="cmt">-- 'monthly' or 'annual'</span>
+  <span class="nm">created_at</span> <span class="ty">TIMESTAMP</span>                                                  <span class="kw">NULL</span>,
+  <span class="nm">updated_at</span> <span class="ty">TIMESTAMP</span>                                                  <span class="kw">NULL</span>,
+  <span class="kw">PRIMARY KEY</span> (<span class="nm">id</span>)
+) <span class="kw">ENGINE</span>=InnoDB;</pre>
+        </div>
+      </div>
+
+      {{-- 4. departments ────────────────────── --}}
+      <div class="doc-sub">
+        <div class="doc-sub-title">
+          departments
+          <span class="tb tb-master">Master Data</span>
+        </div>
+        <p>Cost centres and head-office departments. Each department owns its own budget version.</p>
+        <div class="sage-map"><strong>Sage mapping:</strong> <code>code</code> maps to Sage cost centre / department code. <code>entity_type</code> differentiates head-office departments (<code>'department'</code>) from field entities (<code>'subsidiary'</code>). Filter <code>is_active = 1</code> and <code>deleted_at IS NULL</code> for the active list.</div>
+        <div class="ddl-wrap">
+<pre class="ddl"><span class="kw">CREATE TABLE</span> <span class="nm">departments</span> (
+  <span class="nm">id</span>          <span class="ty">BIGINT UNSIGNED</span>                              <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+  <span class="nm">zone_id</span>     <span class="ty">BIGINT UNSIGNED</span>                                      <span class="kw">NULL</span>,  <span class="cmt">-- FK → zones.id</span>
+  <span class="nm">name</span>        <span class="ty">VARCHAR(255)</span>                                 <span class="kw">NOT NULL</span>,
+  <span class="nm">code</span>        <span class="ty">VARCHAR(255)</span>                                 <span class="kw">NOT NULL UNIQUE</span>,  <span class="cmt">-- Cost centre code → Sage</span>
+  <span class="nm">description</span> <span class="ty">TEXT</span>                                                 <span class="kw">NULL</span>,
+  <span class="nm">is_active</span>   <span class="ty">TINYINT(1)</span>                                   <span class="kw">NOT NULL DEFAULT 1</span>,
+  <span class="nm">budget_type</span> <span class="ty">ENUM</span>(<span class="str">'revenue'</span>,<span class="str">'expense'</span>,<span class="str">'both'</span>)             <span class="kw">NOT NULL</span>,
+  <span class="nm">entity_type</span> <span class="ty">VARCHAR(20)</span>                                  <span class="kw">NOT NULL</span>,  <span class="cmt">-- 'department' or 'subsidiary'</span>
+  <span class="nm">deleted_at</span>  <span class="ty">TIMESTAMP</span>                                            <span class="kw">NULL</span>,  <span class="cmt">-- Soft-delete</span>
+  <span class="nm">created_at</span>  <span class="ty">TIMESTAMP</span>                                            <span class="kw">NULL</span>,
+  <span class="nm">updated_at</span>  <span class="ty">TIMESTAMP</span>                                            <span class="kw">NULL</span>,
+  <span class="kw">PRIMARY KEY</span> (<span class="nm">id</span>)
+) <span class="kw">ENGINE</span>=InnoDB;</pre>
+        </div>
+      </div>
+
+      {{-- 5. subsidiaries ───────────────────── --}}
+      <div class="doc-sub">
+        <div class="doc-sub-title">
+          subsidiaries
+          <span class="tb tb-master">Master Data</span>
+        </div>
+        <p>Service stations and subsidiary entities. A budget version can belong to a subsidiary instead of (or in addition to) a department.</p>
+        <div class="sage-map"><strong>Sage mapping:</strong> <code>code</code> is the station / subsidiary identifier — match to Sage branch or project codes. <code>subsidiary_category_id</code> groups stations by type (e.g. branded, dealer). Filter <code>is_active = 1</code> for active stations.</div>
+        <div class="ddl-wrap">
+<pre class="ddl"><span class="kw">CREATE TABLE</span> <span class="nm">subsidiaries</span> (
+  <span class="nm">id</span>                     <span class="ty">BIGINT UNSIGNED</span>  <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+  <span class="nm">subsidiary_category_id</span> <span class="ty">BIGINT UNSIGNED</span>  <span class="kw">NOT NULL</span>,  <span class="cmt">-- FK → subsidiary_categories.id (station type)</span>
+  <span class="nm">name</span>                   <span class="ty">VARCHAR(255)</span>     <span class="kw">NOT NULL</span>,  <span class="cmt">-- Full station / entity name</span>
+  <span class="nm">code</span>                   <span class="ty">VARCHAR(20)</span>      <span class="kw">NOT NULL UNIQUE</span>,  <span class="cmt">-- Station code → Sage branch/project</span>
+  <span class="nm">description</span>            <span class="ty">TEXT</span>                     <span class="kw">NULL</span>,
+  <span class="nm">is_active</span>              <span class="ty">TINYINT(1)</span>       <span class="kw">NOT NULL DEFAULT 1</span>,
+  <span class="nm">sort_order</span>             <span class="ty">INT UNSIGNED</span>     <span class="kw">NOT NULL DEFAULT 0</span>,
+  <span class="nm">created_at</span>             <span class="ty">TIMESTAMP</span>                <span class="kw">NULL</span>,
+  <span class="nm">updated_at</span>             <span class="ty">TIMESTAMP</span>                <span class="kw">NULL</span>,
+  <span class="kw">PRIMARY KEY</span> (<span class="nm">id</span>)
+) <span class="kw">ENGINE</span>=InnoDB;</pre>
+        </div>
+      </div>
+
+      {{-- 6. budget_versions ────────────────── --}}
+      <div class="doc-sub">
+        <div class="doc-sub-title">
+          budget_versions
+          <span class="tb tb-finance">Finance</span>
+        </div>
+        <p>One row per submitted budget for a department or station within a period. Tracks the full approval workflow. Revisions create a new row with <code class="sk">is_revision = 1</code>.</p>
+        <div class="sage-map"><strong>Sage mapping:</strong> Only versions with <code>status = 'approved'</code> are final. Join to <code>budget_line_items</code> on <code>id</code> to get the approved figures. <code>version_number &gt; 1</code> indicates a supplementary or revised budget.</div>
+        <div class="ddl-wrap">
+<pre class="ddl"><span class="kw">CREATE TABLE</span> <span class="nm">budget_versions</span> (
+  <span class="nm">id</span>               <span class="ty">BIGINT UNSIGNED</span>                                     <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+  <span class="nm">budget_period_id</span> <span class="ty">BIGINT UNSIGNED</span>                                     <span class="kw">NOT NULL</span>,  <span class="cmt">-- FK → budget_periods.id</span>
+  <span class="nm">department_id</span>    <span class="ty">BIGINT UNSIGNED</span>                                             <span class="kw">NULL</span>,  <span class="cmt">-- FK → departments.id (dept budget)</span>
+  <span class="nm">subsidiary_id</span>    <span class="ty">BIGINT UNSIGNED</span>                                             <span class="kw">NULL</span>,  <span class="cmt">-- FK → subsidiaries.id (station budget)</span>
+  <span class="nm">version_number</span>   <span class="ty">TINYINT UNSIGNED</span>                                    <span class="kw">NOT NULL</span>,  <span class="cmt">-- 1=original; 2+=supplementary</span>
+  <span class="nm">is_revision</span>      <span class="ty">TINYINT(1)</span>                                          <span class="kw">NOT NULL</span>,  <span class="cmt">-- 1 if revision of earlier version</span>
+  <span class="nm">revised_from_id</span>  <span class="ty">BIGINT UNSIGNED</span>                                             <span class="kw">NULL</span>,  <span class="cmt">-- FK → budget_versions.id (parent)</span>
+  <span class="nm">status</span>           <span class="ty">ENUM</span>(<span class="str">'draft'</span>,<span class="str">'submitted'</span>,<span class="str">'under_review'</span>,
+                        <span class="str">'approved'</span>,<span class="str">'rejected'</span>)                     <span class="kw">NOT NULL</span>,  <span class="cmt">-- Workflow state</span>
+  <span class="nm">submitted_at</span>     <span class="ty">TIMESTAMP</span>                                                   <span class="kw">NULL</span>,
+  <span class="nm">created_at</span>       <span class="ty">TIMESTAMP</span>                                                   <span class="kw">NULL</span>,
+  <span class="nm">updated_at</span>       <span class="ty">TIMESTAMP</span>                                                   <span class="kw">NULL</span>,
+  <span class="kw">PRIMARY KEY</span> (<span class="nm">id</span>)
+) <span class="kw">ENGINE</span>=InnoDB;</pre>
+        </div>
+      </div>
+
+      {{-- 7. budget_line_items ──────────────── --}}
+      <div class="doc-sub">
+        <div class="doc-sub-title">
+          budget_line_items
+          <span class="tb tb-finance">Finance</span>
+        </div>
+        <p>The approved budget amounts — one row per GL code per budget version. Columns <code class="sk">m1_amount</code> … <code class="sk">m12_amount</code> hold Jan–Dec figures. <code class="sk">total_amount</code> is the sum of all 12 months.</p>
+        <div class="sage-map"><strong>Sage mapping:</strong> This is the core budget feed. Join to <code>budget_versions</code> (filter <code>status='approved'</code>), then to <code>account_codes</code> on <code>account_code_id</code> to get the Sage GL code. Monthly columns correspond to calendar months within the period's year.</div>
+        <div class="ddl-wrap">
+<pre class="ddl"><span class="kw">CREATE TABLE</span> <span class="nm">budget_line_items</span> (
+  <span class="nm">id</span>                <span class="ty">BIGINT UNSIGNED</span>   <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+  <span class="nm">budget_version_id</span> <span class="ty">BIGINT UNSIGNED</span>   <span class="kw">NOT NULL</span>,    <span class="cmt">-- FK → budget_versions.id</span>
+  <span class="nm">account_code_id</span>   <span class="ty">BIGINT UNSIGNED</span>   <span class="kw">NOT NULL</span>,    <span class="cmt">-- FK → account_codes.id (GL code)</span>
+  <span class="nm">m1_amount</span>         <span class="ty">DECIMAL(15,2)</span>     <span class="kw">NOT NULL DEFAULT 0</span>,  <span class="cmt">-- January budget (GHS)</span>
+  <span class="nm">m2_amount</span>         <span class="ty">DECIMAL(15,2)</span>     <span class="kw">NOT NULL DEFAULT 0</span>,  <span class="cmt">-- February</span>
+  <span class="nm">m3_amount</span>         <span class="ty">DECIMAL(15,2)</span>     <span class="kw">NOT NULL DEFAULT 0</span>,  <span class="cmt">-- March</span>
+  <span class="nm">m4_amount</span>         <span class="ty">DECIMAL(15,2)</span>     <span class="kw">NOT NULL DEFAULT 0</span>,  <span class="cmt">-- April</span>
+  <span class="nm">m5_amount</span>         <span class="ty">DECIMAL(15,2)</span>     <span class="kw">NOT NULL DEFAULT 0</span>,  <span class="cmt">-- May</span>
+  <span class="nm">m6_amount</span>         <span class="ty">DECIMAL(15,2)</span>     <span class="kw">NOT NULL DEFAULT 0</span>,  <span class="cmt">-- June</span>
+  <span class="nm">m7_amount</span>         <span class="ty">DECIMAL(15,2)</span>     <span class="kw">NOT NULL DEFAULT 0</span>,  <span class="cmt">-- July</span>
+  <span class="nm">m8_amount</span>         <span class="ty">DECIMAL(15,2)</span>     <span class="kw">NOT NULL DEFAULT 0</span>,  <span class="cmt">-- August</span>
+  <span class="nm">m9_amount</span>         <span class="ty">DECIMAL(15,2)</span>     <span class="kw">NOT NULL DEFAULT 0</span>,  <span class="cmt">-- September</span>
+  <span class="nm">m10_amount</span>        <span class="ty">DECIMAL(15,2)</span>     <span class="kw">NOT NULL DEFAULT 0</span>,  <span class="cmt">-- October</span>
+  <span class="nm">m11_amount</span>        <span class="ty">DECIMAL(15,2)</span>     <span class="kw">NOT NULL DEFAULT 0</span>,  <span class="cmt">-- November</span>
+  <span class="nm">m12_amount</span>        <span class="ty">DECIMAL(15,2)</span>     <span class="kw">NOT NULL DEFAULT 0</span>,  <span class="cmt">-- December</span>
+  <span class="nm">quantity</span>          <span class="ty">DECIMAL(15,4)</span>             <span class="kw">NULL</span>,        <span class="cmt">-- Input qty (e.g. litres, trips)</span>
+  <span class="nm">rate</span>              <span class="ty">DECIMAL(15,4)</span>             <span class="kw">NULL</span>,        <span class="cmt">-- Unit rate (e.g. price per litre)</span>
+  <span class="nm">frequency</span>         <span class="ty">DECIMAL(10,4)</span>             <span class="kw">NULL</span>,        <span class="cmt">-- Occurrences per month</span>
+  <span class="nm">justification</span>     <span class="ty">TEXT</span>                      <span class="kw">NULL</span>,        <span class="cmt">-- Budget owner narrative</span>
+  <span class="nm">line_type</span>         <span class="ty">ENUM</span>(<span class="str">'revenue'</span>,<span class="str">'expense'</span>,
+                         <span class="str">'capex'</span>,<span class="str">'asset'</span>,<span class="str">'liability'</span>) <span class="kw">NOT NULL</span>,
+  <span class="nm">total_amount</span>      <span class="ty">DECIMAL(15,2)</span>             <span class="kw">NULL</span>,        <span class="cmt">-- Sum of m1…m12 (denormalised)</span>
+  <span class="nm">created_at</span>        <span class="ty">TIMESTAMP</span>                 <span class="kw">NULL</span>,
+  <span class="nm">updated_at</span>        <span class="ty">TIMESTAMP</span>                 <span class="kw">NULL</span>,
+  <span class="kw">PRIMARY KEY</span> (<span class="nm">id</span>)
+) <span class="kw">ENGINE</span>=InnoDB;</pre>
+        </div>
+      </div>
+
+      {{-- 8. budget_actuals ─────────────────── --}}
+      <div class="doc-sub">
+        <div class="doc-sub-title">
+          budget_actuals
+          <span class="tb tb-transact">Transactional</span>
+        </div>
+        <p>Actual expenditure and revenue recorded month by month against each budget line. The <code class="sk">reference</code> column is intended for the source document number (Sage journal or invoice reference).</p>
+        <div class="sage-map"><strong>Sage mapping:</strong> Each row = one GL posting for a given month. Only rows with <code>status = 'confirmed'</code> are finalised. Join to <code>account_codes</code> via <code>account_code_id</code> to get the GL code. Use <code>reference</code> to link back to the originating Sage journal entry.</div>
+        <div class="ddl-wrap">
+<pre class="ddl"><span class="kw">CREATE TABLE</span> <span class="nm">budget_actuals</span> (
+  <span class="nm">id</span>                  <span class="ty">BIGINT UNSIGNED</span>                                     <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+  <span class="nm">budget_line_item_id</span> <span class="ty">BIGINT UNSIGNED</span>                                     <span class="kw">NOT NULL</span>,  <span class="cmt">-- FK → budget_line_items.id</span>
+  <span class="nm">budget_period_id</span>    <span class="ty">BIGINT UNSIGNED</span>                                     <span class="kw">NOT NULL</span>,  <span class="cmt">-- FK → budget_periods.id</span>
+  <span class="nm">department_id</span>       <span class="ty">BIGINT UNSIGNED</span>                                             <span class="kw">NULL</span>,  <span class="cmt">-- FK → departments.id (if dept)</span>
+  <span class="nm">subsidiary_id</span>       <span class="ty">BIGINT UNSIGNED</span>                                             <span class="kw">NULL</span>,  <span class="cmt">-- FK → subsidiaries.id (if station)</span>
+  <span class="nm">account_code_id</span>     <span class="ty">BIGINT UNSIGNED</span>                                     <span class="kw">NOT NULL</span>,  <span class="cmt">-- FK → account_codes.id (GL code)</span>
+  <span class="nm">month</span>               <span class="ty">TINYINT UNSIGNED</span>                                    <span class="kw">NOT NULL</span>,  <span class="cmt">-- 1=Jan … 12=Dec</span>
+  <span class="nm">year</span>                <span class="ty">YEAR</span>                                                <span class="kw">NOT NULL</span>,
+  <span class="nm">amount</span>              <span class="ty">DECIMAL(15,2)</span>                                       <span class="kw">NOT NULL</span>,  <span class="cmt">-- Actual amount (GHS)</span>
+  <span class="nm">description</span>         <span class="ty">TEXT</span>                                                        <span class="kw">NULL</span>,  <span class="cmt">-- Narrative / memo</span>
+  <span class="nm">reference</span>           <span class="ty">VARCHAR(255)</span>                                                <span class="kw">NULL</span>,  <span class="cmt">-- Source doc ref (Sage journal #)</span>
+  <span class="nm">status</span>              <span class="ty">ENUM</span>(<span class="str">'draft'</span>,<span class="str">'submitted'</span>,
+                           <span class="str">'head_confirmed'</span>,<span class="str">'confirmed'</span>)              <span class="kw">NOT NULL</span>,  <span class="cmt">-- 'confirmed'=finalised</span>
+  <span class="nm">created_at</span>          <span class="ty">TIMESTAMP</span>                                                   <span class="kw">NULL</span>,
+  <span class="nm">updated_at</span>          <span class="ty">TIMESTAMP</span>                                                   <span class="kw">NULL</span>,
+  <span class="kw">PRIMARY KEY</span> (<span class="nm">id</span>)
+) <span class="kw">ENGINE</span>=InnoDB;</pre>
+        </div>
+      </div>
+
+      {{-- Sample query ─────────────────────── --}}
+      <div class="doc-sub">
+        <div class="doc-sub-title">Sample query — approved budget by GL code</div>
+        <p>A query Sage can run via ODBC to pull the full approved budget for a given year across all departments and stations.</p>
+        <div class="ddl-wrap">
+<pre class="ddl"><span class="kw">SELECT</span>
+    bp.year,
+    d.code        <span class="kw">AS</span> cost_centre_code,
+    d.name        <span class="kw">AS</span> cost_centre_name,
+    ac.code       <span class="kw">AS</span> gl_code,
+    ac.name       <span class="kw">AS</span> gl_description,
+    ac.budget_type,
+    bli.line_type,
+    bli.m1_amount,  bli.m2_amount,  bli.m3_amount,
+    bli.m4_amount,  bli.m5_amount,  bli.m6_amount,
+    bli.m7_amount,  bli.m8_amount,  bli.m9_amount,
+    bli.m10_amount, bli.m11_amount, bli.m12_amount,
+    bli.total_amount
+<span class="kw">FROM</span>      budget_line_items  bli
+<span class="kw">JOIN</span>      budget_versions    bv  <span class="kw">ON</span> bv.id = bli.budget_version_id
+<span class="kw">JOIN</span>      budget_periods     bp  <span class="kw">ON</span> bp.id = bv.budget_period_id
+<span class="kw">JOIN</span>      account_codes      ac  <span class="kw">ON</span> ac.id = bli.account_code_id
+<span class="kw">LEFT JOIN</span> departments        d   <span class="kw">ON</span> d.id  = bv.department_id
+<span class="kw">LEFT JOIN</span> subsidiaries       s   <span class="kw">ON</span> s.id  = bv.subsidiary_id
+<span class="kw">WHERE</span>
+    bp.year    = <span class="str">2026</span>
+    <span class="kw">AND</span> bv.status  = <span class="str">'approved'</span>
+    <span class="kw">AND</span> ac.deleted_at <span class="kw">IS NULL</span>
+<span class="kw">ORDER BY</span>
+    cost_centre_code, ac.sort_order, gl_code;</pre>
+        </div>
+        <div class="doc-tip" style="max-width:none">
+          The <code>department_id</code> and <code>subsidiary_id</code> columns on <code>budget_versions</code> are mutually exclusive — a version belongs to either a department or a station, not both. The <code>LEFT JOIN</code> above handles this; use <code>COALESCE(d.code, s.code)</code> if you want a single cost-centre column.
+        </div>
+      </div>
+
+    </div>{{-- end #schema --}}
 
   </div>{{-- end .docs-content --}}
 </div>{{-- end .docs-wrap --}}

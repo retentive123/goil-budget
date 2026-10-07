@@ -680,6 +680,8 @@ class ActualController extends Controller
     {
         $request->validate($this->workflowValidation());
 
+        $this->assertDeptOwnership($request->department_id, $request->subsidiary_id);
+
         $monthName = BudgetActual::MONTHS[(int) $request->month];
 
         $count = $this->monthQuery($request)

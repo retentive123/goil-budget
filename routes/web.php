@@ -51,7 +51,7 @@ use App\Http\Controllers\Admin\CustomBudgetFieldController;
 Route::middleware('guest')->group(function () {
     Route::get('/',      [LoginController::class, 'showLoginForm']);
     Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
-    Route::post('/login',[LoginController::class, 'login']);
+    Route::post('/login',[LoginController::class, 'login'])->middleware('throttle:login');
     Route::get('/2fa',           [TwoFactorController::class, 'show'])->name('2fa.show');
     Route::post('/2fa/verify',   [TwoFactorController::class, 'verify'])->name('2fa.verify')->middleware('throttle:6,1');
 });
@@ -70,12 +70,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/profile/avatar',  [ProfileController::class, 'uploadAvatar'])->name('profile.avatar');
 
     Route::get('/password/change',  [PasswordController::class, 'showChangeForm'])->name('password.change');
-    Route::post('/password/change', [PasswordController::class, 'update'])->name('password.update');
+    Route::post('/password/change', [PasswordController::class, 'update'])->name('password.update')->middleware('throttle:10,1');
     Route::get('/2fa/setup',    [TwoFactorController::class, 'setup'])->name('2fa.setup');
-    Route::post('/2fa/enable',  [TwoFactorController::class, 'enable'])->name('2fa.enable');
+    Route::post('/2fa/enable',  [TwoFactorController::class, 'enable'])->name('2fa.enable')->middleware('throttle:5,1');
     Route::post('/2fa/disable', [TwoFactorController::class, 'disable'])
         ->name('2fa.disable')
-        ->middleware('permission:disable two factor');
+        ->middleware(['throttle:5,1', 'permission:disable two factor']);
 
 
     // -------------------------------------------------------
@@ -454,11 +454,4 @@ Route::prefix('import-export')->name('ie.')->group(function () {
     });
 });
 
-Route::middleware(['auth', 'role:super_admin'])->prefix('admin/maintenance')->name('admin.maintenance.')->group(function () {
-            Route::get('/',         [MaintenanceController::class, 'index'])->name('index');
-            Route::post('/enable',  [MaintenanceController::class, 'enable'])->name('enable');
-            Route::post('/disable', [MaintenanceController::class, 'disable'])->name('disable');
-        });
-        //comment
-
-});
+}); // end auth group

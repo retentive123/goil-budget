@@ -353,6 +353,12 @@ class UserController extends Controller
             return back()->with('error', 'CSV is missing required columns: ' . implode(', ', $missing));
         }
 
+        // Pre-load all lookup data to avoid N+1 queries per row
+        $existingEmails = array_flip(User::pluck('email')->map('strtolower')->all());
+        $roleMap        = Role::pluck('name', 'name')->all();
+        $deptMap        = Department::pluck('id', 'code')->all();
+        $subMap         = Subsidiary::pluck('id', 'code')->all();
+
         $created = 0;
         $skipped = [];
         $rowNum  = 1;
@@ -369,48 +375,49 @@ class UserController extends Controller
                 continue;
             }
 
-            if (User::where('email', trim($data['email']))->exists()) {
-                $skipped[] = "Row {$rowNum}: {$data['email']} already exists — skipped.";
+            $email = strtolower(trim($data['email']));
+            $role  = trim($data['role']);
+
+            if (isset($existingEmails[$email])) {
+                $skipped[] = "Row {$rowNum}: {$email} already exists — skipped.";
                 continue;
             }
 
-            if (!\Spatie\Permission\Models\Role::where('name', trim($data['role']))->exists()) {
-                $skipped[] = "Row {$rowNum}: role '{$data['role']}' does not exist — skipped.";
+            if (!isset($roleMap[$role])) {
+                $skipped[] = "Row {$rowNum}: role '{$role}' does not exist — skipped.";
                 continue;
             }
 
-            // Resolve department (by code or name)
-            $department = null;
-            if (!empty($data['department_code'] ?? '')) {
-                $department = Department::where('code', trim($data['department_code']))->first();
-            }
-
-            // Resolve subsidiary (by code)
-            $subsidiary = null;
-            if (!empty($data['subsidiary_code'] ?? '')) {
-                $subsidiary = \App\Models\Subsidiary::where('code', trim($data['subsidiary_code']))->first();
-            }
+            $deptCode     = trim($data['department_code'] ?? '');
+            $subCode      = trim($data['subsidiary_code'] ?? '');
+            $departmentId = $deptCode ? ($deptMap[$deptCode] ?? null) : null;
+            $subsidiaryId = $subCode  ? ($subMap[$subCode]  ?? null) : null;
 
             $password = trim($data['password'] ?? '') ?: 'Welcome@' . now()->year;
 
             $user = User::create([
                 'name'                 => trim($data['name']),
-                'email'                => trim($data['email']),
+                'email'                => $email,
                 'employee_id'          => trim($data['employee_id'] ?? '') ?: null,
                 'phone'                => trim($data['phone'] ?? '') ?: null,
-                'department_id'        => $subsidiary ? null : $department?->id,
-                'subsidiary_id'        => $subsidiary?->id,
+                'department_id'        => $subsidiaryId ? null : $departmentId,
+                'subsidiary_id'        => $subsidiaryId,
                 'password'             => Hash::make($password),
                 'is_active'            => true,
                 'must_change_password' => true,
             ]);
 
-            $user->assignRole(trim($data['role']));
+            $user->assignRole($role);
             AuditLogger::userCreated($user, auth()->user());
+
+            // Mark email as used so duplicate rows in the same CSV are caught
+            $existingEmails[$email] = true;
 
             try {
                 $user->load('roles');
-                Mail::to($user->email)->send(new WelcomeUserMail(
+                // Queue instead of send — emails are dispatched to the jobs table
+                // and processed by `php artisan queue:work` without blocking this request
+                Mail::to($user->email)->queue(new WelcomeUserMail(
                     user:          $user,
                     plainPassword: $password,
                     loginUrl:      url('/login'),

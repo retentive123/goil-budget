@@ -366,6 +366,15 @@ class SupplementaryBudgetController extends Controller
 
     public function destroy(SupplementaryBudget $supplementary)
     {
+        $user = auth()->user();
+        if (!$user->hasAnyRole(['finance_reviewer', 'bdu_admin', 'super_admin'])) {
+            abort_unless(
+                (int) $supplementary->department_id === (int) $user->department_id,
+                403,
+                'You do not have access to this request.'
+            );
+        }
+
         if (!in_array($supplementary->status, ['submitted','under_review','draft'])) {
             return back()->with('error', 'Only pending requests can be deleted.');
         }

@@ -25,7 +25,8 @@ class TwoFactorController extends Controller
 
         if (!$user->two_factor_secret) {
             $secret = $this->google2fa->generateSecretKey();
-            $user->update(['two_factor_secret' => $secret]);
+            $user->two_factor_secret = $secret;
+            $user->save();
         }
 
         $qrCodeUrl = $this->google2fa->getQRCodeUrl(
@@ -74,8 +75,8 @@ class TwoFactorController extends Controller
 
         $user = Auth::user();
 
+        $user->two_factor_secret = null;
         $user->update([
-            'two_factor_secret'       => null,
             'two_factor_enabled'      => false,
             'two_factor_confirmed_at' => null,
         ]);

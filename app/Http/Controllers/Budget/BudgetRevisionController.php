@@ -16,6 +16,8 @@ class BudgetRevisionController extends Controller
      */
     public function create(BudgetVersion $budgetVersion)
     {
+        $this->authorizeOwnership($budgetVersion);
+
         abort_unless(
             $budgetVersion->status === BudgetVersion::STATUS_APPROVED,
             403,
@@ -48,6 +50,8 @@ class BudgetRevisionController extends Controller
      */
     public function store(Request $request, BudgetVersion $budgetVersion)
     {
+        $this->authorizeOwnership($budgetVersion);
+
         abort_unless(
             $budgetVersion->status === BudgetVersion::STATUS_APPROVED,
             403,
@@ -123,5 +127,29 @@ class BudgetRevisionController extends Controller
                 "Revision v{$revision->version_number} created. Line items pre-populated from the approved budget — " .
                 "update the amounts and submit for approval when ready."
             );
+    }
+
+    private function authorizeOwnership(BudgetVersion $version): void
+    {
+        $user = auth()->user();
+
+        if ($user->hasAnyRole(['finance_reviewer', 'gceo', 'board', 'bdu_admin', 'super_admin'])) {
+            return;
+        }
+
+        if ($user->isSubsidiaryUser()) {
+            abort_unless(
+                (int) $version->subsidiary_id === (int) $user->subsidiary_id,
+                403,
+                'You do not have access to this budget.'
+            );
+            return;
+        }
+
+        abort_unless(
+            (int) $version->department_id === (int) $user->department_id,
+            403,
+            'You do not have access to this budget.'
+        );
     }
 }

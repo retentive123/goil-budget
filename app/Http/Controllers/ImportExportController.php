@@ -352,6 +352,18 @@ class ImportExportController extends Controller
     {
         $user = auth()->user();
         if ($user->hasAnyRole(['finance_reviewer','gceo','board','bdu_admin','super_admin'])) return;
-        if ($version->department_id !== $user->department_id) abort(403);
+
+        if ($user->isSubsidiaryUser()) {
+            abort_unless(
+                $version->subsidiary_id && (int) $version->subsidiary_id === (int) $user->subsidiary_id,
+                403
+            );
+            return;
+        }
+
+        abort_unless(
+            $version->department_id && (int) $version->department_id === (int) $user->department_id,
+            403
+        );
     }
 }

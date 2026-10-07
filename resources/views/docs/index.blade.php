@@ -1023,7 +1023,7 @@
 
       <div class="doc-sub">
         <div class="doc-sub-title">Template variables</div>
-        <p>Use <span class="sk">{{ '{{' }} variable {{ '}}' }}</span> placeholders in subject and body. Available variables depend on the event — common ones include <span class="sk">{{ '{{' }} department {{ '}}' }}</span>, <span class="sk">{{ '{{' }} period {{ '}}' }}</span>, <span class="sk">{{ '{{' }} amount {{ '}}' }}</span>, <span class="sk">{{ '{{' }} status {{ '}}' }}</span>, and <span class="sk">{{ '{{' }} approver {{ '}}' }}</span>.</p>
+        <p>Use <span class="sk">@{{ variable }}</span> placeholders in subject and body. Available variables depend on the event — common ones include <span class="sk">@{{ department }}</span>, <span class="sk">@{{ period }}</span>, <span class="sk">@{{ amount }}</span>, <span class="sk">@{{ status }}</span>, and <span class="sk">@{{ approver }}</span>.</p>
       </div>
     </div>
     <hr class="docs-divider">

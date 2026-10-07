@@ -247,8 +247,6 @@
 
 </div>
 
-<script>
-
 <style>
     .stat-card {
         background: #fff;
