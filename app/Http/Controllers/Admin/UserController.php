@@ -57,10 +57,18 @@ class UserController extends Controller
         // Get roles for filter dropdown
         $roles = Role::orderBy('name')->get();
 
-        // Calculate online count (users active in last 15 minutes)
-        $onlineCount = User::where('last_login_at', '>=', now()->subMinutes(15))->count();
+        // Total counts from the full users table (not the paginated slice)
+        $activeCount   = User::where('is_active', true)->count();
+        $inactiveCount = User::where('is_active', false)->count();
 
-        return view('admin.users.index', compact('users', 'departments', 'roles', 'onlineCount'));
+        // Count users with an active session in the last 5 minutes (sessions table, last_activity is a Unix timestamp)
+        $onlineCount = \DB::table('sessions')
+            ->whereNotNull('user_id')
+            ->where('last_activity', '>=', now()->subMinutes(5)->timestamp)
+            ->distinct('user_id')
+            ->count('user_id');
+
+        return view('admin.users.index', compact('users', 'departments', 'roles', 'activeCount', 'inactiveCount', 'onlineCount'));
     }
 
     public function create()

@@ -38,7 +38,7 @@
         <div class="stat-card text-center">
             <div class="stat-accent" style="background:#10B981"></div>
             <div class="stat-label">Active</div>
-            <div class="stat-value" style="color:#10B981">{{ $users->where('is_active', true)->count() }}</div>
+            <div class="stat-value" style="color:#10B981">{{ $activeCount }}</div>
             <div class="stat-sub">Active accounts</div>
         </div>
     </div>
@@ -46,7 +46,7 @@
         <div class="stat-card text-center">
             <div class="stat-accent" style="background:#F43F5E"></div>
             <div class="stat-label">Inactive</div>
-            <div class="stat-value" style="color:#F43F5E">{{ $users->where('is_active', false)->count() }}</div>
+            <div class="stat-value" style="color:#F43F5E">{{ $inactiveCount }}</div>
             <div class="stat-sub">Deactivated</div>
         </div>
     </div>
