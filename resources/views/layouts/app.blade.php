@@ -1412,6 +1412,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('submit', function (e) {
         const form = e.target;
         if (!form.querySelector('input[name="_method"][value="DELETE"]')) return;
+        if (form.dataset.skipConfirm) return;
         if (form._swConfirmed) { delete form._swConfirmed; return; }
         e.preventDefault();
         e.stopImmediatePropagation();

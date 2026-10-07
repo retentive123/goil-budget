@@ -516,11 +516,45 @@ body[data-filter] .step.matched {
       <span class="step-badge badge-admin">Admin</span><span class="step-num">8</span>
       <div class="step-body">
         <div class="step-action">Review System Settings</div>
-        <div class="step-detail">Go to <span class="ui">System Settings</span>. Key settings:<br>
-          <strong>Calculation Mode</strong> — Direct entry (type totals) or Qty × Rate (unit count × rate, system calculates).<br>
-          <strong>Actuals Check Mode</strong> — Annual (YTD flexible) or Monthly (strict per-month cap).<br>
-          <strong>Actuals Approval Flow</strong> — Multi-Stage recommended (Dept User → Head → Finance).
+        <div class="step-detail">Go to <span class="ui">Admin → Settings</span>. The settings page has six tabs — General, Budget, Notifications, Mail, Security, and Backup. Key settings:<br>
+          <strong>Budget Entry Mode</strong> (Budget tab) — Quarterly (Q1–Q4 columns) or Monthly (M1–M12 columns).<br>
+          <strong>Calculation Mode</strong> (Budget tab) — Direct entry or Qty × Rate.<br>
+          <strong>Actuals Check Mode</strong> (Budget tab) — Annual (YTD flexible) or Monthly (strict per-month cap).<br>
+          <strong>Company Logo</strong> (General tab) — upload a PNG/JPG to appear on report headers and PDFs.<br>
+          <strong>Email Notifications</strong> (Notifications tab) — enable to send email alongside in-app alerts.
         </div>
+      </div>
+    </div>
+
+    <div class="step" data-roles="admin">
+      <span class="step-badge badge-admin">Admin</span><span class="step-num">9</span>
+      <div class="step-body">
+        <div class="step-action">(Optional) Customise email templates</div>
+        <div class="step-detail">Go to <span class="ui">Admin → Email Templates</span>. Each notification event (budget submitted, approved, rejected, etc.) has a customisable subject and HTML body. Edit the template for any event to match your organisation's tone. If no custom template is set, the system uses its built-in defaults.</div>
+      </div>
+    </div>
+
+    <div class="step" data-roles="admin">
+      <span class="step-badge badge-admin">Admin</span><span class="step-num">10</span>
+      <div class="step-body">
+        <div class="step-action">(Optional) Register webhooks for external integrations</div>
+        <div class="step-detail">Go to <span class="ui">Admin → Webhooks → Add Endpoint</span>. Enter the receiving URL and a secret key. Select which events should trigger this endpoint (budget submitted, approved, rejected, virement events, actuals confirmed). Webhooks deliver a signed JSON payload instantly when the event fires — useful for connecting to Power Automate, Slack, or audit systems.</div>
+      </div>
+    </div>
+
+    <div class="step" data-roles="admin">
+      <span class="step-badge badge-admin">Admin</span><span class="step-num">11</span>
+      <div class="step-body">
+        <div class="step-action">(Optional) Configure dashboard widget visibility</div>
+        <div class="step-detail">Go to <span class="ui">Admin → Widget Settings</span>. Toggle checkboxes to show or hide each dashboard widget per role. This keeps each audience's dashboard focused — for example, hiding approval queues from department users, or hiding entry-status cards from Finance.</div>
+      </div>
+    </div>
+
+    <div class="step" data-roles="admin">
+      <span class="step-badge badge-admin">Admin</span><span class="step-num">12</span>
+      <div class="step-body">
+        <div class="step-action">(Optional) Add custom budget fields</div>
+        <div class="step-detail">Go to <span class="ui">Admin → Custom Budget Fields → Add Field</span>. Create extra columns for the budget entry form — for example, a Cost Centre Code text field or a Project Reference dropdown. Active fields appear in every department's budget form as additional columns after Notes. Set <strong>Required</strong> to enforce completion before submission.</div>
       </div>
     </div>
 
@@ -584,6 +618,10 @@ body[data-filter] .step.matched {
       </div>
     </div>
 
+    <div class="callout callout-tip">
+      <span class="callout-icon">💡</span>
+      <div><strong>Custom fields</strong> If your administrator has created Custom Budget Fields, extra columns (e.g. Cost Centre Code, Project Reference) appear to the right of the Notes column. Fill them in as you enter each line item — required fields are marked with a red asterisk and will block submission if left empty.</div>
+    </div>
     <div class="callout callout-tip">
       <span class="callout-icon">💡</span>
       <div><strong>Tip</strong> If rejected, you receive a notification with the reason. Return to <span class="ui">My Budget</span>, make the changes, and resubmit. The cycle can repeat until approved.</div>
@@ -872,6 +910,22 @@ body[data-filter] .step.matched {
     <div class="step" data-roles="finance admin">
       <span class="step-badge badge-finance">Finance</span><span class="step-num">6</span>
       <div class="step-body">
+        <div class="step-action">Analytical &amp; performance reports</div>
+        <div class="step-detail">Six additional reports are available under <span class="ui">Reports</span>:<br>
+          <strong>Consolidated</strong> — full organisation roll-up with quarterly or monthly columns.<br>
+          <strong>Compliance</strong> — submission timeliness and approval rates per department.<br>
+          <strong>Department Ranking</strong> — league table by utilisation, variance, or virement count.<br>
+          <strong>Virement Impact</strong> — net budget movement per account code from virements.<br>
+          <strong>Station Performance</strong> — service station metrics grouped by zone.<br>
+          <strong>Approver Activity</strong> — action counts per approver from the audit trail.<br>
+          All six have an <span class="ui">Export CSV</span> button at the top right.
+        </div>
+      </div>
+    </div>
+
+    <div class="step" data-roles="finance admin">
+      <span class="step-badge badge-finance">Finance</span><span class="step-num">7</span>
+      <div class="step-body">
         <div class="step-action">Export to CSV or print to PDF</div>
         <div class="step-detail">Every report has a <span class="ui">Download CSV</span> button — click it to export for further analysis in Excel. For PDF, use your browser's Print function (Ctrl+P) and select <em>Save as PDF</em>.</div>
       </div>
@@ -981,8 +1035,38 @@ body[data-filter] .step.matched {
       <tr>
         <td><span class="step-badge badge-finance">Finance</span></td>
         <td>Any report</td>
-        <td><span class="ui">Download CSV</span></td>
+        <td><span class="ui">Download CSV</span> / <span class="ui">Export CSV</span></td>
         <td>Exports to Excel-compatible file</td>
+      </tr>
+      <tr>
+        <td><span class="step-badge badge-finance">Finance</span></td>
+        <td><span class="ui">Reports → Consolidated</span></td>
+        <td>Select period, optional export</td>
+        <td>Organisation-wide roll-up (Q or M columns)</td>
+      </tr>
+      <tr>
+        <td><span class="step-badge badge-finance">Finance</span></td>
+        <td><span class="ui">Reports → Compliance</span></td>
+        <td>Select period</td>
+        <td>Submission timeliness per department</td>
+      </tr>
+      <tr>
+        <td><span class="step-badge badge-admin">Admin</span></td>
+        <td><span class="ui">Admin → Email Templates</span></td>
+        <td>Edit subject &amp; body</td>
+        <td>Custom notification emails per event</td>
+      </tr>
+      <tr>
+        <td><span class="step-badge badge-admin">Admin</span></td>
+        <td><span class="ui">Admin → Webhooks</span></td>
+        <td><span class="ui">Add Endpoint</span></td>
+        <td>External integrations receive signed JSON events</td>
+      </tr>
+      <tr>
+        <td><span class="step-badge badge-admin">Admin</span></td>
+        <td><span class="ui">Admin → Custom Budget Fields</span></td>
+        <td><span class="ui">Add Field</span></td>
+        <td>Extra columns appear in all budget entry forms</td>
       </tr>
     </tbody>
   </table>
@@ -993,7 +1077,7 @@ body[data-filter] .step.matched {
 </main>
 
 <footer class="doc-footer">
-  GOIL Budget System &nbsp;·&nbsp; Process Guide &nbsp;·&nbsp; For internal use
+  GOIL Budget System &nbsp;·&nbsp; Process Guide &nbsp;·&nbsp; Last updated October 2026 &nbsp;·&nbsp; For internal use
 </footer>
 
 <script>

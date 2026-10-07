@@ -202,6 +202,10 @@
       <a class="docs-nav-link" href="#admin-periods">Budget Periods</a>
       <a class="docs-nav-link" href="#admin-approval-stages">Approval Stages</a>
       <a class="docs-nav-link" href="#admin-settings">System Settings</a>
+      <a class="docs-nav-link" href="#admin-email-templates">Email Templates <span style="font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;background:#C9A84C;color:#1B2A4A;padding:1px 5px;border-radius:3px;margin-left:4px;">New</span></a>
+      <a class="docs-nav-link" href="#admin-webhooks">Webhooks <span style="font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;background:#C9A84C;color:#1B2A4A;padding:1px 5px;border-radius:3px;margin-left:4px;">New</span></a>
+      <a class="docs-nav-link" href="#admin-widget-settings">Widget Settings <span style="font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;background:#C9A84C;color:#1B2A4A;padding:1px 5px;border-radius:3px;margin-left:4px;">New</span></a>
+      <a class="docs-nav-link" href="#admin-custom-fields">Custom Budget Fields <span style="font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;background:#C9A84C;color:#1B2A4A;padding:1px 5px;border-radius:3px;margin-left:4px;">New</span></a>
       <a class="docs-nav-link" href="#admin-pnl-layout">P&amp;L Layout</a>
       <a class="docs-nav-link" href="#admin-bs-layout">BS Layout</a>
       <a class="docs-nav-link" href="#admin-audit">Audit Log</a>
@@ -248,7 +252,7 @@
           <div class="docs-hero-meta-item"><strong>Organisation</strong>Ghana Oil Company Limited</div>
           <div class="docs-hero-meta-item"><strong>Currency</strong>GHS (Ghanaian Cedi)</div>
           <div class="docs-hero-meta-item"><strong>Authentication</strong>Local + Active Directory SSO</div>
-          <div class="docs-hero-meta-item"><strong>Last updated</strong>August 2026</div>
+          <div class="docs-hero-meta-item"><strong>Last updated</strong>October 2026</div>
         </div>
       </div>
 
@@ -662,6 +666,12 @@
             <tr><td><strong>Approved Budgets</strong></td><td>All approved line items by category and code for the selected period.</td><td>Excel / PDF</td></tr>
             <tr><td><strong>Financial Statement</strong></td><td>Full P&amp;L, cash flow, and balance sheet with monthly/quarterly columns and year-over-year comparison.</td><td>–</td></tr>
             <tr><td><strong>Capital Expenditure</strong></td><td>CapEx-only line items with budget and actual values.</td><td>–</td></tr>
+            <tr><td><strong>Consolidated</strong> <span class="db db-gold" style="font-size:9px;vertical-align:middle">New</span></td><td>Organisation-wide roll-up: approved budget totals per department/station/subsidiary across Q1–Q4 or M1–M12, with grand totals. Respects the Budget Entry Mode setting (quarterly vs monthly).</td><td>CSV</td></tr>
+            <tr><td><strong>Compliance</strong> <span class="db db-gold" style="font-size:9px;vertical-align:middle">New</span></td><td>Submission timeliness and approval metrics per department: on-time rate, rejection rate, average days to approval, version count. Useful for governance reporting.</td><td>CSV</td></tr>
+            <tr><td><strong>Department Ranking</strong> <span class="db db-gold" style="font-size:9px;vertical-align:middle">New</span></td><td>League table sorted by utilisation %, variance %, or virement count. Quickly surfaces the best- and worst-performing entities for a period.</td><td>CSV</td></tr>
+            <tr><td><strong>Virement Impact</strong> <span class="db db-gold" style="font-size:9px;vertical-align:middle">New</span></td><td>Net movement per account code across all approved virements for the selected period. Shows which codes gained and which lost budget through reallocation.</td><td>CSV</td></tr>
+            <tr><td><strong>Station Performance</strong> <span class="db db-gold" style="font-size:9px;vertical-align:middle">New</span></td><td>Service station metrics grouped by zone: approved budget, confirmed actuals, utilisation, and variance. Drillable by zone for regional comparison.</td><td>CSV</td></tr>
+            <tr><td><strong>Approver Activity</strong> <span class="db db-gold" style="font-size:9px;vertical-align:middle">New</span></td><td>Action counts per approver: budgets reviewed, virements reviewed, and total actions logged in the audit trail for the selected period.</td><td>CSV</td></tr>
           </tbody>
         </table>
       </div>
@@ -966,7 +976,161 @@
       <div class="doc-eyebrow">Admin Guide</div>
       <div class="doc-title">System Settings</div>
       <div class="doc-lead">System-wide behaviour is controlled from Admin → Settings. All changes are immediately applied and recorded in the audit log.</div>
-      <p>Settings are grouped into four sections: <strong>General</strong>, <strong>Budget</strong>, <strong>Notifications</strong>, and <strong>Security</strong>. See the <a href="#settings-ref">Settings Reference</a> below for a complete list of keys and their defaults.</p>
+      <p>Settings are organised into six tabs: <strong>General</strong>, <strong>Budget</strong>, <strong>Notifications</strong>, <strong>Mail</strong>, <strong>Security</strong>, and <strong>Backup</strong>. The active tab is remembered between sessions. See the <a href="#settings-ref">Settings Reference</a> below for a complete list of keys and their defaults.</p>
+      <div class="doc-sub">
+        <div class="doc-sub-title">Notable controls (October 2026)</div>
+        <ul>
+          <li><strong>Company Logo</strong> (General tab) — upload a PNG/JPG/SVG; the logo appears in report headers and exported PDFs. Stored in <span class="sk">storage/logos/</span>.</li>
+          <li><strong>Budget Entry Mode</strong> (Budget tab) — radio pills: <em>Quarterly</em> (Q1–Q4 columns) or <em>Monthly</em> (M1–M12 columns). Controls the Consolidated report column layout as well.</li>
+          <li><strong>Currency Position</strong> (General tab) — radio pills: <em>Before</em> (GHS 1,000) or <em>After</em> (1,000 GHS).</li>
+          <li><strong>Email Signature</strong> (Mail tab) — appended to all outgoing notification emails.</li>
+          <li><strong>Login Page Message</strong> (General tab) — optional announcement shown on the login screen.</li>
+        </ul>
+      </div>
+    </div>
+    <hr class="docs-divider">
+
+    {{-- Email Templates ────────────────────────────────── --}}
+    <div class="doc-section" id="admin-email-templates">
+      <div class="doc-eyebrow">Admin Guide</div>
+      <div class="doc-title">Email Templates</div>
+      <div class="doc-lead">Customise the subject line and body of every outgoing notification email without touching code. Templates are stored in the database and rendered as HTML emails.</div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Available events</div>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>Event key</th><th>When it fires</th></tr></thead>
+            <tbody>
+              <tr><td><span class="sk">budget_submitted</span></td><td>A department submits a budget for approval</td></tr>
+              <tr><td><span class="sk">budget_approved</span></td><td>A budget passes a stage or receives final approval</td></tr>
+              <tr><td><span class="sk">budget_rejected</span></td><td>A budget is rejected at any stage</td></tr>
+              <tr><td><span class="sk">virement_submitted</span></td><td>A virement request is submitted</td></tr>
+              <tr><td><span class="sk">virement_approved</span></td><td>A virement is approved</td></tr>
+              <tr><td><span class="sk">virement_rejected</span></td><td>A virement is rejected</td></tr>
+              <tr><td><span class="sk">actuals_confirmed</span></td><td>A month's actuals receive final approval</td></tr>
+              <tr><td><span class="sk">over_budget_alert</span></td><td>Actuals confirmation is blocked by an over-budget line</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Managing templates</div>
+        <p>Go to <strong>Admin → Email Templates</strong>. Each event has one editable template with a <strong>Subject</strong> and an <strong>HTML Body</strong>. Click <em>Edit</em> to open the template editor. When no custom template exists for an event, the system falls back to the built-in default template.</p>
+        <div class="doc-note">Deleting a custom template restores the built-in default — it does not suppress the notification.</div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Template variables</div>
+        <p>Use <span class="sk">{{ '{{' }} variable {{ '}}' }}</span> placeholders in subject and body. Available variables depend on the event — common ones include <span class="sk">{{ '{{' }} department {{ '}}' }}</span>, <span class="sk">{{ '{{' }} period {{ '}}' }}</span>, <span class="sk">{{ '{{' }} amount {{ '}}' }}</span>, <span class="sk">{{ '{{' }} status {{ '}}' }}</span>, and <span class="sk">{{ '{{' }} approver {{ '}}' }}</span>.</p>
+      </div>
+    </div>
+    <hr class="docs-divider">
+
+    {{-- Webhooks ─────────────────────────────────────────── --}}
+    <div class="doc-section" id="admin-webhooks">
+      <div class="doc-eyebrow">Admin Guide</div>
+      <div class="doc-title">Webhooks</div>
+      <div class="doc-lead">Push real-time event notifications to an external URL whenever a significant budget event occurs. Use webhooks to integrate GOIL Budget with other systems — Power Automate flows, Slack bots, audit systems, or custom dashboards.</div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">How it works</div>
+        <p>When a webhook event fires, the system sends an HTTP POST to your registered endpoint with a JSON payload describing the event. Each request carries an <strong>HMAC-SHA256 signature</strong> in the <span class="sk">X-GOIL-Signature</span> header. Your endpoint should verify this signature before processing the payload.</p>
+        <div class="doc-note">Signature verification: compute <code>HMAC-SHA256(secret, raw_request_body)</code> and compare it to the value in <span class="sk">X-GOIL-Signature</span>. Requests that fail verification should be rejected with HTTP 401.</div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Supported events</div>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>Event</th><th>Fires when</th><th>Key payload fields</th></tr></thead>
+            <tbody>
+              <tr><td><span class="sk">budget_submitted</span></td><td>Budget submitted for approval</td><td><span class="sk">budget_version_id</span>, <span class="sk">department</span>, <span class="sk">period</span>, <span class="sk">total</span></td></tr>
+              <tr><td><span class="sk">budget_approved</span></td><td>Budget fully approved</td><td><span class="sk">budget_version_id</span>, <span class="sk">department</span>, <span class="sk">total</span>, <span class="sk">approved_by</span></td></tr>
+              <tr><td><span class="sk">budget_rejected</span></td><td>Budget rejected at any stage</td><td><span class="sk">budget_version_id</span>, <span class="sk">department</span>, <span class="sk">rejected_by</span>, <span class="sk">reason</span></td></tr>
+              <tr><td><span class="sk">virement_submitted</span></td><td>Virement request created</td><td><span class="sk">virement_id</span>, <span class="sk">department</span>, <span class="sk">amount</span></td></tr>
+              <tr><td><span class="sk">virement_approved</span></td><td>Virement approved</td><td><span class="sk">virement_id</span>, <span class="sk">department</span>, <span class="sk">amount</span>, <span class="sk">approved_by</span></td></tr>
+              <tr><td><span class="sk">virement_rejected</span></td><td>Virement rejected</td><td><span class="sk">virement_id</span>, <span class="sk">department</span>, <span class="sk">amount</span>, <span class="sk">rejected_by</span></td></tr>
+              <tr><td><span class="sk">actuals_confirmed</span></td><td>Month's actuals receive final approval</td><td><span class="sk">department</span>, <span class="sk">period</span>, <span class="sk">month</span>, <span class="sk">total</span></td></tr>
+              <tr><td><span class="sk">over_budget_alert</span></td><td>Actuals confirmation blocked by over-budget line</td><td><span class="sk">department</span>, <span class="sk">line_item</span>, <span class="sk">budget</span>, <span class="sk">actuals</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Registering a webhook</div>
+        <p>Go to <strong>Admin → Webhooks → Add Endpoint</strong>. Fields:</p>
+        <ul>
+          <li><strong>URL</strong> — the HTTPS endpoint that will receive the POST.</li>
+          <li><strong>Secret</strong> — a random string used to sign payloads. Store it securely in your receiving system.</li>
+          <li><strong>Events</strong> — tick the events this endpoint should receive. An endpoint can subscribe to one or more events.</li>
+          <li><strong>Active</strong> — toggle to pause delivery without deleting the endpoint.</li>
+        </ul>
+        <div class="doc-warning">Webhook endpoints must respond with HTTP 200 within 10 seconds. Delivery failures are logged but not retried automatically.</div>
+      </div>
+    </div>
+    <hr class="docs-divider">
+
+    {{-- Widget Settings ───────────────────────────────────── --}}
+    <div class="doc-section" id="admin-widget-settings">
+      <div class="doc-eyebrow">Admin Guide</div>
+      <div class="doc-title">Dashboard Widget Settings</div>
+      <div class="doc-lead">Control which dashboard widgets are visible to each role. Useful for keeping the dashboard focused on what each audience needs.</div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Managing widget visibility</div>
+        <p>Go to <strong>Admin → Widget Settings</strong>. The page shows a grid of widgets against roles. Toggle the checkbox in each cell to show or hide that widget for that role. Changes take effect immediately — users see the updated dashboard on their next page load.</p>
+        <div class="doc-tip">Department Users and Department Heads see the departmental dashboard; Finance, BDU Admin, GCEO, Board, and Super Admin see the organisation-wide dashboard. The widget grid reflects this split.</div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Default visibility</div>
+        <p>All widgets are visible to all roles by default. Hide widgets you don't want a role to see — for example, hiding the <em>Pending Approvals</em> widget from Department Users, or hiding the <em>Budget Entry Status</em> widget from Finance.</p>
+      </div>
+    </div>
+    <hr class="docs-divider">
+
+    {{-- Custom Budget Fields ─────────────────────────────── --}}
+    <div class="doc-section" id="admin-custom-fields">
+      <div class="doc-eyebrow">Admin Guide</div>
+      <div class="doc-title">Custom Budget Fields</div>
+      <div class="doc-lead">Add extra data columns to every budget line item — cost centre codes, project references, narrative notes, or any other metadata your organisation needs to capture alongside the monetary figures.</div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Field types</div>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>Type</th><th>Input rendered</th><th>Use cases</th></tr></thead>
+            <tbody>
+              <tr><td><span class="db db-blue">Text</span></td><td>Single-line text input</td><td>Cost centre code, project reference, narrative</td></tr>
+              <tr><td><span class="db db-gold">Number</span></td><td>Numeric input</td><td>Units, headcount, additional numeric metrics</td></tr>
+              <tr><td><span class="db db-green">Select</span></td><td>Dropdown list</td><td>Category classification, region, approval tier</td></tr>
+              <tr><td><span class="db db-purple">Boolean</span></td><td>Checkbox (Yes/No)</td><td>Capital approval needed, external funding, statutory item</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">Creating a custom field</div>
+        <p>Go to <strong>Admin → Custom Budget Fields → Add Field</strong>. Required fields:</p>
+        <ul>
+          <li><strong>Label</strong> — the column header shown in the budget entry form.</li>
+          <li><strong>Field Type</strong> — Text, Number, Select, or Boolean.</li>
+          <li><strong>Options</strong> (Select type only) — comma-separated list of dropdown values.</li>
+          <li><strong>Required</strong> — if enabled, departments cannot submit without filling in this field for every non-zero line item.</li>
+          <li><strong>Display Order</strong> — controls the left-to-right column order in the budget form.</li>
+          <li><strong>Active</strong> — inactive fields are hidden from the budget form but their saved values are preserved.</li>
+        </ul>
+      </div>
+
+      <div class="doc-sub">
+        <div class="doc-sub-title">In the budget form</div>
+        <p>Active custom fields appear as extra columns to the right of the <em>Notes</em> column in the budget entry form. Required fields are marked with a red asterisk. Values are saved automatically with each budget save and are included in CSV exports.</p>
+        <div class="doc-note">Custom field values are stored per line item, per budget version. They persist across saves and reloads, and are visible (read-only) when the budget is under review.</div>
+      </div>
     </div>
     <hr class="docs-divider">
 
@@ -1216,6 +1380,7 @@
           <li><strong>Excel (.xlsx)</strong> — Approved Budgets, Variance, Utilisation, Virement, Department Drill-down, Code Explorer</li>
           <li><strong>PDF</strong> — Approved Budgets</li>
           <li><strong>CSV / JSON / TSV</strong> — YoY report, Account Categories index</li>
+          <li><strong>CSV</strong> — Consolidated, Compliance, Department Ranking, Virement Impact, Station Performance, Approver Activity (all 6 analytical reports)</li>
         </ul>
       </div>
     </div>
@@ -1235,7 +1400,12 @@
               <tr><td><span class="sk">app_name</span></td><td>GOIL Budget Tool</td><td>Application name shown in the header</td></tr>
               <tr><td><span class="sk">company_name</span></td><td>Ghana Oil Company Limited</td><td>Used in reports and exports</td></tr>
               <tr><td><span class="sk">currency_symbol</span></td><td>GHS</td><td>Currency prefix on all monetary displays</td></tr>
+              <tr><td><span class="sk">currency_position</span></td><td>before</td><td>before / after — whether the symbol precedes or follows the amount</td></tr>
               <tr><td><span class="sk">fiscal_year_start</span></td><td>1 (January)</td><td>Month number (1–12) that begins the fiscal year</td></tr>
+              <tr><td><span class="sk">company_logo</span></td><td>–</td><td>Uploaded logo file path; shown in report headers and exported PDFs</td></tr>
+              <tr><td><span class="sk">report_footer_text</span></td><td>–</td><td>Text appended to the footer of exported reports and PDFs</td></tr>
+              <tr><td><span class="sk">login_page_message</span></td><td>–</td><td>Optional announcement text displayed on the login screen</td></tr>
+              <tr><td><span class="sk">report_decimal_places</span></td><td>2</td><td>Number of decimal places shown on monetary values in reports (0–4)</td></tr>
             </tbody>
           </table>
         </div>
@@ -1248,10 +1418,17 @@
             <thead><tr><th>Key</th><th>Default</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="sk">max_budget_versions</span></td><td>4</td><td>Max versions a department may submit per period</td></tr>
+              <tr><td><span class="sk">budget_entry_mode</span></td><td>quarterly</td><td>quarterly / monthly — column layout used in the budget entry form and Consolidated report</td></tr>
               <tr><td><span class="sk">virement_limit_pct</span></td><td>10</td><td>Max % of a source line item that may be vired away</td></tr>
               <tr><td><span class="sk">allow_virement_after_approval</span></td><td>true</td><td>Allow virements on approved budgets</td></tr>
               <tr><td><span class="sk">require_justification</span></td><td>false</td><td>Block submission unless every non-zero line has a justification</td></tr>
               <tr><td><span class="sk">budget_entry_deadline_days</span></td><td>30</td><td>Days after period opens within which departments must submit</td></tr>
+              <tr><td><span class="sk">allow_supplementary_budget</span></td><td>true</td><td>Allow departments to submit supplementary budget requests</td></tr>
+              <tr><td><span class="sk">supplementary_budget_limit_pct</span></td><td>20</td><td>Max supplementary amount as a % of the approved budget per line</td></tr>
+              <tr><td><span class="sk">budget_variance_alert_pct</span></td><td>10</td><td>Variance % threshold that triggers a warning badge in reports</td></tr>
+              <tr><td><span class="sk">budget_carry_forward</span></td><td>false</td><td>Carry approved budget figures forward as the starting draft for the next period</td></tr>
+              <tr><td><span class="sk">require_cost_center_code</span></td><td>false</td><td>Require a cost centre code on each line item before submission</td></tr>
+              <tr><td><span class="sk">board_approval_threshold</span></td><td>0</td><td>Budget total (GHS) above which board approval is required; 0 = disabled</td></tr>
             </tbody>
           </table>
         </div>
@@ -1288,6 +1465,9 @@
               <tr><td><span class="sk">notify_on_approval</span></td><td>true</td><td>Notify submitter when their budget is approved</td></tr>
               <tr><td><span class="sk">notify_on_rejection</span></td><td>true</td><td>Notify submitter when their budget is rejected</td></tr>
               <tr><td><span class="sk">notify_finance_on_virement</span></td><td>true</td><td>Notify finance reviewers when a virement is requested</td></tr>
+              <tr><td><span class="sk">notify_on_variance_breach</span></td><td>false</td><td>Send an alert when a department's actuals variance exceeds <span class="sk">budget_variance_alert_pct</span></td></tr>
+              <tr><td><span class="sk">deadline_reminder_days</span></td><td>7,3,1</td><td>Comma-separated days before submission deadline to send reminder emails</td></tr>
+              <tr><td><span class="sk">email_signature</span></td><td>–</td><td>HTML or plain text appended to the bottom of every outgoing email</td></tr>
             </tbody>
           </table>
         </div>

@@ -43,10 +43,33 @@
             {{-- Card Body --}}
             <div class="card-body p-4">
 
-                {{-- Password Strength Indicator (Optional) --}}
-                <div class="alert alert-info small py-2 px-3 mb-4" style="border-radius: 10px; background: #F0F7FF; border-color: #B8D4F0;">
-                    <i class="bi bi-key"></i>
-                    Password must be at least 8 characters long and include a mix of letters, numbers, and symbols.
+                {{-- Password Requirements Checklist --}}
+                <div id="pwChecklist" class="mb-4 p-3" style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;">
+                    <div class="small fw-semibold mb-2" style="color:#475569;letter-spacing:.3px">
+                        <i class="bi bi-key me-1" style="color:#E65C00"></i> Password requirements
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 8px">
+                        <div class="pw-req d-flex align-items-center gap-2 small" data-req="length">
+                            <i class="bi bi-circle" style="color:#CBD5E1;font-size:13px;flex-shrink:0"></i>
+                            <span style="color:#64748B">8+ characters</span>
+                        </div>
+                        <div class="pw-req d-flex align-items-center gap-2 small" data-req="upper">
+                            <i class="bi bi-circle" style="color:#CBD5E1;font-size:13px;flex-shrink:0"></i>
+                            <span style="color:#64748B">Uppercase (A–Z)</span>
+                        </div>
+                        <div class="pw-req d-flex align-items-center gap-2 small" data-req="lower">
+                            <i class="bi bi-circle" style="color:#CBD5E1;font-size:13px;flex-shrink:0"></i>
+                            <span style="color:#64748B">Lowercase (a–z)</span>
+                        </div>
+                        <div class="pw-req d-flex align-items-center gap-2 small" data-req="number">
+                            <i class="bi bi-circle" style="color:#CBD5E1;font-size:13px;flex-shrink:0"></i>
+                            <span style="color:#64748B">Number (0–9)</span>
+                        </div>
+                        <div class="pw-req d-flex align-items-center gap-2 small" data-req="symbol">
+                            <i class="bi bi-circle" style="color:#CBD5E1;font-size:13px;flex-shrink:0"></i>
+                            <span style="color:#64748B">Symbol (!@#$...)</span>
+                        </div>
+                    </div>
                 </div>
 
                 <form method="POST" action="{{ route('password.update') }}" id="passwordForm">
@@ -248,34 +271,55 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // ── Password Strength Checker ──
+    // ── Password Strength Checker + Real-time Checklist ──
     const newPassword = document.getElementById('new_password');
     const strengthBar = document.getElementById('passwordStrengthBar');
     const strengthText = document.getElementById('passwordStrengthText');
 
+    const pwRules = {
+        length: v => v.length >= 8,
+        upper:  v => /[A-Z]/.test(v),
+        lower:  v => /[a-z]/.test(v),
+        number: v => /[0-9]/.test(v),
+        symbol: v => /[^a-zA-Z0-9]/.test(v),
+    };
+
+    function updateChecklist(value) {
+        document.querySelectorAll('.pw-req').forEach(function(row) {
+            const met = pwRules[row.dataset.req](value);
+            const icon = row.querySelector('i');
+            const text = row.querySelector('span');
+            if (met) {
+                icon.className = 'bi bi-check-circle-fill';
+                icon.style.color = '#10B981';
+                text.style.color = '#065F46';
+                text.style.fontWeight = '500';
+            } else {
+                icon.className = 'bi bi-circle';
+                icon.style.color = '#CBD5E1';
+                text.style.color = '#64748B';
+                text.style.fontWeight = '';
+            }
+        });
+    }
+
     function checkPasswordStrength(password) {
-        let score = 0;
-
-        if (password.length >= 8) score++;
-        if (password.match(/[a-z]/)) score++;
-        if (password.match(/[A-Z]/)) score++;
-        if (password.match(/[0-9]/)) score++;
-        if (password.match(/[^a-zA-Z0-9]/)) score++;
-
+        const score = Object.values(pwRules).filter(fn => fn(password)).length;
         const strengthMap = {
             0: { text: 'Very Weak', color: '#dc3545', width: '10%' },
-            1: { text: 'Weak', color: '#dc3545', width: '25%' },
-            2: { text: 'Fair', color: '#ffc107', width: '45%' },
-            3: { text: 'Good', color: '#17a2b8', width: '65%' },
-            4: { text: 'Strong', color: '#28a745', width: '85%' },
+            1: { text: 'Weak',      color: '#dc3545', width: '25%' },
+            2: { text: 'Fair',      color: '#ffc107', width: '45%' },
+            3: { text: 'Good',      color: '#17a2b8', width: '65%' },
+            4: { text: 'Strong',    color: '#28a745', width: '85%' },
             5: { text: 'Very Strong', color: '#28a745', width: '100%' },
         };
-
         return strengthMap[score] || strengthMap[0];
     }
 
     newPassword.addEventListener('input', function() {
-        const strength = checkPasswordStrength(this.value);
+        const val = this.value;
+        updateChecklist(val);
+        const strength = checkPasswordStrength(val);
         strengthBar.style.width = strength.width;
         strengthBar.style.background = strength.color;
         strengthText.textContent = strength.text;

@@ -300,7 +300,7 @@
             This action cannot be undone.
         </p>
 
-        <form id="purgeForm" method="POST" action="{{ route('admin.users.purge-inactive') }}">
+        <form id="purgeForm" method="POST" action="{{ route('admin.users.purge-inactive') }}" data-skip-confirm="true">
             @csrf
             @method('DELETE')
             <input type="hidden" name="type" id="purgeType" value="">
@@ -347,6 +347,10 @@
                        placeholder="Type DELETE to confirm"
                        oninput="checkPurgeConfirm()">
             </div>
+            <div id="purgeNoUsersBox" style="display:none;background:#F0FDF4;border:1px solid #86EFAC;
+                 border-radius:8px;padding:12px 14px;font-size:13px;color:#16A34A;margin-bottom:16px">
+                ✓ No matching users found — nothing to delete.
+            </div>
 
             <div class="d-flex gap-2 justify-content-end">
                 <button type="button"
@@ -372,21 +376,16 @@ const PURGE_COUNTS = {
 function selectPurge(type) {
     document.getElementById('purgeType').value = type;
     ['never_logged_in','never_active'].forEach(t => {
-        const el = document.getElementById('opt-' + t.replace('_','-'));
+        const el = document.getElementById('opt-' + t.replace(/_/g,'-'));
         el.style.borderColor = t === type ? '#E65C00' : '#E2E8F0';
         el.style.background  = t === type ? '#FFF7ED' : '';
     });
     const count = PURGE_COUNTS[type] ?? 0;
     document.getElementById('purgeCount').textContent = count;
-    document.getElementById('purgeConfirmBox').style.display = count > 0 ? 'block' : 'none';
     document.getElementById('purgeConfirmInput').value = '';
     document.getElementById('purgeSubmitBtn').disabled = true;
-    if (count === 0) {
-        document.getElementById('purgeConfirmBox').style.display = 'block';
-        document.getElementById('purgeConfirmBox').innerHTML =
-            '<span style="color:#16A34A">✓ No matching users found — nothing to delete.</span>';
-        document.getElementById('purgeSubmitBtn').disabled = true;
-    }
+    document.getElementById('purgeConfirmBox').style.display  = count > 0 ? 'block' : 'none';
+    document.getElementById('purgeNoUsersBox').style.display  = count === 0 ? 'block' : 'none';
 }
 
 function checkPurgeConfirm() {
