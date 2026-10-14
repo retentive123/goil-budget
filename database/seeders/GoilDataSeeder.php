@@ -23,7 +23,7 @@ class GoilDataSeeder extends Seeder
         $this->command->info('Seeding departments…');
 
         $departments = [
-            ['name' => 'GCEO/MD',             'code' => '01001', 'description' => 'Office of the Group Chief Executive Officer & Managing Director. Provides overall strategic leadership and corporate governance.'],
+            ['name' => 'GCEO/MD',              'code' => '01001', 'description' => 'Office of the Group Chief Executive Officer & Managing Director. Provides overall strategic leadership and corporate governance.'],
             ['name' => 'COO',                  'code' => '15000', 'description' => 'Office of the Chief Operating Officer. Oversees operational efficiency and coordination across all business units.'],
             ['name' => 'Finance',              'code' => '05001', 'description' => 'Financial planning, accounting, treasury, and management reporting for the company.'],
             ['name' => 'Admin/HR',             'code' => '07000', 'description' => 'Administration & Human Resources. Manages human capital, staff welfare, payroll, and general administrative services.'],
@@ -150,7 +150,21 @@ class GoilDataSeeder extends Seeder
         );
         $catMap['Cost of Sales'] = DB::table('account_categories')->where('code', 'CAT-COS')->value('id');
 
-        $this->command->info('  ' . (count($categories) + 3) . ' categories done.');
+        // Other Income category
+        DB::table('account_categories')->updateOrInsert(
+            ['code' => 'CAT-OTH-INC'],
+            [
+                'name'        => 'Other Income',
+                'code'        => 'CAT-OTH-INC',
+                'budget_type' => 'revenue',
+                'is_active'   => true,
+                'created_at'  => now(),
+                'updated_at'  => now(),
+            ]
+        );
+        $catMap['Other Income'] = DB::table('account_categories')->where('code', 'CAT-OTH-INC')->value('id');
+
+        $this->command->info('  ' . (count($categories) + 4) . ' categories done.');
 
         // ── 3. Account Codes ──────────────────────────────────────────────────
         $this->command->info('Seeding account codes…');
@@ -409,6 +423,11 @@ class GoilDataSeeder extends Seeder
             ['Sales Revenue', '41000-413-004-02', 'Blasia 220 - 209 Litres'],
             ['Sales Revenue', '41000-413-024-02', 'Therm Oil 7 - 209 Litres'],
             ['Sales Revenue', '41000-412-014-01', 'Renolit Moly LX 2 - 180 kg'],
+
+            // Other Income (42000 series)
+            ['Other Income', '42114', 'Rent Income - Restaurants'],
+            ['Other Income', '42129', 'ATM Rent'],
+            ['Other Income', '42122', 'Service Station Rental Income'],
 
             // Cost of Sales (52000 series — same products, different ledger prefix)
             ['Cost of Sales', '52000-113', 'Diesel XP'],

@@ -12,6 +12,9 @@ class DatabaseSeeder extends Seeder
             RolesAndPermissionsSeeder::class,
             ApprovalStagesSeeder::class,
             AdminUserSeeder::class,
+            EmailTemplateSeeder::class,
+            GoilDataSeeder::class,
+            SystemSettingsSeeder::class,
         ]);
     }
 }

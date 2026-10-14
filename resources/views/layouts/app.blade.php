@@ -245,7 +245,8 @@
         }
 
         .sidebar-submenu.open {
-            max-height: 600px;
+            max-height: 2000px;
+            overflow-y: auto;
         }
 
         .sidebar-submenu .sidebar-link {
@@ -866,6 +867,11 @@
                class="sidebar-link {{ request()->routeIs('reports.approver-activity') ? 'active' : '' }}">
                 <i class="bi bi-person-check nav-icon"></i>
                 <span class="link-text">Approver Activity</span>
+            </a>
+            <a href="{{ route('reports.revised') }}"
+               class="sidebar-link {{ request()->routeIs('reports.revised') ? 'active' : '' }}">
+                <i class="bi bi-arrow-repeat nav-icon"></i>
+                <span class="link-text">Revised Budget</span>
             </a>
         </div>
         @endcan
