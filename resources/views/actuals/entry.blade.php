@@ -112,7 +112,7 @@
         </tbody>
     </table>
 
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 flex-wrap">
         @if($department)
         <a href="{{ route('supplementary.create', [
                 'period_id'     => $period->id,
@@ -123,6 +123,51 @@
             <i class="fas fa-plus-circle"></i> Request Supplementary Budget
         </a>
         @endif
+
+        @if(session('overbudget_override_allowed'))
+        {{-- Override buttons — shown only when the admin setting is enabled --}}
+        @php
+            $wfBaseOvr = ['period_id'=>$period->id,'department_id'=>$department?->id,'subsidiary_id'=>($subsidiary??null)?->id,'month'=>$month,'year'=>$year,'override_overbudget'=>1];
+        @endphp
+        @if(\App\Models\SystemSetting::get('actuals_approval_flow','simple') === 'simple')
+            @can('confirm actuals')
+            <form method="POST" action="{{ route('actuals.confirm') }}" id="overrideConfirmForm" style="display:inline">
+                @csrf
+                @foreach($wfBaseOvr as $k => $v) @if(!is_null($v)) <input type="hidden" name="{{ $k }}" value="{{ $v }}"> @endif @endforeach
+                <button type="button" onclick="submitOverrideConfirm('overrideConfirmForm', 'Confirm Month Actuals', 'confirm')"
+                        class="btn btn-sm"
+                        style="background:#D97706;color:#fff;border-radius:8px;padding:8px 18px">
+                    <i class="fas fa-exclamation-triangle"></i> Override &amp; Confirm Anyway
+                </button>
+            </form>
+            @endcan
+        @elseif($monthStatus === 'submitted')
+            @can('head confirm actuals')
+            <form method="POST" action="{{ route('actuals.head-confirm') }}" id="overrideHeadConfirmForm" style="display:inline">
+                @csrf
+                @foreach($wfBaseOvr as $k => $v) @if(!is_null($v)) <input type="hidden" name="{{ $k }}" value="{{ $v }}"> @endif @endforeach
+                <button type="button" onclick="submitOverrideConfirm('overrideHeadConfirmForm', 'Head-Confirm Actuals', 'head confirm')"
+                        class="btn btn-sm"
+                        style="background:#D97706;color:#fff;border-radius:8px;padding:8px 18px">
+                    <i class="fas fa-exclamation-triangle"></i> Override &amp; Confirm Anyway
+                </button>
+            </form>
+            @endcan
+        @elseif($monthStatus === 'head_confirmed')
+            @can('approve actuals')
+            <form method="POST" action="{{ route('actuals.approve') }}" id="overrideApproveForm" style="display:inline">
+                @csrf
+                @foreach($wfBaseOvr as $k => $v) @if(!is_null($v)) <input type="hidden" name="{{ $k }}" value="{{ $v }}"> @endif @endforeach
+                <button type="button" onclick="submitOverrideConfirm('overrideApproveForm', 'Final Approve Actuals', 'approve')"
+                        class="btn btn-sm"
+                        style="background:#D97706;color:#fff;border-radius:8px;padding:8px 18px">
+                    <i class="fas fa-exclamation-triangle"></i> Override &amp; Approve Anyway
+                </button>
+            </form>
+            @endcan
+        @endif
+        @endif
+
         <a href="{{ route('actuals.index', [
                 'period_id'     => $period->id,
                 'department_id' => $department?->id,
@@ -873,7 +918,7 @@ function confirmMonth() {
                 const data = await res.json();
 
                 if (res.status === 422 && data.status === 'over_budget') {
-                    // Build a readable list of blocked lines
+                    // Blocked — override not enabled
                     const rows = (data.items || []).map(it =>
                         `<li><strong>${it.code}</strong> ${it.name}: ` +
                         `budget {{ currency() }} ${Number(it.budget).toLocaleString('en-GH',{minimumFractionDigits:2})} · ` +
@@ -893,6 +938,45 @@ function confirmMonth() {
                         icon: 'error',
                         confirmButtonColor: '#1B2A4A',
                         confirmButtonText: 'OK, I\'ll Review',
+                    });
+                    return;
+                }
+
+                if (data.over_budget_warning && data.over_budget_items) {
+                    // Override is enabled — ask the user to acknowledge before confirming
+                    const rows = (data.over_budget_items || []).map(it =>
+                        `<li><strong>${it.code}</strong> ${it.name}: ` +
+                        `budget {{ currency() }} ${Number(it.budget).toLocaleString('en-GH',{minimumFractionDigits:2})} · ` +
+                        `projected {{ currency() }} ${Number(it.projected_total).toLocaleString('en-GH',{minimumFractionDigits:2})} ` +
+                        `<span style="color:#F43F5E">(+${Number(it.overrun).toLocaleString('en-GH',{minimumFractionDigits:2})})</span></li>`
+                    ).join('');
+
+                    Swal.fire({
+                        title: '⚠️ Over Budget — Confirm Anyway?',
+                        html: `
+                            <div style="background:#FEF3C7;border-radius:8px;padding:12px;margin-bottom:12px;text-align:left;font-size:13px;color:#92400E">
+                                <strong>WARNING:</strong> ${data.over_budget_items.length} expense line(s) would exceed
+                                the approved budget. Confirming will override this check.
+                                <strong>This action is logged.</strong>
+                            </div>
+                            <ul style="text-align:left;font-size:13px;padding-left:18px;color:#1E293B">${rows}</ul>
+                        `,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: '#D97706',
+                        cancelButtonColor: '#64748B',
+                        confirmButtonText: 'I Understand — Confirm Anyway',
+                        cancelButtonText: 'Cancel, I\'ll Fix It',
+                        reverseButtons: true,
+                    }).then(result => {
+                        if (result.isConfirmed) {
+                            // Add override flag to confirmForm and submit
+                            const inp = document.createElement('input');
+                            inp.type = 'hidden'; inp.name = 'override_overbudget'; inp.value = '1';
+                            document.getElementById('confirmForm').appendChild(inp);
+                            document.getElementById('confirmForm').submit();
+                        }
+                        // On cancel: draft was already saved, user stays on page
                     });
                     return;
                 }
@@ -980,6 +1064,26 @@ function saveAndSubmitForApproval() {
                 return;
             }
 
+            if (data.over_budget_warning && data.over_budget_items) {
+                const rows = (data.over_budget_items || []).map(it =>
+                    `<li><strong>${it.code}</strong> ${it.name}: budget {{ currency() }} ${Number(it.budget).toLocaleString('en-GH',{minimumFractionDigits:2})} · projected {{ currency() }} ${Number(it.projected_total).toLocaleString('en-GH',{minimumFractionDigits:2})} <span style="color:#F43F5E">(+${Number(it.overrun).toLocaleString('en-GH',{minimumFractionDigits:2})})</span></li>`
+                ).join('');
+                Swal.fire({
+                    title: '⚠️ Over Budget — Submit Anyway?',
+                    html: `<div style="background:#FEF3C7;border-radius:8px;padding:12px;margin-bottom:12px;text-align:left;font-size:13px;color:#92400E"><strong>WARNING:</strong> ${data.over_budget_items.length} expense line(s) would exceed the approved budget. Submitting will override this check. <strong>This action is logged.</strong></div><ul style="text-align:left;font-size:13px;padding-left:18px;color:#1E293B">${rows}</ul>`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#D97706',
+                    cancelButtonColor: '#64748B',
+                    confirmButtonText: 'I Understand — Submit Anyway',
+                    cancelButtonText: 'Cancel, I\'ll Fix It',
+                    reverseButtons: true,
+                }).then(result => {
+                    if (result.isConfirmed) document.getElementById('submitForm').submit();
+                });
+                return;
+            }
+
             if (!res.ok) {
                 Swal.fire({ title: 'Save Failed', text: data.message || 'Unexpected error.', icon: 'error', confirmButtonColor: '#1B2A4A' });
                 return;
@@ -1026,6 +1130,30 @@ function finalApprove() {
         reverseButtons: true,
     }).then(result => {
         if (result.isConfirmed) document.getElementById('approveForm').submit();
+    });
+}
+
+function submitOverrideConfirm(formId, actionLabel, stepLabel) {
+    Swal.fire({
+        title: '⚠️ Override Budget Check?',
+        html: `
+            <div style="background:#FEF3C7;border-radius:8px;padding:14px;margin-bottom:12px;text-align:left;font-size:13px;color:#92400E">
+                <strong>WARNING:</strong> You are about to <strong>${stepLabel}</strong> actuals that exceed
+                the approved budget. This action will be permanently logged with your name and timestamp.
+            </div>
+            <p style="color:#64748B;font-size:13px">
+                Only proceed if you have authorisation to override the budget check.
+            </p>
+        `,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#D97706',
+        cancelButtonColor: '#64748B',
+        confirmButtonText: 'Yes, Override &amp; ' + actionLabel,
+        cancelButtonText: 'Cancel',
+        reverseButtons: true,
+    }).then(result => {
+        if (result.isConfirmed) document.getElementById(formId).submit();
     });
 }
 

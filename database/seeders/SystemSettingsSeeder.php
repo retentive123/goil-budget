@@ -160,6 +160,14 @@ class SystemSettingsSeeder extends Seeder
                 'description' => 'simple = a single confirmation step to record actuals. multi_stage = actuals go through the configured approval stages before being confirmed.',
                 'group'       => 'budget',
             ],
+            [
+                'key'         => 'allow_overbudget_actuals_override',
+                'value'       => '0',
+                'type'        => 'boolean',
+                'label'       => 'Allow Over-Budget Actuals Override',
+                'description' => 'When enabled, users can confirm actuals that exceed the approved budget after acknowledging a warning. The override is logged. Disabled by default.',
+                'group'       => 'budget',
+            ],
 
             // ── Feature: Supplementary / Virement approval routing
             [

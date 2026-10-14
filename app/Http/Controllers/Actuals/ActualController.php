@@ -271,6 +271,7 @@ class ActualController extends Controller
         $this->assertDeptOwnership($request->department_id, $request->subsidiary_id);
 
         $checkMode       = \App\Models\SystemSetting::get('actuals_budget_check_mode', 'annual');
+        $overrideEnabled = \App\Models\SystemSetting::get('allow_overbudget_actuals_override', false);
         $overBudgetItems = [];
 
         foreach ($request->actuals as $data) {
@@ -291,7 +292,7 @@ class ActualController extends Controller
             if ($hit) $overBudgetItems[] = $hit;
         }
 
-        if (!empty($overBudgetItems)) {
+        if (!empty($overBudgetItems) && !$overrideEnabled) {
             BudgetNotification::create([
                 'user_id'         => auth()->id(),
                 'type'            => 'over_budget_blocked',
@@ -361,19 +362,34 @@ class ActualController extends Controller
         $monthName = BudgetActual::MONTHS[(int) $request->month];
 
         if ($wantsJson) {
-            return response()->json([
+            $payload = [
                 'status'  => 'ok',
+                'success' => true,
                 'saved'   => $saved,
                 'message' => "{$saved} actuals saved as draft for {$monthName} {$request->year}.",
-            ]);
+            ];
+            if (!empty($overBudgetItems) && $overrideEnabled) {
+                $payload['over_budget_warning'] = true;
+                $payload['over_budget_items']   = $overBudgetItems;
+            }
+            return response()->json($payload);
         }
 
-        return redirect()->route('actuals.entry', [
+        $redirect = redirect()->route('actuals.entry', [
             'period_id'     => $request->period_id,
             'department_id' => $request->department_id,
             'month'         => $request->month,
             'year'          => $request->year,
-        ])->with('success', "{$saved} actuals saved as draft for {$monthName} {$request->year}.");
+        ]);
+
+        if (!empty($overBudgetItems) && $overrideEnabled) {
+            return $redirect
+                ->with('over_budget_items', $overBudgetItems)
+                ->with('overbudget_override_allowed', true)
+                ->with('warning', count($overBudgetItems) . ' expense line(s) exceed the approved budget. You may override and confirm anyway, or request a supplementary budget.');
+        }
+
+        return $redirect->with('success', "{$saved} actuals saved as draft for {$monthName} {$request->year}.");
     }
 
     /**
@@ -576,10 +592,26 @@ class ActualController extends Controller
         // Over-budget check before the head locks in
         $overBudgetItems = $this->overBudgetCheckForStatus($request, 'submitted');
         if (!empty($overBudgetItems)) {
-            return back()
-                ->with('over_budget_items', $overBudgetItems)
-                ->with('error', count($overBudgetItems) . " expense line(s) would exceed the budget for {$monthName}. "
-                    . "Ask the department to adjust entries or request a supplementary budget.");
+            $overrideEnabled = \App\Models\SystemSetting::get('allow_overbudget_actuals_override', false);
+
+            if ($overrideEnabled && $request->boolean('override_overbudget')) {
+                BudgetNotification::create([
+                    'user_id'         => auth()->id(),
+                    'type'            => 'over_budget_override',
+                    'subject'         => 'Head-confirmed actuals with over-budget override',
+                    'message'         => auth()->user()->name . ' head-confirmed ' . $monthName . ' actuals with ' .
+                                         count($overBudgetItems) . ' expense line(s) exceeding the approved budget (admin override enabled).',
+                    'notifiable_id'   => (int) $request->department_id,
+                    'notifiable_type' => Department::class,
+                ]);
+                // fall through
+            } else {
+                return back()
+                    ->with('over_budget_items', $overBudgetItems)
+                    ->with('overbudget_override_allowed', $overrideEnabled)
+                    ->with('error', count($overBudgetItems) . " expense line(s) would exceed the budget for {$monthName}. " .
+                        ($overrideEnabled ? "You may override and confirm anyway." : "Ask the department to adjust entries or request a supplementary budget."));
+            }
         }
 
         $count = $this->monthQuery($request)
@@ -635,10 +667,26 @@ class ActualController extends Controller
         // Final over-budget check
         $overBudgetItems = $this->overBudgetCheckForStatus($request, 'head_confirmed');
         if (!empty($overBudgetItems)) {
-            return back()
-                ->with('over_budget_items', $overBudgetItems)
-                ->with('error', count($overBudgetItems) . " expense line(s) would exceed the budget for {$monthName}. "
-                    . "Reopen the month and ask the department to revise entries.");
+            $overrideEnabled = \App\Models\SystemSetting::get('allow_overbudget_actuals_override', false);
+
+            if ($overrideEnabled && $request->boolean('override_overbudget')) {
+                BudgetNotification::create([
+                    'user_id'         => auth()->id(),
+                    'type'            => 'over_budget_override',
+                    'subject'         => 'Finance-approved actuals with over-budget override',
+                    'message'         => auth()->user()->name . ' gave final Finance approval for ' . $monthName .
+                                         ' actuals with ' . count($overBudgetItems) . ' expense line(s) exceeding the approved budget (admin override enabled).',
+                    'notifiable_id'   => (int) $request->department_id,
+                    'notifiable_type' => Department::class,
+                ]);
+                // fall through
+            } else {
+                return back()
+                    ->with('over_budget_items', $overBudgetItems)
+                    ->with('overbudget_override_allowed', $overrideEnabled)
+                    ->with('error', count($overBudgetItems) . " expense line(s) would exceed the budget for {$monthName}. " .
+                        ($overrideEnabled ? "You may override and approve anyway." : "Reopen the month and ask the department to revise entries."));
+            }
         }
 
         $count = $this->monthQuery($request)
@@ -774,23 +822,40 @@ class ActualController extends Controller
         }
 
         if (!empty($overBudgetItems)) {
-            BudgetNotification::create([
-                'user_id'         => auth()->id(),
-                'type'            => 'over_budget_blocked',
-                'subject'         => 'Confirmation blocked — budget overrun detected',
-                'message'         => 'The confirmation of ' . $monthName . ' actuals was blocked because ' .
-                                     count($overBudgetItems) . ' expense line(s) would exceed the approved budget.',
-                'notifiable_id'   => (int) $request->department_id,
-                'notifiable_type' => Department::class,
-            ]);
+            $overrideEnabled = \App\Models\SystemSetting::get('allow_overbudget_actuals_override', false);
 
-            return back()
-                ->with('over_budget_items', $overBudgetItems)
-                ->with('error',
-                    "Confirmation blocked: " . count($overBudgetItems) .
-                    " expense line(s) would exceed the approved budget for {$monthName}. " .
-                    "Edit the draft entries or request a supplementary budget."
-                );
+            if ($overrideEnabled && $request->boolean('override_overbudget')) {
+                // User acknowledged the over-budget warning — log and proceed
+                BudgetNotification::create([
+                    'user_id'         => auth()->id(),
+                    'type'            => 'over_budget_override',
+                    'subject'         => 'Actuals confirmed with over-budget override',
+                    'message'         => auth()->user()->name . ' confirmed ' . $monthName . ' actuals with ' .
+                                         count($overBudgetItems) . ' expense line(s) exceeding the approved budget (admin override enabled).',
+                    'notifiable_id'   => (int) $request->department_id,
+                    'notifiable_type' => Department::class,
+                ]);
+                // fall through to confirm
+            } else {
+                BudgetNotification::create([
+                    'user_id'         => auth()->id(),
+                    'type'            => 'over_budget_blocked',
+                    'subject'         => 'Confirmation blocked — budget overrun detected',
+                    'message'         => 'The confirmation of ' . $monthName . ' actuals was blocked because ' .
+                                         count($overBudgetItems) . ' expense line(s) would exceed the approved budget.',
+                    'notifiable_id'   => (int) $request->department_id,
+                    'notifiable_type' => Department::class,
+                ]);
+
+                return back()
+                    ->with('over_budget_items', $overBudgetItems)
+                    ->with('overbudget_override_allowed', $overrideEnabled)
+                    ->with('error',
+                        "Confirmation blocked: " . count($overBudgetItems) .
+                        " expense line(s) would exceed the approved budget for {$monthName}. " .
+                        ($overrideEnabled ? "You may override and confirm anyway." : "Edit the draft entries or request a supplementary budget.")
+                    );
+            }
         }
 
         $count = BudgetActual::where('department_id',    $request->department_id)
