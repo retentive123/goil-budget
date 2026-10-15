@@ -43,6 +43,29 @@
                 {{ now()->format('l, d F Y') }}
             </div>
 
+            {{-- Department / Subsidiary badge --}}
+            @php
+                $authUser = Auth::user();
+                $orgName  = null;
+                $orgIcon  = 'bi-building';
+                $orgColor = '#1B2A4A';
+                if ($authUser->isSubsidiaryUser() && $authUser->subsidiary) {
+                    $orgName  = $authUser->subsidiary->name;
+                    $orgIcon  = 'bi-diagram-3';
+                    $orgColor = '#5B21B6';
+                } elseif ($authUser->department) {
+                    $orgName  = $authUser->department->name;
+                }
+            @endphp
+            @if($orgName)
+            <div class="d-flex align-items-center gap-2 mt-2">
+                <i class="bi {{ $orgIcon }}" style="color:{{ $orgColor }};font-size:13px"></i>
+                <span style="font-size:12px;font-weight:600;color:{{ $orgColor }}">
+                    {{ $orgName }}
+                </span>
+            </div>
+            @endif
+
             {{-- Show specific period info only when a period filter is active --}}
             @if(!$isAllPeriods && $currentPeriod)
             <div class="d-flex align-items-center gap-2 mt-3 flex-wrap">
@@ -547,7 +570,7 @@
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
                         <div style="font-size:13px;font-weight:600;color:var(--navy)">
-                            {{ $v->department->name }}
+                            {{ $v->subsidiary?->name ?? $v->department?->name }}
                         </div>
                         <div style="font-size:11px;color:var(--slate)">
                             v{{ $v->version_number }}
@@ -786,8 +809,16 @@ new Chart(document.getElementById('yoyLine'),{
                         color:#1B2A4A;font-weight:700;margin-bottom:4px">
                 GOIL Budget Management
             </div>
+            @php
+                $deptUser = Auth::user();
+                $deptLabel = $deptUser->isSubsidiaryUser()
+                    ? $deptUser->subsidiary?->name
+                    : $deptUser->department?->name;
+                $deptIcon  = $deptUser->isSubsidiaryUser() ? 'bi-diagram-3' : 'bi-building';
+            @endphp
             <div style="font-size:20px;font-weight:700;color:var(--navy)">
-                {{ Auth::user()->department?->name }}
+                <i class="bi {{ $deptIcon }} me-1" style="color:var(--gold)"></i>
+                {{ $deptLabel ?? 'My Budget' }}
             </div>
             <div style="color:var(--slate);font-size:13px;margin-top:4px">
                 <i class="bi bi-calendar3 me-1" style="color:var(--gold)"></i>

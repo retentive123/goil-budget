@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Budget — ' . $budgetVersion->department->name)
+@section('title', 'Budget — ' . ($budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name))
 @section('content')
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -7,10 +7,14 @@
         <a href="{{ route('budgets.index') }}"
            class="text-muted text-decoration-none small">← All Budgets</a>
         <span class="text-muted">/</span>
+        @if($budgetVersion->department)
         <a href="{{ route('budgets.department', $budgetVersion->department) }}"
            class="text-muted text-decoration-none small">
             {{ $budgetVersion->department->name }}
         </a>
+        @else
+        <span class="text-muted small">{{ $budgetVersion->subsidiary?->name }}</span>
+        @endif
         <span class="text-muted">/</span>
         <span class="small">v{{ $budgetVersion->version_number }} — {{ $budgetVersion->period->name }}</span>
     </div>
@@ -67,7 +71,7 @@
     <div class="row align-items-center">
         <div class="col">
             <div style="font-size:19px;font-weight:700;color:var(--navy)">
-                {{ $budgetVersion->department->name }}
+                {{ $budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name }}
             </div>
             <div style="font-size:13px;color:var(--slate);margin-top:4px">
                 {{ $budgetVersion->period->name }}
@@ -717,12 +721,14 @@
                     <i class="bi bi-clock-history me-2"></i>Full Approval History
                 </a>
 
+                @if($budgetVersion->department)
                 <a href="{{ route('budgets.department', $budgetVersion->department) }}"
                    class="btn btn-sm text-start"
                    style="background:var(--surface);border:1px solid var(--border);
                           border-radius:8px;padding:10px 14px;font-size:13px;color:var(--navy)">
                     <i class="bi bi-building me-2"></i>All Versions
                 </a>
+                @endif
 
                 <a href="{{ route('reports.department', ['department_id'=>$budgetVersion->department_id,'period_id'=>$budgetVersion->budget_period_id]) }}"
                    class="btn btn-sm text-start"
@@ -888,7 +894,7 @@ function tabPrint(tabId) {
     const clone = tbl.cloneNode(true);
     _tabHide(hidden);
     const w = window.open('', '_blank', 'width=1100,height=700');
-    w.document.write('<html><head><title>Budget — {{ $budgetVersion->department->name }} — {{ $budgetVersion->period->name }}</title>'
+    w.document.write('<html><head><title>Budget — {{ $budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name }} — {{ $budgetVersion->period->name }}</title>'
         + '<style>*{font-family:sans-serif}table{border-collapse:collapse;width:100%;font-size:10px}'
         + 'th,td{border:1px solid #ccc;padding:3px 6px}'
         + 'th{background:#1B2A4A;color:#fff}'

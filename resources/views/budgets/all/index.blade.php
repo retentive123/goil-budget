@@ -201,7 +201,7 @@
                     <tr>
                         <td>
                             <div style="font-size:13px;font-weight:600;color:var(--navy)">
-                                {{ $v->department->name }}
+                                {{ $v->subsidiary?->name ?? $v->department?->name }}
                             </div>
                             <div style="font-size:10px;color:var(--slate)">
                                 {{ $v->department->code }}
@@ -269,7 +269,7 @@
                         </td>
                         <td>
                             <div class="d-flex gap-1">
-                                <a href="{{ route('budgets.show', $v) }}"
+                                <a href="{{ route('budgets.show-pnl', $v) }}"
                                    class="btn btn-sm"
                                    style="background:var(--navy);color:#fff;
                                           font-size:11px;border-radius:6px;

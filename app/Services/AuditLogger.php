@@ -9,6 +9,11 @@ use App\Models\User;
 
 class AuditLogger
 {
+    private static function versionLabel(BudgetVersion $v): string
+    {
+        $entity = $v->subsidiary?->name ?? $v->department?->name ?? "Version {$v->id}";
+        return "{$entity} v{$v->version_number}";
+    }
 
 public static function record(
         string $event,
@@ -99,7 +104,7 @@ public static function record(
             options: [
                 'subject_type'  => BudgetVersion::class,
                 'subject_id'    => $v->id,
-                'subject_label' => "{$v->department->name} v{$v->version_number} — {$v->period->name}",
+                'subject_label' => self::versionLabel($v) . " — {$v->period->name}",
                 'new_values'    => ['status' => $v->status, 'version' => $v->version_number],
                 'severity'      => 'info',
             ]
@@ -115,7 +120,7 @@ public static function record(
             options: [
                 'subject_type'  => BudgetVersion::class,
                 'subject_id'    => $v->id,
-                'subject_label' => "{$v->department->name} v{$v->version_number} — {$v->period->name}",
+                'subject_label' => self::versionLabel($v) . " — {$v->period->name}",
                 'new_values'    => [
                     'total' => $v->lineItems()->sum('total_amount'),
                     'notes' => $v->submission_notes,
@@ -134,7 +139,7 @@ public static function record(
             options: [
                 'subject_type'  => BudgetVersion::class,
                 'subject_id'    => $v->id,
-                'subject_label' => "{$v->department->name} v{$v->version_number}",
+                'subject_label' => self::versionLabel($v),
                 'meta'          => ['stage' => $stageName],
                 'severity'      => 'info',
             ]
@@ -150,7 +155,7 @@ public static function record(
             options: [
                 'subject_type'  => BudgetVersion::class,
                 'subject_id'    => $v->id,
-                'subject_label' => "{$v->department->name} v{$v->version_number}",
+                'subject_label' => self::versionLabel($v),
                 'meta'          => ['stage' => $stageName, 'comments' => $comments],
                 'severity'      => 'warning',
             ]
@@ -167,7 +172,7 @@ public static function record(
             options: [
                 'subject_type'  => Virement::class,
                 'subject_id'    => $v->id,
-                'subject_label' => "{$v->department->name} — {{ currency() }} " . number_format($v->amount, 2),
+                'subject_label' => ($v->department?->name ?? '—') . " — " . number_format($v->amount, 2),
                 'new_values'    => [
                     'from' => $v->fromLineItem->accountCode->code,
                     'to'   => $v->toLineItem->accountCode->code,
@@ -187,7 +192,7 @@ public static function record(
             options: [
                 'subject_type'  => Virement::class,
                 'subject_id'    => $v->id,
-                'subject_label' => "{$v->department->name} — {{ currency() }} " . number_format($v->amount, 2),
+                'subject_label' => ($v->department?->name ?? '—') . " — " . number_format($v->amount, 2),
                 'severity'      => 'info',
             ]
         );
@@ -202,7 +207,7 @@ public static function record(
             options: [
                 'subject_type'  => Virement::class,
                 'subject_id'    => $v->id,
-                'subject_label' => "{$v->department->name} — {{ currency() }} " . number_format($v->amount, 2),
+                'subject_label' => ($v->department?->name ?? '—') . " — " . number_format($v->amount, 2),
                 'severity'      => 'warning',
             ]
         );

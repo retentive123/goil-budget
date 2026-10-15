@@ -422,6 +422,11 @@
                                            + $loop->parent->index * 100
                                            + $loop->index;
                         @endphp
+                        @php
+                            $itemEntries = $existingActualsGrouped->get($item->id, collect());
+                            $entryTotal  = $itemEntries->sum('amount');
+                            $hasMultiple = $itemEntries->count() > 1;
+                        @endphp
                         <tr>
                             <input type="hidden"
                                    name="actuals[{{ $idx }}][line_item_id]"
@@ -455,6 +460,17 @@
                                 style="color:{{ $remaining >= 0 ? '#10B981' : '#F43F5E' }}">
                                 {{ number_format($remaining, 2) }}
                             </td>
+                            @if($hasMultiple)
+                            {{-- Multiple entries: show sum as read-only, entries listed below --}}
+                            <td class="text-end fw-bold" style="color:var(--navy)">
+                                <input type="hidden" name="actuals[{{ $idx }}][amount]" value="{{ $entryTotal }}">
+                                {{ number_format($entryTotal, 2) }}
+                                <div style="font-size:10px;color:var(--slate)">{{ $itemEntries->count() }} entries</div>
+                            </td>
+                            <td colspan="2" style="font-size:11px;color:var(--slate)">
+                                (see entries below)
+                            </td>
+                            @else
                             <td>
                                 <input type="number"
                                        name="actuals[{{ $idx }}][amount]"
@@ -481,7 +497,136 @@
                                        placeholder="Optional note"
                                        {{ $formLocked ? 'readonly' : '' }}>
                             </td>
+                            @endif
                         </tr>
+                        {{-- Existing individual entries (shown when there are any) --}}
+                        @if($itemEntries->isNotEmpty())
+                        <tr>
+                            <td colspan="7" style="padding:0 0 8px 20px;background:#F8FAFC">
+                                <div style="font-size:11px;font-weight:600;color:var(--slate);margin-bottom:4px;margin-top:4px">
+                                    <i class="fas fa-list-ul me-1"></i> Entries
+                                </div>
+                                <table style="width:100%;font-size:11px;border-collapse:collapse">
+                                    <thead>
+                                        <tr style="color:var(--slate);font-weight:600">
+                                            <th style="padding:2px 6px;width:90px">Date</th>
+                                            <th style="padding:2px 6px;width:120px">Reference</th>
+                                            <th style="padding:2px 6px">Narration</th>
+                                            <th style="padding:2px 6px;text-align:right;width:120px">Amount</th>
+                                            <th style="padding:2px 6px;width:60px">Status</th>
+                                            @if(!$formLocked)<th style="width:40px"></th>@endif
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                    @foreach($itemEntries as $entry)
+                                    <tr style="border-top:1px solid #E2E8F0">
+                                        <td style="padding:3px 6px;color:var(--slate)">
+                                            {{ $entry->entry_date?->format('d/m/Y') ?? '—' }}
+                                        </td>
+                                        <td style="padding:3px 6px;font-family:monospace">
+                                            {{ $entry->reference ?: '—' }}
+                                        </td>
+                                        <td style="padding:3px 6px">
+                                            {{ $entry->description ?: '—' }}
+                                        </td>
+                                        <td style="padding:3px 6px;text-align:right;font-weight:700">
+                                            {{ number_format($entry->amount, 2) }}
+                                        </td>
+                                        <td style="padding:3px 6px">
+                                            <span style="font-size:10px;padding:2px 6px;border-radius:10px;
+                                                background:{{ $entry->status==='confirmed' ? '#D1FAE5' : '#FEF9C3' }};
+                                                color:{{ $entry->status==='confirmed' ? '#065F46' : '#854D0E' }}">
+                                                {{ $entry->status }}
+                                            </span>
+                                        </td>
+                                        @if(!$formLocked && $entry->status === 'draft')
+                                        <td style="padding:3px 6px">
+                                            <form method="POST"
+                                                  action="{{ route('actuals.entry.delete', $entry->id) }}"
+                                                  onsubmit="return confirm('Delete this entry?')">
+                                                @csrf @method('DELETE')
+                                                <button type="submit"
+                                                        style="background:none;border:none;color:#F43F5E;cursor:pointer;font-size:12px"
+                                                        title="Delete entry">
+                                                    <i class="fas fa-trash-alt"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                        @elseif(!$formLocked)
+                                        <td></td>
+                                        @endif
+                                    </tr>
+                                    @endforeach
+                                    </tbody>
+                                </table>
+                            </td>
+                        </tr>
+                        @endif
+                        {{-- Add Entry button (inline form) --}}
+                        @if(!$formLocked)
+                        <tr>
+                            <td colspan="7" style="padding:4px 20px 10px;background:#F8FAFC">
+                                <button type="button"
+                                        onclick="toggleAddEntryForm('add-entry-{{ $item->id }}')"
+                                        style="background:none;border:1px dashed #CBD5E1;color:var(--slate);
+                                               font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer">
+                                    <i class="fas fa-plus me-1"></i> Add Entry
+                                </button>
+                                <div id="add-entry-{{ $item->id }}" style="display:none;margin-top:8px">
+                                    <form method="POST" action="{{ route('actuals.entry.add') }}">
+                                        @csrf
+                                        <input type="hidden" name="period_id"     value="{{ $period->id }}">
+                                        <input type="hidden" name="department_id" value="{{ $department?->id }}">
+                                        @if($subsidiary ?? null)
+                                        <input type="hidden" name="subsidiary_id" value="{{ $subsidiary->id }}">
+                                        @endif
+                                        <input type="hidden" name="month"         value="{{ $month }}">
+                                        <input type="hidden" name="year"          value="{{ $year }}">
+                                        <input type="hidden" name="line_item_id"  value="{{ $item->id }}">
+                                        <div class="row g-2 align-items-end">
+                                            <div class="col-auto">
+                                                <label style="font-size:10px;color:var(--slate)">Date</label>
+                                                <input type="date" name="entry_date"
+                                                       class="form-control form-control-sm"
+                                                       style="width:130px"
+                                                       value="{{ now()->format('Y-m-d') }}">
+                                            </div>
+                                            <div class="col-auto">
+                                                <label style="font-size:10px;color:var(--slate)">Amount *</label>
+                                                <input type="number" name="amount" required
+                                                       class="form-control form-control-sm"
+                                                       style="width:120px"
+                                                       min="0.01" step="0.01" placeholder="0.00">
+                                            </div>
+                                            <div class="col-auto">
+                                                <label style="font-size:10px;color:var(--slate)">Reference</label>
+                                                <input type="text" name="reference"
+                                                       class="form-control form-control-sm"
+                                                       style="width:130px"
+                                                       placeholder="Invoice/Voucher #">
+                                            </div>
+                                            <div class="col">
+                                                <label style="font-size:10px;color:var(--slate)">Narration</label>
+                                                <input type="text" name="description"
+                                                       class="form-control form-control-sm"
+                                                       placeholder="What is this entry for?">
+                                            </div>
+                                            <div class="col-auto">
+                                                <button type="submit" class="btn btn-sm btn-primary">
+                                                    Add
+                                                </button>
+                                                <button type="button"
+                                                        onclick="toggleAddEntryForm('add-entry-{{ $item->id }}')"
+                                                        class="btn btn-sm btn-outline-secondary">
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        @endif
                         @endforeach
                     </tbody>
                     @php
@@ -651,8 +796,19 @@ function updateTotals() {
     document.querySelectorAll('.actual-input').forEach(inp => {
         total += parseFloat(inp.value) || 0;
     });
+    // Also count totals from multi-entry rows (hidden inputs set to the sum)
+    document.querySelectorAll('input[type="hidden"][name*="[amount]"]').forEach(inp => {
+        if (!inp.closest('tr')?.querySelector('.actual-input')) {
+            total += parseFloat(inp.value) || 0;
+        }
+    });
     document.getElementById('monthTotal').textContent =
         '{{ currency() }} ' + total.toLocaleString('en-GH', { minimumFractionDigits: 2 });
+}
+
+function toggleAddEntryForm(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
 /* ── Save-status badge helpers ── */

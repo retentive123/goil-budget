@@ -7,7 +7,7 @@
        class="text-muted text-decoration-none small">← Approvals</a>
     <span class="text-muted">/</span>
     <span class="small">
-        {{ $budgetVersion->department->name }} —
+        {{ $budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name }} —
         v{{ $budgetVersion->version_number }} History
     </span>
 </div>
@@ -26,7 +26,7 @@
     <div class="row align-items-center">
         <div class="col">
             <div style="font-size:18px;font-weight:700;color:var(--navy)">
-                {{ $budgetVersion->department->name }}
+                {{ $budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name }}
             </div>
             <div style="font-size:13px;color:var(--slate);margin-top:2px">
                 {{ $budgetVersion->period->name }}

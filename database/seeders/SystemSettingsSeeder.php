@@ -58,8 +58,8 @@ class SystemSettingsSeeder extends Seeder
                 'key'         => 'virement_limit_pct',
                 'value'       => '10',
                 'type'        => 'integer',
-                'label'       => 'Virement Limit (%)',
-                'description' => 'Maximum % of an account code budget that can be vired out.',
+                'label'       => 'Virement Limit — Same Type (%)',
+                'description' => 'Maximum % of a line item\'s budget that can be vired OUT to another line within the same budget type group (e.g. Expense → Expense, Capital → Capital). Both the per-request amount and the cumulative total of all pending/approved virements from that line are checked against this limit.',
                 'group'       => 'budget',
             ],
             [
@@ -68,6 +68,22 @@ class SystemSettingsSeeder extends Seeder
                 'type'        => 'boolean',
                 'label'       => 'Allow Virements After Approval',
                 'description' => 'Whether departments can request virements on an approved budget.',
+                'group'       => 'budget',
+            ],
+            [
+                'key'         => 'allow_cross_type_virement',
+                'value'       => '0',
+                'type'        => 'boolean',
+                'label'       => 'Allow Cross-Type Virements',
+                'description' => 'When OFF (default), virements between different budget type groups are completely blocked — no one can move money from e.g. an Expense line to a Capital line. When ON, such movements are permitted up to the Cross-Type Limit below. Budget type groups: Revenue (revenue/both), Expense (expense/ex-pump), Capital (capital_expenditure), Balance Sheet (assets/liabilities).',
+                'group'       => 'budget',
+            ],
+            [
+                'key'         => 'cross_type_virement_limit_pct',
+                'value'       => '5',
+                'type'        => 'integer',
+                'label'       => 'Cross-Type Virement Limit (%)',
+                'description' => 'Maximum % of a line item\'s budget that can be vired OUT to a line in a different budget type group. Only enforced when Allow Cross-Type Virements is ON. Kept lower than the same-type limit (default 5% vs 10%) because cross-type movements have wider financial reporting implications (e.g. reclassifying operating spend as capital changes depreciation treatment).',
                 'group'       => 'budget',
             ],
             [

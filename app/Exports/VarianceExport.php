@@ -37,7 +37,7 @@ class VarianceExport implements FromCollection, WithHeadings, WithTitle, WithSty
                     : 0;
 
                 $rows->push([
-                    $version->department->name,
+                    $version->subsidiary?->name ?? $version->department?->name ?? '—',
                     $item->accountCode->category->name,
                     $item->accountCode->code,
                     $item->accountCode->name,

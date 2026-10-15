@@ -158,7 +158,7 @@ class BudgetReadOnlyExport implements FromCollection, WithHeadings, WithTitle, W
 
         $sheet->insertNewRowBefore(1, 2);
 
-        $dept   = $this->version->department->name;
+        $dept   = $this->version->subsidiary?->name ?? $this->version->department?->name ?? '—';
         $period = $this->version->period->name;
         $ver    = $this->version->version_number;
         $status = ucfirst(str_replace('_', ' ', $this->version->status));

@@ -10,6 +10,7 @@ use App\Models\BudgetLineItem;
 use App\Models\Department;
 use App\Models\SupplementaryBudget;
 use App\Models\BudgetNotification;
+use App\Models\AccountCode;
 use App\Services\WebhookService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -30,11 +31,18 @@ class ActualController extends Controller
             ? BudgetPeriod::find($request->period_id)
             : $currentPeriod;
 
-        $department = $request->department_id
-            ? Department::find($request->department_id)
-            : ($user->hasAnyRole(['department_user', 'department_head'])
-                ? $user->department
-                : $departments->first());
+        $subsidiary = null;
+        if ($user->isSubsidiaryUser()) {
+            $subsidiary = $user->subsidiary;
+        }
+
+        $department = $subsidiary ? null : (
+            $request->department_id
+                ? Department::find($request->department_id)
+                : ($user->hasAnyRole(['department_user', 'department_head'])
+                    ? $user->department
+                    : $departments->first())
+        );
 
         $selectedMonth = (int) $request->get('month', now()->month);
         $selectedYear  = (int) $request->get('year',  now()->year);
@@ -42,9 +50,14 @@ class ActualController extends Controller
         $approvalFlow   = \App\Models\SystemSetting::get('actuals_approval_flow', 'simple');
         $monthlySummary = [];
 
-        if ($department && $period) {
+        $entityForSummary = $subsidiary ?? $department;
+
+        if ($entityForSummary && $period) {
             // Two batch queries instead of 12 individual ones
-            $confirmedTotals = BudgetActual::where('department_id',    $department->id)
+            $confirmedTotals = BudgetActual::when($subsidiary,
+                    fn($q) => $q->where('subsidiary_id', $subsidiary->id),
+                    fn($q) => $q->where('department_id', $department->id)
+                )
                 ->where('budget_period_id', $period->id)
                 ->where('status', 'confirmed')
                 ->selectRaw('month, SUM(amount) as total')
@@ -52,7 +65,10 @@ class ActualController extends Controller
                 ->pluck('total', 'month');
 
             // Highest-priority status per month (confirmed > head_confirmed > submitted > draft)
-            $statusByMonth = BudgetActual::where('department_id',    $department->id)
+            $statusByMonth = BudgetActual::when($subsidiary,
+                    fn($q) => $q->where('subsidiary_id', $subsidiary->id),
+                    fn($q) => $q->where('department_id', $department->id)
+                )
                 ->where('budget_period_id', $period->id)
                 ->selectRaw("month, MAX(CASE status
                     WHEN 'confirmed'      THEN 4
@@ -85,7 +101,7 @@ class ActualController extends Controller
             if ($user->hasAnyRole(['finance_reviewer', 'bdu_admin', 'super_admin'])) {
                 $pendingApprovals = BudgetActual::where('budget_period_id', $period->id)
                     ->where('status', 'head_confirmed')
-                    ->with('department')
+                    ->with('department', 'subsidiary')
                     ->select('department_id', 'subsidiary_id', 'budget_period_id', 'month', 'year')
                     ->selectRaw('COUNT(*) as entry_count, SUM(amount) as total_amount')
                     ->groupBy('department_id', 'subsidiary_id', 'budget_period_id', 'month', 'year')
@@ -95,6 +111,7 @@ class ActualController extends Controller
                 $pendingApprovals = BudgetActual::where('budget_period_id', $period->id)
                     ->where('status', 'submitted')
                     ->where('department_id', $user->department_id)
+                    ->with('department', 'subsidiary')
                     ->select('department_id', 'subsidiary_id', 'budget_period_id', 'month', 'year')
                     ->selectRaw('COUNT(*) as entry_count, SUM(amount) as total_amount')
                     ->groupBy('department_id', 'subsidiary_id', 'budget_period_id', 'month', 'year')
@@ -104,7 +121,7 @@ class ActualController extends Controller
         }
 
         return view('actuals.index', compact(
-            'period', 'periods', 'departments', 'department',
+            'period', 'periods', 'departments', 'department', 'subsidiary',
             'selectedMonth', 'selectedYear', 'monthlySummary', 'approvalFlow',
             'pendingApprovals'
         ));
@@ -162,14 +179,20 @@ class ActualController extends Controller
                 ->with('error', "No approved budget found for {$entityName} in {$period->name}.");
         }
 
-        // Existing actuals recorded for THIS specific month/year
-        $existingActuals = BudgetActual::when($subsidiary, fn($q) => $q->where('subsidiary_id', $subsidiary->id))
+        // All actuals recorded for THIS specific month/year (grouped for multi-entry support)
+        $allMonthActuals = BudgetActual::when($subsidiary, fn($q) => $q->where('subsidiary_id', $subsidiary->id))
             ->when($department, fn($q) => $q->where('department_id', $department->id))
             ->where('budget_period_id', $period->id)
             ->where('month', $month)
             ->where('year',  $year)
-            ->get()
-            ->keyBy('budget_line_item_id');
+            ->orderBy('id')
+            ->get();
+
+        // Grouped by line item for the multi-entry panel
+        $existingActualsGrouped = $allMonthActuals->groupBy('budget_line_item_id');
+
+        // First (primary) entry per line item — used for the batch save form fields
+        $existingActuals = $existingActualsGrouped->map(fn($entries) => $entries->first());
 
         // Group by category, then sort: revenue first, then expense, then others;
         // alphabetical by category name within each type; account code order within each category.
@@ -235,7 +258,7 @@ class ActualController extends Controller
 
         return view('actuals.entry', compact(
             'period', 'periods', 'departments', 'department', 'subsidiary',
-            'version', 'byCategory', 'existingActuals', 'ytdActuals',
+            'version', 'byCategory', 'existingActuals', 'existingActualsGrouped', 'ytdActuals',
             'month', 'year', 'lineRemaining',
             'monthStatus', 'approvalFlow'
         ));
@@ -776,11 +799,8 @@ class ActualController extends Controller
         // multi-stage flow (user → head → finance) when that setting is enabled.
         $user = auth()->user();
         if (\App\Services\SegregationService::enabled() && !$user->hasRole('department_user')) {
-            $recorders = BudgetActual::where('department_id',    $request->department_id)
-                ->where('budget_period_id', $request->period_id)
-                ->where('month',            $request->month)
-                ->where('year',             $request->year)
-                ->where('status',           'draft')
+            $recorders = $this->monthQuery($request)
+                ->where('status', 'draft')
                 ->pluck('recorded_by')
                 ->unique();
 
@@ -795,12 +815,9 @@ class ActualController extends Controller
 
         // Over-budget check — confirm is the point-of-no-return; block if any
         // expense draft would breach the budget cap when confirmed.
-        $drafts = BudgetActual::with(['lineItem.accountCode'])
-            ->where('department_id',    $request->department_id)
-            ->where('budget_period_id', $request->period_id)
-            ->where('month',            $request->month)
-            ->where('year',             $request->year)
-            ->where('status',           'draft')
+        $drafts = $this->monthQuery($request)
+            ->with(['lineItem.accountCode'])
+            ->where('status', 'draft')
             ->get();
 
         $checkMode       = \App\Models\SystemSetting::get('actuals_budget_check_mode', 'annual');
@@ -858,11 +875,8 @@ class ActualController extends Controller
             }
         }
 
-        $count = BudgetActual::where('department_id',    $request->department_id)
-            ->where('budget_period_id', $request->period_id)
-            ->where('month',            $request->month)
-            ->where('year',             $request->year)
-            ->where('status',           'draft')
+        $count = $this->monthQuery($request)
+            ->where('status', 'draft')
             ->update([
                 'status'      => 'confirmed',
                 'approved_by' => auth()->id(),
@@ -958,6 +972,189 @@ class ActualController extends Controller
 
         abort_unless((int) $requestedDeptId === (int) $user->department_id, 403,
             'You can only record actuals for your own department.');
+    }
+
+    // ── Multi-entry: add a single journal entry to a line item ───────────────
+
+    public function addEntry(Request $request)
+    {
+        $request->validate([
+            'period_id'     => ['required', 'exists:budget_periods,id'],
+            'department_id' => ['nullable', 'exists:departments,id'],
+            'subsidiary_id' => ['nullable', 'exists:subsidiaries,id'],
+            'line_item_id'  => ['required', 'exists:budget_line_items,id'],
+            'month'         => ['required', 'integer', 'min:1', 'max:12'],
+            'year'          => ['required', 'integer', 'min:2000', 'max:2100'],
+            'amount'        => ['required', 'numeric', 'min:0.01'],
+            'description'   => ['nullable', 'string', 'max:500'],
+            'reference'     => ['nullable', 'string', 'max:100'],
+            'entry_date'    => ['nullable', 'date'],
+        ]);
+
+        $this->assertDeptOwnership($request->department_id, $request->subsidiary_id);
+
+        $lineItem = BudgetLineItem::findOrFail($request->line_item_id);
+
+        BudgetActual::create([
+            'budget_line_item_id' => (int) $request->line_item_id,
+            'budget_period_id'    => (int) $request->period_id,
+            'department_id'       => $request->department_id ? (int) $request->department_id : null,
+            'subsidiary_id'       => $request->subsidiary_id ? (int) $request->subsidiary_id : null,
+            'account_code_id'     => $lineItem->account_code_id,
+            'month'               => (int) $request->month,
+            'year'                => (int) $request->year,
+            'amount'              => (float) $request->amount,
+            'description'         => $request->description,
+            'reference'           => $request->reference,
+            'entry_date'          => $request->entry_date,
+            'recorded_by'         => auth()->id(),
+            'status'              => 'draft',
+        ]);
+
+        $monthName = BudgetActual::MONTHS[(int) $request->month];
+
+        return redirect()->route('actuals.entry', [
+            'period_id'     => $request->period_id,
+            'department_id' => $request->department_id,
+            'subsidiary_id' => $request->subsidiary_id,
+            'month'         => $request->month,
+            'year'          => $request->year,
+        ])->with('success', "Entry added to {$monthName} {$request->year}.");
+    }
+
+    // ── Multi-entry: delete a single journal entry ────────────────────────────
+
+    public function deleteEntry(BudgetActual $actual)
+    {
+        $user = auth()->user();
+
+        if (!$user->hasAnyRole(['finance_reviewer', 'bdu_admin', 'super_admin'])) {
+            abort_unless(
+                ((int) $actual->department_id === (int) $user->department_id)
+                || ((int) $actual->subsidiary_id === (int) $user->subsidiary_id),
+                403
+            );
+        }
+
+        if ($actual->status !== 'draft') {
+            return back()->with('error', 'Only draft entries can be deleted. Reopen the month first.');
+        }
+
+        $actual->delete();
+
+        return back()->with('success', 'Entry deleted.');
+    }
+
+    // ── Actuals allocation: spread an amount across departments ──────────────
+
+    /**
+     * Show the allocation form.
+     * Finance/admin selects an account code + month, then enters per-department amounts.
+     */
+    public function allocate(Request $request)
+    {
+        $periods     = BudgetPeriod::orderByDesc('year')->get();
+        $period      = $request->period_id
+            ? BudgetPeriod::find($request->period_id)
+            : (BudgetPeriod::current() ?? $periods->first());
+
+        $month = (int) $request->get('month', now()->month);
+        $year  = (int) $request->get('year',  now()->year);
+
+        $accountCodes = collect();
+        $deptLines    = collect();
+
+        $selectedCode = $request->account_code_id
+            ? AccountCode::with('category')->find($request->account_code_id)
+            : null;
+
+        if ($period) {
+            // All account codes that appear in at least one approved budget for this period
+            $accountCodes = AccountCode::whereIn('id',
+                BudgetLineItem::join('budget_versions', 'budget_line_items.budget_version_id', '=', 'budget_versions.id')
+                    ->where('budget_versions.budget_period_id', $period->id)
+                    ->where('budget_versions.status', 'approved')
+                    ->pluck('budget_line_items.account_code_id')
+                    ->unique()
+            )->with('category')->orderBy('code')->get();
+        }
+
+        if ($period && $selectedCode) {
+            // Find all departments that have this code in their approved budget
+            $deptLines = BudgetLineItem::with(['budgetVersion.department'])
+                ->join('budget_versions', 'budget_line_items.budget_version_id', '=', 'budget_versions.id')
+                ->where('budget_versions.budget_period_id', $period->id)
+                ->where('budget_versions.status', 'approved')
+                ->where('budget_line_items.account_code_id', $selectedCode->id)
+                ->whereNotNull('budget_versions.department_id')
+                ->select('budget_line_items.*')
+                ->get();
+        }
+
+        return view('actuals.allocate', compact(
+            'period', 'periods', 'month', 'year',
+            'accountCodes', 'selectedCode', 'deptLines'
+        ));
+    }
+
+    /**
+     * Store the allocation — create one BudgetActual entry per selected department.
+     */
+    public function storeAllocation(Request $request)
+    {
+        $request->validate([
+            'period_id'       => ['required', 'exists:budget_periods,id'],
+            'month'           => ['required', 'integer', 'min:1', 'max:12'],
+            'year'            => ['required', 'integer', 'min:2000', 'max:2100'],
+            'account_code_id' => ['required', 'exists:account_codes,id'],
+            'entry_date'      => ['nullable', 'date'],
+            'allocations'     => ['required', 'array', 'min:1'],
+            'allocations.*.line_item_id' => ['required', 'exists:budget_line_items,id'],
+            'allocations.*.amount'       => ['nullable', 'numeric', 'min:0'],
+            'allocations.*.description'  => ['nullable', 'string', 'max:500'],
+            'allocations.*.reference'    => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $saved = 0;
+
+        DB::transaction(function () use ($request, &$saved) {
+            foreach ($request->allocations as $alloc) {
+                $amount = (float) ($alloc['amount'] ?? 0);
+                if ($amount <= 0) continue;
+
+                $lineItem = BudgetLineItem::find($alloc['line_item_id']);
+                if (!$lineItem) continue;
+
+                $version = $lineItem->budgetVersion;
+
+                BudgetActual::create([
+                    'budget_line_item_id' => $lineItem->id,
+                    'budget_period_id'    => (int) $request->period_id,
+                    'department_id'       => $version->department_id,
+                    'subsidiary_id'       => $version->subsidiary_id ?? null,
+                    'account_code_id'     => (int) $request->account_code_id,
+                    'month'               => (int) $request->month,
+                    'year'                => (int) $request->year,
+                    'amount'              => $amount,
+                    'description'         => $alloc['description'] ?? null,
+                    'reference'           => $alloc['reference']   ?? null,
+                    'entry_date'          => $request->entry_date,
+                    'recorded_by'         => auth()->id(),
+                    'status'              => 'draft',
+                ]);
+
+                $saved++;
+            }
+        });
+
+        $monthName = BudgetActual::MONTHS[(int) $request->month];
+
+        return redirect()->route('actuals.allocate', [
+            'period_id'       => $request->period_id,
+            'account_code_id' => $request->account_code_id,
+            'month'           => $request->month,
+            'year'            => $request->year,
+        ])->with('success', "Allocated to {$saved} department(s) for {$monthName} {$request->year}.");
     }
 
     /**

@@ -35,7 +35,7 @@ class ApprovedBudgetExport implements
                 $effective     = $original + $supplementary;
 
                 $rows->push([
-                    $v->department->name,
+                    $v->subsidiary?->name ?? $v->department?->name ?? '—',
                     $v->period->name,
                     $item->accountCode->category->name,
                     $item->accountCode->code,

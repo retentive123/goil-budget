@@ -6,6 +6,7 @@ use App\Models\BudgetActual;
 use App\Models\BudgetVersion;
 use App\Models\BudgetLineItem;
 use App\Models\BudgetPeriod;
+use App\Models\IncomeStatementConfig;
 
 class BudgetCalculationService
 {
@@ -16,9 +17,10 @@ class BudgetCalculationService
      */
     public function populateLineItems(BudgetVersion $version): void
     {
-        $department = $version->department;
+        // Support both department-owned and subsidiary-owned budget versions.
+        $entity = $version->subsidiary ?? $version->department;
 
-        if (!$department) {
+        if (!$entity) {
             return;
         }
 
@@ -29,10 +31,10 @@ class BudgetCalculationService
         $adminSetsRate = $period->adminSetsRate();
         $adminSetsFreq = $period->adminSetsFreq();
 
-        $accountCodes = $department->accountCodes()
-                                   ->where('account_codes.is_active', true)
-                                   ->with('category')
-                                   ->get();
+        $accountCodes = $entity->accountCodes()
+                               ->where('account_codes.is_active', true)
+                               ->with('category')
+                               ->get();
 
         // Pre-load per-period rate snapshots so we don't N+1 inside the loop.
         // Fallback chain: period code rate → global code rate
@@ -56,22 +58,25 @@ class BudgetCalculationService
             $pCode = $periodCodeRates[$code->id] ?? null;
             $pCat  = $periodCatRates[$code->account_category_id] ?? null;
 
-            // When admin controls rate/freq, the final fallback is 1 (not null/0)
-            // so a line item is never silently zeroed when no defaults are configured.
-            $defaultRate = ($calcMode !== 'none' && $adminSetsRate)
+            // Always use period/global rates as editable defaults when calc mode is active.
+            // adminSetsRate only controls whether the input is readonly (locked); the default
+            // is populated regardless so users see the suggested value, not a blank.
+            // When admin locks the rate, fall back to 1 (never zero a locked field);
+            // when not locked, fall back to null (user fills in their own value).
+            $defaultRate = $calcMode !== 'none'
                 ? ($pCode?->default_rate
                     ?? $code->default_rate
                     ?? $pCat?->default_rate
                     ?? $code->category->default_rate
-                    ?? 1)
+                    ?? ($adminSetsRate ? 1 : null))
                 : null;
 
-            $defaultFreq = ($calcMode === 'qty_rate_freq' && $adminSetsFreq)
+            $defaultFreq = $calcMode === 'qty_rate_freq'
                 ? ($pCode?->default_frequency
                     ?? $code->default_frequency
                     ?? $pCat?->default_frequency
                     ?? $code->category->default_frequency
-                    ?? 1)
+                    ?? ($adminSetsFreq ? 1 : null))
                 : null;
 
             BudgetLineItem::firstOrCreate(
@@ -91,30 +96,47 @@ class BudgetCalculationService
                 ]
             );
 
-            // When admin locks rate or freq, sync the line item's stored value with
-            // the period-specific rates (or fall back to global) so it stays current
-            // if the admin edits rates later via the period rate manager.
+            // Sync rate/frequency into existing draft line items:
+            // - When admin LOCKS the value: always overwrite so the latest period rate is used.
+            // - When not locked: only fill in NULL values (don't overwrite what the user typed).
             // IMPORTANT: Only do this for DRAFT versions — submitted/approved budgets
             // must retain the rates that were in effect when they were entered.
-            if ($calcMode !== 'none'
-                && ($adminSetsRate || $adminSetsFreq)
-                && $version->status === BudgetVersion::STATUS_DRAFT)
-            {
+            if ($calcMode !== 'none' && $version->status === BudgetVersion::STATUS_DRAFT) {
                 $updates = [];
 
-                if ($adminSetsRate)
-                    $updates['rate'] = $pCode?->default_rate
-                        ?? $code->default_rate
-                        ?? $pCat?->default_rate
-                        ?? $code->category->default_rate
-                        ?? 1;
+                $periodRate = $pCode?->default_rate
+                    ?? $code->default_rate
+                    ?? $pCat?->default_rate
+                    ?? $code->category->default_rate;
 
-                if ($calcMode === 'qty_rate_freq' && $adminSetsFreq)
-                    $updates['frequency'] = $pCode?->default_frequency
+                $periodFreq = $calcMode === 'qty_rate_freq'
+                    ? ($pCode?->default_frequency
                         ?? $code->default_frequency
                         ?? $pCat?->default_frequency
-                        ?? $code->category->default_frequency
-                        ?? 1;
+                        ?? $code->category->default_frequency)
+                    : null;
+
+                if ($adminSetsRate && $periodRate !== null) {
+                    // Locked: always overwrite with the period rate (or 1 if none set).
+                    $updates['rate'] = $periodRate ?? 1;
+                } elseif (!$adminSetsRate && $periodRate !== null) {
+                    // Not locked: fill in null/zero cells — don't overwrite a value the user typed.
+                    BudgetLineItem::where('budget_version_id', $version->id)
+                        ->where('account_code_id', $code->id)
+                        ->where(fn($q) => $q->whereNull('rate')->orWhere('rate', 0))
+                        ->update(['rate' => $periodRate]);
+                }
+
+                if ($calcMode === 'qty_rate_freq') {
+                    if ($adminSetsFreq && $periodFreq !== null) {
+                        $updates['frequency'] = $periodFreq ?? 1;
+                    } elseif (!$adminSetsFreq && $periodFreq !== null) {
+                        BudgetLineItem::where('budget_version_id', $version->id)
+                            ->where('account_code_id', $code->id)
+                            ->where(fn($q) => $q->whereNull('frequency')->orWhere('frequency', 0))
+                            ->update(['frequency' => $periodFreq]);
+                    }
+                }
 
                 if (!empty($updates)) {
                     BudgetLineItem::where('budget_version_id', $version->id)
@@ -307,7 +329,10 @@ public function isOverBudget(int $departmentId, int $periodId): array
 
         if ($prevPeriod) {
             $prevActuals = BudgetActual::where('budget_period_id', $prevPeriod->id)
-                ->where('department_id', $version->department_id)
+                ->when($version->subsidiary_id,
+                    fn($q) => $q->where('subsidiary_id', $version->subsidiary_id),
+                    fn($q) => $q->where('department_id', $version->department_id)
+                )
                 ->where('status', 'confirmed')
                 ->selectRaw('account_code_id, sum(amount) as total')
                 ->groupBy('account_code_id')
@@ -316,7 +341,10 @@ public function isOverBudget(int $departmentId, int $periodId): array
                 ->toArray();
 
             $prevVersionIds = BudgetVersion::where('budget_period_id', $prevPeriod->id)
-                ->where('department_id', $version->department_id)
+                ->when($version->subsidiary_id,
+                    fn($q) => $q->where('subsidiary_id', $version->subsidiary_id),
+                    fn($q) => $q->where('department_id', $version->department_id)
+                )
                 ->where('status', 'approved')
                 ->pluck('id');
 
@@ -456,5 +484,220 @@ public function isOverBudget(int $departmentId, int $periodId): array
         }
 
         return $this->isDeadlinePassed($periodId, $departmentId);
+    }
+
+    // ── Configured P&L statement builder ──────────────────────────────────────
+    // Builds the structured income statement array used by both the Financial
+    // Report and the budget P&L entry/review view.
+    public function buildConfiguredStatement(
+        IncomeStatementConfig $config,
+        $versions,
+        BudgetPeriod $period,
+        ?int $deptId,
+        ?BudgetPeriod $prevPeriod = null,
+        ?int $subsidiaryId = null
+    ): array {
+        // Effective budget amounts by sub_category_id from provided versions
+        $budgetBySubCat = [];
+        foreach ($versions as $version) {
+            foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
+                $subCatId = $item->accountCode->category->account_sub_category_id ?? null;
+                if (!$subCatId) continue;
+                $eff = $item->total_amount + $item->approvedSupplementaryTotal();
+                $budgetBySubCat[$subCatId] = ($budgetBySubCat[$subCatId] ?? 0) + $eff;
+            }
+        }
+
+        // YTD confirmed actuals by sub_category_id
+        $actualsBySubCat = BudgetActual::where('budget_period_id', $period->id)
+            ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+            ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
+            ->where('status', 'confirmed')
+            ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
+            ->join('account_categories', 'account_codes.account_category_id', '=', 'account_categories.id')
+            ->whereNotNull('account_categories.account_sub_category_id')
+            ->selectRaw('account_categories.account_sub_category_id as sc, SUM(budget_actuals.amount) as total')
+            ->groupBy('account_categories.account_sub_category_id')
+            ->pluck('total', 'sc')
+            ->toArray();
+
+        // Prev-period data
+        $prevBudgetBySubCat  = [];
+        $prevActualsBySubCat = [];
+        if ($prevPeriod) {
+            $prevVersions = BudgetVersion::where('budget_period_id', $prevPeriod->id)
+                ->where('status', 'approved')
+                ->where('is_revision', false)
+                ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+                ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
+                ->get();
+
+            foreach ($prevVersions as $pv) {
+                foreach ($pv->lineItems()->with('accountCode.category')->get() as $item) {
+                    $subCatId = $item->accountCode->category->account_sub_category_id ?? null;
+                    if (!$subCatId) continue;
+                    $eff = $item->total_amount + $item->approvedSupplementaryTotal();
+                    $prevBudgetBySubCat[$subCatId] = ($prevBudgetBySubCat[$subCatId] ?? 0) + $eff;
+                }
+            }
+
+            $prevActualsBySubCat = BudgetActual::where('budget_period_id', $prevPeriod->id)
+                ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
+                ->when($subsidiaryId, fn($q) => $q->where('subsidiary_id', $subsidiaryId))
+                ->where('status', 'confirmed')
+                ->join('account_codes', 'budget_actuals.account_code_id', '=', 'account_codes.id')
+                ->join('account_categories', 'account_codes.account_category_id', '=', 'account_categories.id')
+                ->whereNotNull('account_categories.account_sub_category_id')
+                ->selectRaw('account_categories.account_sub_category_id as sc, SUM(budget_actuals.amount) as total')
+                ->groupBy('account_categories.account_sub_category_id')
+                ->pluck('total', 'sc')
+                ->toArray();
+        }
+
+        $cs = fn(float $val, float $base): ?float =>
+            $base != 0 ? round($val / $base * 100, 1) : null;
+
+        // Pre-pass: record the running total at each subtotal point
+        $subtotalRunBudgets     = [];
+        $subtotalRunPrevBudgets = [];
+        {
+            $tmpBud  = 0.0;
+            $tmpPrev = 0.0;
+            foreach ($config->lines as $ln) {
+                if ($ln->line_type === 'sub_category') {
+                    $sign     = $ln->operator === 'subtract' ? -1 : 1;
+                    $tmpBud  += $sign * (float)($budgetBySubCat[$ln->sub_category_id]     ?? 0);
+                    $tmpPrev += $sign * (float)($prevBudgetBySubCat[$ln->sub_category_id] ?? 0);
+                } elseif ($ln->line_type === 'subtotal' && $ln->label) {
+                    $subtotalRunBudgets[$ln->label]     = $tmpBud;
+                    $subtotalRunPrevBudgets[$ln->label] = $tmpPrev;
+                }
+            }
+        }
+
+        $hasCs         = false;
+        $csBases       = [];
+        $lines         = [];
+        $runBudget     = 0.0;
+        $runActual     = 0.0;
+        $runPrevBudget = 0.0;
+        $runPrevActual = 0.0;
+
+        foreach ($config->lines as $line) {
+            if ($line->line_type === 'sub_category') {
+                $scId    = $line->sub_category_id;
+                $budget  = (float)($budgetBySubCat[$scId]      ?? 0);
+                $actual  = (float)($actualsBySubCat[$scId]     ?? 0);
+                $prevBud = (float)($prevBudgetBySubCat[$scId]  ?? 0);
+                $prevAct = (float)($prevActualsBySubCat[$scId] ?? 0);
+                $sign    = $line->operator === 'subtract' ? -1 : 1;
+
+                $runBudget     += $sign * $budget;
+                $runActual     += $sign * $actual;
+                $runPrevBudget += $sign * $prevBud;
+                $runPrevActual += $sign * $prevAct;
+
+                $isExpense = $line->operator === 'subtract';
+                $variance  = $isExpense ? $budget - $actual : $actual - $budget;
+                $pct       = $budget != 0 ? round(($variance / abs($budget)) * 100, 1) : 0;
+                $prevVar   = $isExpense ? $prevBud - $prevAct : $prevAct - $prevBud;
+                $prevPct   = $prevBud != 0 ? round(($prevVar / abs($prevBud)) * 100, 1) : 0;
+                $growthPct = $prevAct != 0 ? round((($actual - $prevAct) / abs($prevAct)) * 100, 1) : null;
+
+                $displayLabel = $line->label
+                    ?: (($line->operator === 'subtract' ? 'Less: ' : '') . ($line->subCategory?->name ?? ''));
+
+                $csBaseId    = $line->cs_base_sub_category_id;
+                $csBaseLabel = $line->cs_base_subtotal_label;
+                if ($csBaseId) {
+                    $csBaseBud = (float)($budgetBySubCat[$csBaseId]     ?? 0);
+                    $csPrevBud = (float)($prevBudgetBySubCat[$csBaseId] ?? 0);
+                } elseif ($csBaseLabel) {
+                    $csBaseBud = (float)($subtotalRunBudgets[$csBaseLabel]     ?? 0);
+                    $csPrevBud = (float)($subtotalRunPrevBudgets[$csBaseLabel] ?? 0);
+                } else {
+                    $csBaseBud = 0;
+                    $csPrevBud = 0;
+                }
+
+                if ($csBaseId || $csBaseLabel) {
+                    $hasCs = true;
+                    $csBases[$scId] = ['bud' => $csBaseBud, 'prev' => $csPrevBud];
+                }
+
+                $lines[] = [
+                    'type'        => 'sub_category',
+                    'label'       => $displayLabel,
+                    'operator'    => $line->operator,
+                    'sub_cat_id'  => $scId,
+                    'budget'      => $budget,
+                    'actual'      => $actual,
+                    'prev_budget' => $prevBud,
+                    'prev_actual' => $prevAct,
+                    'variance'    => $variance,
+                    'pct'         => $pct,
+                    'prev_var'    => $prevVar,
+                    'prev_pct'    => $prevPct,
+                    'growth_pct'  => $growthPct,
+                    'cs_bud'      => $cs($budget,  $csBaseBud),
+                    'cs_prev_bud' => $cs($prevBud, $csPrevBud),
+                ];
+
+            } elseif ($line->line_type === 'subtotal') {
+                $variance  = $runActual - $runBudget;
+                $pct       = $runBudget != 0 ? round(($variance / abs($runBudget)) * 100, 1) : 0;
+                $prevVar   = $runPrevActual - $runPrevBudget;
+                $prevPct   = $runPrevBudget != 0 ? round(($prevVar / abs($runPrevBudget)) * 100, 1) : 0;
+                $growthPct = $runPrevActual != 0
+                    ? round((($runActual - $runPrevActual) / abs($runPrevActual)) * 100, 1) : null;
+
+                $stCsBaseId    = $line->cs_base_sub_category_id;
+                $stCsBaseLabel = $line->cs_base_subtotal_label;
+                if ($stCsBaseId) {
+                    $stCsBaseBud = (float)($budgetBySubCat[$stCsBaseId]     ?? 0);
+                    $stCsPrevBud = (float)($prevBudgetBySubCat[$stCsBaseId] ?? 0);
+                } elseif ($stCsBaseLabel) {
+                    $stCsBaseBud = (float)($subtotalRunBudgets[$stCsBaseLabel]     ?? 0);
+                    $stCsPrevBud = (float)($subtotalRunPrevBudgets[$stCsBaseLabel] ?? 0);
+                } else {
+                    $stCsBaseBud = 0;
+                    $stCsPrevBud = 0;
+                }
+                if ($stCsBaseId || $stCsBaseLabel) {
+                    $hasCs = true;
+                }
+
+                $lines[] = [
+                    'type'        => 'subtotal',
+                    'label'       => $line->label ?? 'Subtotal',
+                    'budget'      => $runBudget,
+                    'actual'      => $runActual,
+                    'prev_budget' => $runPrevBudget,
+                    'prev_actual' => $runPrevActual,
+                    'variance'    => $variance,
+                    'pct'         => $pct,
+                    'prev_var'    => $prevVar,
+                    'prev_pct'    => $prevPct,
+                    'growth_pct'  => $growthPct,
+                    'cs_bud'      => $cs($runBudget,     $stCsBaseBud),
+                    'cs_prev_bud' => $cs($runPrevBudget, $stCsPrevBud),
+                ];
+
+            } else { // spacer
+                $lines[] = ['type' => 'spacer'];
+            }
+        }
+
+        return [
+            'lines'          => $lines,
+            'has_cs'         => $hasCs,
+            'cs_bases'       => $csBases,
+            'final_budget'   => $runBudget,
+            'final_actual'   => $runActual,
+            'final_prev_bud' => $runPrevBudget,
+            'final_prev_act' => $runPrevActual,
+            'final_cs_bud'   => null,
+            'final_cs_prev'  => null,
+        ];
     }
 }

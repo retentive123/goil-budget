@@ -48,7 +48,7 @@
                     <div>
                         <h5 class="fw-bold mb-0" style="color:#fff">Confirm Submission</h5>
                         <p class="mb-0" style="font-size:13px;color:rgba(255,255,255,.85)">
-                            {{ $budgetVersion->department->name }} &middot;
+                            {{ $budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name }} &middot;
                             {{ $budgetVersion->period->name }} &middot;
                             Version {{ $budgetVersion->version_number }}
                         </p>
@@ -556,7 +556,7 @@
             </div>
 
             {{-- ── Submission Form ──────────────────────────────────────── --}}
-            <form method="POST" action="{{ route('budget.submit', $budgetVersion) }}">
+            <form method="POST" action="{{ route('budget.submit', $budgetVersion) }}" id="budgetSubmitForm">
                 @csrf
                 <div class="mb-4">
                     <label class="form-label fw-semibold" style="color:#1B2A4A;font-size:13px">
@@ -573,7 +573,7 @@
                 </div>
 
                 <div class="d-flex gap-2 flex-wrap">
-                    <button type="submit" class="btn px-4 py-2 fw-semibold"
+                    <button type="button" id="btnConfirmSubmit" class="btn px-4 py-2 fw-semibold"
                             style="background:#E65C00;color:#fff;border-radius:10px;border:none">
                         <i class="bi bi-send"></i> Confirm &amp; Submit
                     </button>
@@ -632,6 +632,25 @@ function toggleCatItems(row) {
     items.forEach(r => r.style.display = isOpen ? 'none' : '');
     if (icon) icon.style.transform = isOpen ? '' : 'rotate(90deg)';
 }
+
+document.getElementById('btnConfirmSubmit').addEventListener('click', function () {
+    Swal.fire({
+        title: 'Submit Budget?',
+        html: '<div style="font-size:14px;color:#475569">You are about to submit this budget for approval.<br><br><strong style="color:#92400E">Once submitted, you will not be able to make further edits</strong> unless it is rejected and returned for revision.</div>',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#E65C00',
+        cancelButtonColor: '#94A3B8',
+        confirmButtonText: '<i class="bi bi-send"></i> Yes, Submit Now',
+        cancelButtonText: 'Cancel',
+        reverseButtons: true,
+        focusCancel: true,
+    }).then(function (result) {
+        if (result.isConfirmed) {
+            document.getElementById('budgetSubmitForm').submit();
+        }
+    });
+});
 </script>
 @endpush
 

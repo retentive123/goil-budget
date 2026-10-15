@@ -126,7 +126,7 @@
                                 {{ $item->budgetVersion->period->name }}
                             </td>
                             <td class="small">
-                                {{ $item->budgetVersion->department->name }}
+                                {{ $item->budgetVersion->subsidiary?->name ?? $item->budgetVersion->department?->name }}
                             </td>
                             <td class="text-end small">{{ number_format($item->q1_amount,0) }}</td>
                             <td class="text-end small">{{ number_format($item->q2_amount,0) }}</td>

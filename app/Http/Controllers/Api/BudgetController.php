@@ -55,7 +55,7 @@ class BudgetController extends Controller
             'id'             => $budget->id,
             'version_number' => $budget->version_number,
             'status'         => $budget->status,
-            'department'     => $budget->department->only('id','name','code'),
+            'department'     => ($budget->subsidiary ?? $budget->department)?->only('id','name','code'),
             'period'         => $budget->period->only('id','name','year','status'),
             'submitted_by'   => $budget->submittedBy?->only('id','name','email'),
             'submitted_at'   => $budget->submitted_at?->toISOString(),

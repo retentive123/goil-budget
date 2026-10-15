@@ -9,13 +9,22 @@
             Record monthly actual spend against approved budgets
         </p>
     </div>
-    @can('view all budgets')
-    <a href="{{ route('actuals.overview') }}"
-       class="btn btn-sm"
-       style="background:var(--navy);color:#fff;border-radius:8px">
-        Full Overview →
-    </a>
-    @endcan
+    <div class="d-flex gap-2">
+        @can('approve budget')
+        <a href="{{ route('actuals.allocate', ['period_id' => $period?->id]) }}"
+           class="btn btn-sm btn-outline-secondary"
+           style="border-radius:8px">
+            <i class="fas fa-sitemap me-1"></i> Allocate to Departments
+        </a>
+        @endcan
+        @can('view all budgets')
+        <a href="{{ route('actuals.overview') }}"
+           class="btn btn-sm"
+           style="background:var(--navy);color:#fff;border-radius:8px">
+            Full Overview →
+        </a>
+        @endcan
+    </div>
 </div>
 
 {{-- ── Pending Approvals Queue (multi-stage flow) ── --}}
@@ -64,7 +73,7 @@
             @foreach($pendingApprovals as $item)
             @php
                 $dept    = $item->department;
-                $deptName = $dept?->name ?? '—';
+                $deptName = $item->subsidiary?->name ?? $dept?->name ?? '—';
                 $mName   = \App\Models\BudgetActual::MONTHS[$item->month] ?? "Month {$item->month}";
                 $entryUrl = route('actuals.entry', [
                     'period_id'     => $item->budget_period_id,
@@ -128,12 +137,17 @@
     </div>
 </form>
 
-@if($department && $period)
+@php
+    $indexEntity = ($subsidiary ?? null) ?? ($department ?? null);
+    $indexEntityName = $indexEntity?->name;
+@endphp
+
+@if($indexEntity && $period)
 
 {{-- Monthly summary grid --}}
 <div class="chart-card mb-4">
     <div class="chart-title">
-        {{ $department->name }} — {{ $period->name }} Monthly Summary
+        {{ $indexEntityName }} — {{ $period->name }} Monthly Summary
     </div>
 
     @php
@@ -154,12 +168,13 @@
             $sd             = $st ? ($statusDisplay[$st] ?? null) : null;
         @endphp
         <div class="col-md-2 col-4">
-            <a href="{{ route('actuals.entry', [
+            <a href="{{ route('actuals.entry', array_filter([
                     'period_id'     => $period->id,
-                    'department_id' => $department->id,
+                    'department_id' => $department?->id,
+                    'subsidiary_id' => ($subsidiary??null)?->id,
                     'month'         => $m,
                     'year'          => $period->year,
-                ]) }}"
+                ])) }}"
                style="text-decoration:none">
                 <div style="border:1px solid {{ $sd ? $sd['color'] : ($isCurrentMonth ? 'var(--navy)' : 'var(--border)') }};
                             border-radius:10px;padding:12px;text-align:center;
@@ -211,12 +226,13 @@
     <div class="row g-2">
         @foreach(\App\Models\BudgetActual::MONTHS as $m => $name)
         <div class="col-md-3">
-            <a href="{{ route('actuals.entry', [
+            <a href="{{ route('actuals.entry', array_filter([
                     'period_id'     => $period->id,
-                    'department_id' => $department->id,
+                    'department_id' => $department?->id,
+                    'subsidiary_id' => ($subsidiary??null)?->id,
                     'month'         => $m,
                     'year'          => $period->year,
-                ]) }}"
+                ])) }}"
                class="btn btn-sm w-100 text-start"
                style="background:{{ $monthlySummary[$m]['has_data'] ? '#D1FAE5' : 'var(--surface)' }};
                       border:1px solid var(--border);border-radius:8px;

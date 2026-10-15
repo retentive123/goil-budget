@@ -195,8 +195,12 @@ class BudgetEntryController extends Controller
     }
 
     // Show the budget entry form
-    public function show(BudgetVersion $budgetVersion)
+    public function show(BudgetVersion $budgetVersion, Request $request)
     {
+        if (!$request->boolean('classic')) {
+            return redirect()->route('budget.show-pnl', $budgetVersion);
+        }
+
         $this->authorizeBudgetAccess($budgetVersion);
 
         // Sync any account codes assigned to the dept after this version was created
@@ -256,7 +260,25 @@ class BudgetEntryController extends Controller
         $pnlData   = $this->calculator->buildPnlData($budgetVersion, $prevPeriod);
         $entryMode = $budgetVersion->period->entry_mode ?? 'quarterly';
 
-        return view('budget.show-pnl', compact('budgetVersion', 'grandTotals', 'prevPeriod', 'pnlData', 'entryMode'));
+        $activeConfig = \App\Models\IncomeStatementConfig::where('is_active', true)
+            ->with('lines.subCategory', 'lines.csBase')
+            ->first();
+
+        $configuredStatement = $activeConfig
+            ? $this->calculator->buildConfiguredStatement(
+                $activeConfig,
+                collect([$budgetVersion]),
+                $period,
+                $budgetVersion->department_id,
+                $prevPeriod,
+                $budgetVersion->subsidiary_id
+              )
+            : null;
+
+        return view('budget.show-pnl', compact(
+            'budgetVersion', 'grandTotals', 'prevPeriod', 'pnlData', 'entryMode',
+            'activeConfig', 'configuredStatement'
+        ));
     }
 
     // Save line item amounts (auto-save via AJAX)

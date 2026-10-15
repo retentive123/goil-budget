@@ -390,9 +390,13 @@ Route::middleware('auth')->group(function () {
         });
 
         Route::middleware('permission:approve budget|create budget')->group(function () {
-            Route::post('/store',    [ActualController::class, 'store'])->name('store');
-            Route::post('/autosave', [ActualController::class, 'autosave'])->name('autosave');
-            Route::post('/confirm',  [ActualController::class, 'confirm'])->name('confirm');
+            Route::post('/store',        [ActualController::class, 'store'])->name('store');
+            Route::post('/autosave',     [ActualController::class, 'autosave'])->name('autosave');
+            Route::post('/confirm',      [ActualController::class, 'confirm'])->name('confirm');
+            Route::post('/add-entry',    [ActualController::class, 'addEntry'])->name('entry.add');
+            Route::delete('/entries/{actual}', [ActualController::class, 'deleteEntry'])->name('entry.delete');
+            Route::get('/allocate',      [ActualController::class, 'allocate'])->name('allocate');
+            Route::post('/allocate',     [ActualController::class, 'storeAllocation'])->name('storeAllocation');
         });
 
         // Multi-stage approval workflow routes

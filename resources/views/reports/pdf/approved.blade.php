@@ -125,7 +125,7 @@
             @foreach($versions as $v)
             <tr style="background:#F1F5F9">
                 <td colspan="{{ $colspan }}" style="padding:6px;font-weight:bold">
-                    {{ $v->department->name }} — {{ $v->period->name }}
+                    {{ $v->subsidiary?->name ?? $v->department?->name }} — {{ $v->period->name }}
                 </td>
             </tr>
             @foreach($v->lineItems as $item)

@@ -89,6 +89,58 @@
 <form method="POST" action="{{ route('admin.budget-periods.rates.update', $budgetPeriod) }}">
     @csrf @method('PUT')
 
+    {{-- Apply-to-All bar --}}
+    <div class="d-flex align-items-end gap-3 flex-wrap mb-3 p-3 rounded"
+         style="background:#F5F3FF;border:1px solid #DDD6FE">
+        <div style="font-size:12px;font-weight:700;color:#4C1D95;white-space:nowrap">
+            <i class="bi bi-lightning-fill me-1"></i> Apply to All
+        </div>
+
+        {{-- Rate --}}
+        <div class="d-flex align-items-end gap-2">
+            <div>
+                <label style="font-size:10px;font-weight:600;color:#6D28D9;display:block;margin-bottom:2px">
+                    Rate (all categories &amp; codes)
+                </label>
+                <input type="number" id="applyAllRate" step="any" min="0"
+                       class="form-control form-control-sm"
+                       style="width:110px;border-color:#7C3AED"
+                       placeholder="e.g. 1">
+            </div>
+            <button type="button" onclick="applyToAll('rate')"
+                    class="btn btn-sm"
+                    style="background:#7C3AED;color:#fff;white-space:nowrap">
+                Apply Rate
+            </button>
+        </div>
+
+        @if($showFreq)
+        {{-- Freq --}}
+        <div class="d-flex align-items-end gap-2">
+            <div>
+                <label style="font-size:10px;font-weight:600;color:#1D4ED8;display:block;margin-bottom:2px">
+                    Frequency (all categories &amp; codes)
+                </label>
+                <input type="number" id="applyAllFreq" step="any" min="0"
+                       class="form-control form-control-sm"
+                       style="width:110px;border-color:#3B82F6"
+                       placeholder="e.g. 12">
+            </div>
+            <button type="button" onclick="applyToAll('freq')"
+                    class="btn btn-sm"
+                    style="background:#1D4ED8;color:#fff;white-space:nowrap">
+                Apply Freq
+            </button>
+        </div>
+        @endif
+
+        <button type="button" onclick="clearAll()"
+                class="btn btn-sm btn-outline-secondary ms-auto"
+                style="font-size:12px;white-space:nowrap">
+            <i class="bi bi-x-circle me-1"></i>Clear All
+        </button>
+    </div>
+
     {{-- Expand / Collapse All --}}
     <div class="d-flex justify-content-end gap-2 mb-2">
         <button type="button" class="btn btn-sm btn-outline-secondary"
@@ -393,6 +445,32 @@ autoExpand.forEach(id => {
     if (tbody)   tbody.style.display = 'table-row-group';
     if (chevron) chevron.style.transform = 'rotate(90deg)';
 });
+
+// ── Apply a single value to every rate or freq input ─────────────────────────
+function applyToAll(field) {
+    const srcId  = field === 'rate' ? 'applyAllRate' : 'applyAllFreq';
+    const cls    = field === 'rate' ? 'period-rate-input' : 'period-freq-input';
+    const val    = document.getElementById(srcId)?.value?.trim();
+
+    if (!val || isNaN(parseFloat(val))) {
+        alert('Enter a value first.');
+        return;
+    }
+
+    document.querySelectorAll('.' + cls).forEach(input => {
+        input.value = val;
+        input.dispatchEvent(new Event('input'));   // trigger live badge update
+    });
+}
+
+// ── Clear all period rate + freq inputs ───────────────────────────────────────
+function clearAll() {
+    if (!confirm('Clear all period-specific rates and frequencies?')) return;
+    document.querySelectorAll('.period-rate-input, .period-freq-input').forEach(input => {
+        input.value = '';
+        input.dispatchEvent(new Event('input'));
+    });
+}
 
 // ── Live-update Effective badge as the user types ─────────────────────────────
 document.querySelectorAll('.period-rate-input, .period-freq-input').forEach(input => {

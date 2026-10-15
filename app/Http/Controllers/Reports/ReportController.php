@@ -73,8 +73,8 @@ public function executive(Request $request)
         $effective = $original + $supplementary;
 
         $row = [
-            'name'         => $v->department->name,
-            'code'         => $v->department->code,
+            'name'         => $v->subsidiary?->name ?? $v->department?->name ?? '—',
+            'code'         => $v->subsidiary?->code ?? $v->department?->code ?? '—',
             'q1'           => $v->lineItems->sum('q1_amount'),
             'q2'           => $v->lineItems->sum('q2_amount'),
             'q3'           => $v->lineItems->sum('q3_amount'),
@@ -519,7 +519,7 @@ public function deptComparison(Request $request)
     $versionIds  = $versions->pluck('id');
     $deptBudgets = [];
     foreach ($versions as $v) {
-        $dName = $v->department->name ?? 'Unknown';
+        $dName = $v->subsidiary?->name ?? $v->department?->name ?? 'Unknown';
         if (!isset($deptBudgets[$dName])) $deptBudgets[$dName] = 0;
         foreach ($v->lineItems as $item) {
             $deptBudgets[$dName] += $item->effectiveBudget();
@@ -586,7 +586,10 @@ public function deptComparison(Request $request)
         $utilisation = $versions->map(function ($v) {
             $approved = $v->lineItems->sum('total_amount');
 
-            $actual = \App\Models\BudgetActual::where('department_id', $v->department_id)
+            $actual = \App\Models\BudgetActual::when($v->subsidiary_id,
+                    fn($q) => $q->where('subsidiary_id', $v->subsidiary_id),
+                    fn($q) => $q->where('department_id', $v->department_id)
+                )
                 ->where('budget_period_id', $v->period->id)
                 ->where('status', 'confirmed')
                 ->sum('amount');
@@ -614,8 +617,8 @@ public function deptComparison(Request $request)
             })->values();
 
             return [
-                'department'      => $v->department->name,
-                'code'            => $v->department->code,
+                'department'      => $v->subsidiary?->name ?? $v->department?->name ?? '—',
+                'code'            => $v->subsidiary?->code ?? $v->department?->code ?? '—',
                 'approved'        => $approved,
                 'actual'          => $actual,
                 'utilisation_pct' => $pct,

@@ -1,20 +1,24 @@
 @extends('layouts.app')
-@section('title', 'Budget P&L — ' . $budgetVersion->department->name)
+@section('title', 'Budget P&L — ' . ($budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name))
 @section('content')
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div class="d-flex align-items-center gap-2">
         <a href="{{ route('budgets.index') }}" class="text-muted text-decoration-none small">← All Budgets</a>
         <span class="text-muted">/</span>
+        @if($budgetVersion->department)
         <a href="{{ route('budgets.department', $budgetVersion->department) }}" class="text-muted text-decoration-none small">
             {{ $budgetVersion->department->name }}
         </a>
+        @else
+        <span class="text-muted small">{{ $budgetVersion->subsidiary?->name }}</span>
+        @endif
         <span class="text-muted">/</span>
         <span class="small">v{{ $budgetVersion->version_number }} — {{ $budgetVersion->period->name }}</span>
     </div>
     <div class="d-flex align-items-center gap-2">
         <div class="btn-group btn-group-sm" role="group">
-            <a href="{{ route('budgets.show', $budgetVersion) }}" class="btn btn-outline-secondary">Classic View</a>
+            <a href="{{ route('budgets.show', $budgetVersion) }}?classic=1" class="btn btn-outline-secondary">Classic View</a>
             <span class="btn btn-secondary" style="pointer-events:none;">P&amp;L View</span>
         </div>
         <div class="dropdown">
@@ -56,7 +60,7 @@
     <div class="row align-items-center">
         <div class="col">
             <div style="font-size:19px;font-weight:700;color:var(--navy)">
-                {{ $budgetVersion->department->name }}
+                {{ $budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name }}
             </div>
             <div style="font-size:13px;color:var(--slate);margin-top:4px">
                 {{ $budgetVersion->period->name }} &middot; Version {{ $budgetVersion->version_number }}
@@ -471,11 +475,13 @@
                     <i class="bi bi-clock-history me-2"></i>Full Approval History
                 </a>
 
+                @if($budgetVersion->department)
                 <a href="{{ route('budgets.department', $budgetVersion->department) }}" class="btn btn-sm text-start"
                    style="background:var(--surface);border:1px solid var(--border);
                           border-radius:8px;padding:10px 14px;font-size:13px;color:var(--navy)">
                     <i class="bi bi-building me-2"></i>All Versions — {{ $budgetVersion->department->name }}
                 </a>
+                @endif
 
                 <a href="{{ route('reports.department', ['department_id'=>$budgetVersion->department_id,'period_id'=>$budgetVersion->budget_period_id]) }}"
                    class="btn btn-sm text-start"

@@ -56,7 +56,7 @@
     <td>
         <div class="d-flex gap-1">
             @if($latest)
-            <a href="{{ route('budgets.show', $latest) }}"
+            <a href="{{ route('budgets.show-pnl', $latest) }}"
                class="btn btn-sm"
                style="background:#1B2A4A;color:#fff;font-size:11px;border-radius:6px;padding:3px 12px">
                 View

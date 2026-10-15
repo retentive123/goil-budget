@@ -18,6 +18,7 @@ class BudgetActual extends Model
         'account_code_id',
         'month',
         'year',
+        'entry_date',
         'amount',
         'description',
         'reference',
@@ -36,6 +37,7 @@ class BudgetActual extends Model
         'year'              => 'integer',
         'submitted_at'      => 'datetime',
         'head_confirmed_at' => 'datetime',
+        'entry_date'        => 'date',
     ];
 
     /** Human-readable labels for every possible status value. */
@@ -74,6 +76,11 @@ class BudgetActual extends Model
     public function department()
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function subsidiary()
+    {
+        return $this->belongsTo(\App\Models\Subsidiary::class);
     }
 
     public function accountCode()

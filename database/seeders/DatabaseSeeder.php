@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
             EmailTemplateSeeder::class,
             GoilDataSeeder::class,
             SystemSettingsSeeder::class,
+            SubsidiarySeeder::class,
         ]);
     }
 }

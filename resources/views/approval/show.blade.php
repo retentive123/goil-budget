@@ -6,7 +6,7 @@
     <div class="d-flex align-items-center gap-2">
         <a href="{{ route('approvals.index') }}" class="text-muted text-decoration-none">Approvals</a>
         <span class="text-muted">/</span>
-        <span>{{ $budgetVersion->department->name }} — v{{ $budgetVersion->version_number }}</span>
+        <span>{{ $budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name }} — v{{ $budgetVersion->version_number }}</span>
     </div>
     <div class="d-flex align-items-center gap-2">
         <div class="btn-group btn-group-sm" role="group">
@@ -39,8 +39,8 @@
             <div class="card-body py-2">
                 <div class="row text-center">
                     <div class="col border-end">
-                        <div class="small text-muted">Department</div>
-                        <div class="fw-semibold small">{{ $budgetVersion->department->name }}</div>
+                        <div class="small text-muted">Department / Entity</div>
+                        <div class="fw-semibold small">{{ $budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name }}</div>
                     </div>
                     <div class="col border-end">
                         <div class="small text-muted">Period</div>
@@ -564,7 +564,7 @@
 
                     {{-- View Only Button --}}
                     <div class="mt-3">
-                        <a href="{{ route('budget.show', $budgetVersion) }}" class="btn btn-outline-secondary btn-sm px-4" style="border-radius: 8px;">
+                        <a href="{{ route('budget.show-pnl', $budgetVersion) }}" class="btn btn-outline-secondary btn-sm px-4" style="border-radius: 8px;">
                             <i class="bi bi-eye"></i> View Budget
                         </a>
                     </div>

@@ -16,11 +16,11 @@
     <div class="d-flex align-items-center gap-2">
         <a href="{{ route('approvals.index') }}" class="text-muted text-decoration-none">Approvals</a>
         <span class="text-muted">/</span>
-        <span>{{ $budgetVersion->department->name }} — v{{ $budgetVersion->version_number }}</span>
+        <span>{{ $budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name }} — v{{ $budgetVersion->version_number }}</span>
     </div>
     <div class="d-flex align-items-center gap-2">
         <div class="btn-group btn-group-sm" role="group">
-            <a href="{{ route('approvals.show', $budgetVersion) }}" class="btn btn-outline-secondary">Classic View</a>
+            <a href="{{ route('approvals.show', $budgetVersion) }}?classic=1" class="btn btn-outline-secondary">Classic View</a>
             <span class="btn btn-secondary" style="pointer-events:none;">P&amp;L View</span>
         </div>
         <div class="dropdown">
@@ -49,8 +49,8 @@
             <div class="card-body py-2">
                 <div class="row text-center">
                     <div class="col border-end">
-                        <div class="small text-muted">Department</div>
-                        <div class="fw-semibold small">{{ $budgetVersion->department->name }}</div>
+                        <div class="small text-muted">Department / Entity</div>
+                        <div class="fw-semibold small">{{ $budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name }}</div>
                     </div>
                     <div class="col border-end">
                         <div class="small text-muted">Period</div>

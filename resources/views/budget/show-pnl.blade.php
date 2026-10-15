@@ -7,7 +7,7 @@
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
     <div>
         <h5 class="fw-bold mb-0">
-            {{ $budgetVersion->department->name }} —
+            {{ $budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name }} —
             {{ $budgetVersion->period->name }}
             <span class="badge bg-goil-orange ms-1">v{{ $budgetVersion->version_number }}</span>
         </h5>
@@ -29,7 +29,7 @@
 
     <div class="d-flex gap-2 align-items-center flex-wrap">
         <div class="btn-group btn-group-sm" role="group">
-            <a href="{{ route('budget.show', $budgetVersion) }}" class="btn btn-outline-secondary">Classic View</a>
+            <a href="{{ route('budget.show', $budgetVersion) }}?classic=1" class="btn btn-outline-secondary">Classic View</a>
             <span class="btn btn-secondary" style="pointer-events:none;">P&amp;L View</span>
         </div>
         <div class="dropdown">
@@ -179,12 +179,151 @@ $periodColW    = $isMonthly ? '65px' : '90px';
 <div class="card shadow-sm border-0">
     <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
         <span class="fw-semibold small text-uppercase">Income Statement — {{ $budgetVersion->period->name }}</span>
+        @if(($configuredStatement ?? null) && !$budgetVersion->isEditable())
+        <div class="d-flex gap-2">
+            <span class="badge" style="background:#EFF6FF;color:#1D4ED8;font-size:10px;border-radius:4px">
+                <i class="fas fa-sliders-h me-1"></i>{{ $activeConfig->name }}
+            </span>
+        </div>
+        @else
         <div class="d-flex gap-2">
             <button class="btn btn-sm btn-outline-secondary" onclick="expandAll()">Expand All</button>
             <button class="btn btn-sm btn-outline-secondary" onclick="collapseAll()">Collapse All</button>
         </div>
+        @endif
     </div>
     <div class="card-body p-0">
+
+    @if(($configuredStatement ?? null) && !$budgetVersion->isEditable())
+    {{-- Configured P&L layout (matches Financial Report view) --}}
+    @php $cs = $configuredStatement; @endphp
+    <div class="table-responsive">
+    <table class="table table-sm mb-0" id="cfgTable"
+           style="min-width:700px;border-collapse:separate;border-spacing:0">
+        <thead style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#64748B;
+                      position:sticky;top:0;background:#fff;z-index:2">
+            <tr>
+                <th style="min-width:240px;padding:8px 12px">Account</th>
+                <th class="text-end" style="min-width:110px;background:#EFF6FF;color:#1D4ED8;padding:8px 12px">
+                    Eff. Budget
+                </th>
+                <th class="text-end" style="min-width:110px;background:#EFF6FF;color:#1D4ED8;padding:8px 12px">
+                    YTD Actual
+                </th>
+                <th class="text-end" style="min-width:110px;background:#EFF6FF;color:#1D4ED8;padding:8px 12px">
+                    Variance&nbsp;/ %
+                </th>
+                @if($prevPeriod)
+                <th class="text-end" style="min-width:110px;background:#F5F3FF;color:#6D28D9;padding:8px 12px">
+                    Prev Budget
+                </th>
+                <th class="text-end" style="min-width:110px;background:#F5F3FF;color:#6D28D9;padding:8px 12px">
+                    Prev Actual
+                </th>
+                <th class="text-end" style="min-width:100px;background:#F5F3FF;color:#6D28D9;padding:8px 12px">
+                    Growth
+                </th>
+                @endif
+            </tr>
+        </thead>
+        <tbody>
+        @foreach($cs['lines'] as $csRow)
+        @if($csRow['type'] === 'spacer')
+        <tr><td colspan="99" style="padding:4px 0;background:#F8FAFC"></td></tr>
+        @elseif($csRow['type'] === 'subtotal')
+        <tr style="background:#F8FAFC;font-weight:700;border-top:2px solid #CBD5E1">
+            <td style="padding:9px 16px;color:#1B2A4A;font-size:13px">
+                <i class="fas fa-equals me-2" style="color:#64748B;font-size:10px"></i>
+                {{ $csRow['label'] }}
+            </td>
+            <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">
+                {{ number_format($csRow['budget'], 0) }}
+            </td>
+            <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">
+                {{ number_format($csRow['actual'], 0) }}
+            </td>
+            @php $csVarColor = $csRow['variance'] >= 0 ? '#10B981' : '#F43F5E'; @endphp
+            <td class="text-end" style="padding:9px 12px;color:{{ $csVarColor }};font-variant-numeric:tabular-nums">
+                {{ $csRow['variance'] >= 0 ? '+' : '' }}{{ number_format($csRow['variance'], 0) }}
+                <small class="ms-1">({{ $csRow['pct'] >= 0 ? '+' : '' }}{{ $csRow['pct'] }}%)</small>
+            </td>
+            @if($prevPeriod)
+            <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">{{ number_format($csRow['prev_budget'], 0) }}</td>
+            <td class="text-end" style="padding:9px 12px;font-variant-numeric:tabular-nums">{{ number_format($csRow['prev_actual'], 0) }}</td>
+            <td class="text-end" style="padding:9px 12px">
+                @if($csRow['growth_pct'] !== null)
+                <span style="color:{{ $csRow['growth_pct'] >= 0 ? '#10B981' : '#F43F5E' }}">
+                    {{ $csRow['growth_pct'] >= 0 ? '+' : '' }}{{ $csRow['growth_pct'] }}%
+                </span>
+                @else —
+                @endif
+            </td>
+            @endif
+        </tr>
+        @else {{-- sub_category --}}
+        @php $isLess = ($csRow['operator'] === 'subtract'); $varClr = $csRow['variance'] >= 0 ? '#10B981' : '#F43F5E'; @endphp
+        <tr style="border-bottom:1px solid #F1F5F9">
+            <td style="padding:8px 12px 8px 24px;font-size:13px;color:#374151">
+                @if($isLess)<span style="color:#94A3B8;font-size:11px;margin-right:4px">(Less)</span>@endif
+                {{ $csRow['label'] }}
+            </td>
+            <td class="text-end" style="padding:8px 12px;font-size:13px;font-variant-numeric:tabular-nums">{{ number_format($csRow['budget'], 0) }}</td>
+            <td class="text-end" style="padding:8px 12px;font-size:13px;font-variant-numeric:tabular-nums">{{ number_format($csRow['actual'], 0) }}</td>
+            <td class="text-end" style="padding:8px 12px;font-size:12px;color:{{ $varClr }};font-variant-numeric:tabular-nums">
+                {{ $csRow['variance'] >= 0 ? '+' : '' }}{{ number_format($csRow['variance'], 0) }}
+                <small>({{ $csRow['pct'] >= 0 ? '+' : '' }}{{ $csRow['pct'] }}%)</small>
+            </td>
+            @if($prevPeriod)
+            <td class="text-end" style="padding:8px 12px;font-size:12px;color:#8B5CF6;font-variant-numeric:tabular-nums">{{ number_format($csRow['prev_budget'], 0) }}</td>
+            <td class="text-end" style="padding:8px 12px;font-size:12px;color:#8B5CF6;font-variant-numeric:tabular-nums">{{ number_format($csRow['prev_actual'], 0) }}</td>
+            <td class="text-end" style="padding:8px 12px;font-size:12px">
+                @if($csRow['growth_pct'] !== null)
+                <span style="color:{{ $csRow['growth_pct'] >= 0 ? '#10B981' : '#F43F5E' }}">
+                    {{ $csRow['growth_pct'] >= 0 ? '+' : '' }}{{ $csRow['growth_pct'] }}%
+                </span>
+                @else —
+                @endif
+            </td>
+            @endif
+        </tr>
+        @endif
+        @endforeach
+        {{-- Net Income / Loss row --}}
+        @php
+            $finalVar = $cs['final_actual'] - $cs['final_budget'];
+            $finalClr = $finalVar >= 0 ? '#10B981' : '#F43F5E';
+            $finalPct = $cs['final_budget'] != 0 ? round(($finalVar / abs($cs['final_budget'])) * 100, 1) : 0;
+            $finalGrow = ($cs['final_prev_act'] != 0)
+                ? round((($cs['final_actual'] - $cs['final_prev_act']) / abs($cs['final_prev_act'])) * 100, 1)
+                : null;
+        @endphp
+        <tr style="background:{{ $cs['final_actual'] >= 0 ? '#DCFCE7' : '#FEE2E2' }};font-weight:700;border-top:3px double #CBD5E1">
+            <td style="padding:11px 16px;font-size:14px;color:{{ $cs['final_actual'] >= 0 ? '#065F46' : '#991B1B' }}">
+                Net Income / (Loss)
+            </td>
+            <td class="text-end" style="padding:11px 12px;font-variant-numeric:tabular-nums">{{ currency() }} {{ number_format($cs['final_budget'], 0) }}</td>
+            <td class="text-end" style="padding:11px 12px;font-variant-numeric:tabular-nums;color:{{ $finalClr }}">{{ currency() }} {{ number_format($cs['final_actual'], 0) }}</td>
+            <td class="text-end" style="padding:11px 12px;color:{{ $finalClr }};font-variant-numeric:tabular-nums">
+                {{ $finalVar >= 0 ? '+' : '' }}{{ number_format($finalVar, 0) }}
+                <small>({{ $finalPct >= 0 ? '+' : '' }}{{ $finalPct }}%)</small>
+            </td>
+            @if($prevPeriod)
+            <td class="text-end" style="padding:11px 12px;font-variant-numeric:tabular-nums">{{ number_format($cs['final_prev_bud'], 0) }}</td>
+            <td class="text-end" style="padding:11px 12px;font-variant-numeric:tabular-nums">{{ number_format($cs['final_prev_act'], 0) }}</td>
+            <td class="text-end" style="padding:11px 12px">
+                @if($finalGrow !== null)
+                <span style="color:{{ $finalGrow >= 0 ? '#10B981' : '#F43F5E' }}">{{ $finalGrow >= 0 ? '+' : '' }}{{ $finalGrow }}%</span>
+                @else —
+                @endif
+            </td>
+            @endif
+        </tr>
+        </tbody>
+    </table>
+    </div>
+
+    @else
+    {{-- Editable / category-based grid --}}
         <div class="table-responsive">
             <table class="table table-sm mb-0" id="pnl-table">
                 <thead>
@@ -220,6 +359,8 @@ $periodColW    = $isMonthly ? '65px' : '90px';
                 </tbody>
             </table>
         </div>
+    @endif
+
     </div>
 </div>
 </div>

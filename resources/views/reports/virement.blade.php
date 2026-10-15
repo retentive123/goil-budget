@@ -128,7 +128,7 @@
             <tbody>
                 @forelse($virements as $v)
                 <tr>
-                    <td class="small fw-semibold">{{ $v->department->name }}</td>
+                    <td class="small fw-semibold">{{ $v->subsidiary?->name ?? $v->department?->name }}</td>
                     <td class="small">
                         <code>{{ $v->fromLineItem->accountCode->code }}</code>
                         <div style="font-size:10px;color:var(--slate)">

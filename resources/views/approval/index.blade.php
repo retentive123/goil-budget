@@ -78,7 +78,7 @@
                             </div>
                             <div>
                                 <div class="fw-semibold" style="color: #1B2A4A; font-size: 14px;">
-                                    {{ $version->department->name }}
+                                    {{ $version->subsidiary?->name ?? $version->department?->name }}
                                 </div>
                                 <div class="small" style="color: #64748B;">
                                     <span class="fw-medium">{{ $version->period->name }}</span>
@@ -94,7 +94,7 @@
                             <span class="badge px-3 py-2" style="background: #FEF3C7; color: #92400E; font-size: 11px; border-radius: 20px;">
                                 <i class="bi bi-clock"></i> Pending
                             </span>
-                            <a href="{{ route('approvals.show', $version) }}"
+                            <a href="{{ route('approvals.show-pnl', $version) }}"
                                class="btn btn-sm px-3 py-2"
                                style="background: #E65C00; color: #fff; border-radius: 8px; border: none; font-size: 12px; transition: all 0.2s;">
                                 <i class="bi bi-eye"></i> Review
@@ -155,7 +155,7 @@
                             </div>
                             <div>
                                 <div class="fw-semibold small" style="color: #1B2A4A;">
-                                    {{ $version->department->name }}
+                                    {{ $version->subsidiary?->name ?? $version->department?->name }}
                                 </div>
                                 <div class="small" style="color: #94A3B8; font-size: 11px;">
                                     {{ $version->period->name }} &middot; v{{ $version->version_number }}

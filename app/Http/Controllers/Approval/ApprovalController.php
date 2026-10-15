@@ -42,8 +42,12 @@ class ApprovalController extends Controller
     }
 
     // Show a budget version for review
-    public function show(BudgetVersion $budgetVersion)
+    public function show(BudgetVersion $budgetVersion, Request $request)
     {
+        if (!$request->boolean('classic')) {
+            return redirect()->route('approvals.show-pnl', $budgetVersion);
+        }
+
         $budgetVersion->load(
             'department', 'period',
             'lineItems.accountCode.category',

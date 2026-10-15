@@ -252,7 +252,7 @@ class BudgetExport implements FromCollection, WithHeadings, WithTitle, WithStyle
                 $deptActual += $itemActual;
 
                 $lineRows->push([
-                    $version->department->name,  // col A (indented in AfterSheet)
+                    $version->subsidiary?->name ?? $version->department?->name ?? '—',  // col A
                     $category,
                     $item->accountCode->code ?? '—',
                     $item->accountCode->name ?? '—',
@@ -270,7 +270,7 @@ class BudgetExport implements FromCollection, WithHeadings, WithTitle, WithStyle
 
             // Department summary row — push FIRST so it sits above its detail rows
             $rows->push([
-                $version->department->name,
+                $version->subsidiary?->name ?? $version->department?->name ?? '—',
                 '',
                 '',
                 'DEPT TOTAL',
@@ -301,7 +301,7 @@ class BudgetExport implements FromCollection, WithHeadings, WithTitle, WithStyle
             ->when($this->periodId, fn($q) => $q->where('budget_period_id', $this->periodId))
             ->get()
             ->map(fn($v) => [
-                $v->department->name,
+                $v->department?->name ?? '—',
                 $v->fromLineItem->accountCode->code . ' — ' . $v->fromLineItem->accountCode->name,
                 $v->toLineItem->accountCode->code  . ' — ' . $v->toLineItem->accountCode->name,
                 number_format($v->amount, 2),

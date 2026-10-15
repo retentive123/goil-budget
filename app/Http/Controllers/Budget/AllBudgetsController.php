@@ -137,6 +137,10 @@ class AllBudgetsController extends Controller
     // ── View a single budget version in detail ────────────────
     public function show(Request $request, BudgetVersion $budgetVersion)
     {
+        if (!$request->boolean('classic')) {
+            return redirect()->route('budgets.show-pnl', $budgetVersion);
+        }
+
         $budgetVersion->load(
             'department',
             'period',

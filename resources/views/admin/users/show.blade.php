@@ -150,7 +150,7 @@
                         @foreach($submissions as $sub)
                         <tr>
                             <td class="small">{{ $sub->period->name }}</td>
-                            <td class="small fw-semibold">{{ $sub->department->name }}</td>
+                            <td class="small fw-semibold">{{ $sub->subsidiary?->name ?? $sub->department?->name }}</td>
                             <td class="small">v{{ $sub->version_number }}</td>
                             <td>
                                 <span style="padding:1px 8px;border-radius:20px;font-size:10px;
@@ -220,7 +220,7 @@
                         @foreach($decisions as $dec)
                         <tr>
                             <td class="small fw-semibold">
-                                {{ $dec->budgetVersion->department->name }}
+                                {{ $dec->budgetVersion->subsidiary?->name ?? $dec->budgetVersion->department?->name }}
                             </td>
                             <td class="small">{{ $dec->budgetVersion->period->name }}</td>
                             <td class="small">{{ $dec->stage->name }}</td>

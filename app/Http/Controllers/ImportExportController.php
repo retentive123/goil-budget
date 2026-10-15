@@ -31,10 +31,11 @@ class ImportExportController extends Controller
     {
         $this->authorizeBudgetAccess($budgetVersion);
 
-        $budgetVersion->load('lineItems.accountCode.category','department','period.setting','period.codeRates','period.categoryRates');
+        $budgetVersion->load('lineItems.accountCode.category','department','subsidiary','period.setting','period.codeRates','period.categoryRates');
 
+        $entityName = $budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name ?? 'budget';
         $filename = 'budget-' .
-            str($budgetVersion->department->name)->slug() . '-' .
+            str($entityName)->slug() . '-' .
             $budgetVersion->period->year . '-v' .
             $budgetVersion->version_number . '.xlsx';
 
@@ -48,10 +49,11 @@ class ImportExportController extends Controller
     {
         $this->authorizeBudgetAccess($budgetVersion);
 
-        $budgetVersion->load('lineItems.accountCode.category','department','period');
+        $budgetVersion->load('lineItems.accountCode.category','department','subsidiary','period');
 
+        $entityName = $budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name ?? 'budget';
         $filename = 'budget-pnl-' .
-            str($budgetVersion->department->name)->slug() . '-' .
+            str($entityName)->slug() . '-' .
             $budgetVersion->period->year . '-v' .
             $budgetVersion->version_number . '.xlsx';
 
@@ -65,17 +67,21 @@ class ImportExportController extends Controller
     {
         $this->authorizeBudgetAccess($budgetVersion);
 
-        $budgetVersion->load('lineItems.accountCode.category', 'department', 'period');
+        $budgetVersion->load('lineItems.accountCode.category', 'department', 'subsidiary', 'period');
 
         $actualsPerItem = BudgetActual::where('budget_period_id', $budgetVersion->budget_period_id)
-            ->where('department_id', $budgetVersion->department_id)
+            ->when($budgetVersion->subsidiary_id,
+                fn($q) => $q->where('subsidiary_id', $budgetVersion->subsidiary_id),
+                fn($q) => $q->where('department_id', $budgetVersion->department_id)
+            )
             ->where('status', 'confirmed')
             ->selectRaw('budget_line_item_id, sum(amount) as total')
             ->groupBy('budget_line_item_id')
             ->pluck('total', 'budget_line_item_id');
 
+        $entityName = $budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name ?? 'budget';
         $filename = 'budget-export-' .
-            str($budgetVersion->department->name)->slug() . '-' .
+            str($entityName)->slug() . '-' .
             $budgetVersion->period->year . '-v' .
             $budgetVersion->version_number . '.xlsx';
 
@@ -89,10 +95,13 @@ class ImportExportController extends Controller
     {
         $this->authorizeBudgetAccess($budgetVersion);
 
-        $budgetVersion->load('lineItems.accountCode.category', 'department', 'period');
+        $budgetVersion->load('lineItems.accountCode.category', 'department', 'subsidiary', 'period');
 
         $actualsPerItem = BudgetActual::where('budget_period_id', $budgetVersion->budget_period_id)
-            ->where('department_id', $budgetVersion->department_id)
+            ->when($budgetVersion->subsidiary_id,
+                fn($q) => $q->where('subsidiary_id', $budgetVersion->subsidiary_id),
+                fn($q) => $q->where('department_id', $budgetVersion->department_id)
+            )
             ->where('status', 'confirmed')
             ->selectRaw('budget_line_item_id, sum(amount) as total')
             ->groupBy('budget_line_item_id')
@@ -105,8 +114,9 @@ class ImportExportController extends Controller
         $calculator = app(BudgetCalculationService::class);
         $pnlData    = $calculator->buildPnlData($budgetVersion, $prevPeriod);
 
+        $entityName = $budgetVersion->subsidiary?->name ?? $budgetVersion->department?->name ?? 'budget';
         $filename = 'budget-pnl-export-' .
-            str($budgetVersion->department->name)->slug() . '-' .
+            str($entityName)->slug() . '-' .
             $budgetVersion->period->year . '-v' .
             $budgetVersion->version_number . '.xlsx';
 
@@ -202,7 +212,7 @@ class ImportExportController extends Controller
         $monthName = BudgetActual::MONTHS[$month];
 
         $filename = 'actuals-' .
-            str($version->department->name)->slug() . '-' .
+            str($version->subsidiary?->name ?? $version->department?->name ?? 'entity')->slug() . '-' .
             strtolower($monthName) . '-' . $year . '.xlsx';
 
         return Excel::download(

@@ -104,7 +104,7 @@ class ReportController extends Controller
                     ->where('status','confirmed')->sum('amount');
 
                 return [
-                    'department'   => $item->budgetVersion->department->name,
+                    'department'   => $item->budgetVersion->subsidiary?->name ?? $item->budgetVersion->department?->name ?? '—',
                     'category'     => $item->accountCode->category->name,
                     'code'         => $item->accountCode->code,
                     'name'         => $item->accountCode->name,

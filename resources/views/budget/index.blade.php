@@ -124,7 +124,19 @@ $statusColor = fn($s) => match($s) {
     <div class="card-body text-center py-5 text-muted">
         <i class="bi bi-inbox" style="font-size:40px;opacity:.3"></i>
         <p class="mt-2 mb-0">No budget started for <strong>{{ $currentPeriod?->name ?? 'this period' }}</strong>.</p>
-        @if($currentPeriod?->status !== 'open')
+        @if($currentPeriod?->status === 'open')
+            @can('create budget')
+            <div class="mt-3">
+                <form method="POST" action="{{ route('budget.start') }}"
+                      onsubmit="this.querySelector('button').disabled=true">
+                    @csrf
+                    <button class="btn btn-primary" style="border-radius:8px">
+                        <i class="bi bi-plus-lg me-1"></i> Start Budget
+                    </button>
+                </form>
+            </div>
+            @endcan
+        @else
         <p class="small mt-1">This period is closed — use the dropdown above to switch periods.</p>
         @endif
     </div>
@@ -211,7 +223,7 @@ $statusColor = fn($s) => match($s) {
             {{-- Action --}}
             <div class="flex-shrink-0 d-flex gap-1">
                 @if($v->isEditable())
-                <a href="{{ route('budget.show', $v) }}"
+                <a href="{{ route('budget.show-pnl', $v) }}"
                    class="btn btn-sm fw-semibold"
                    style="background:var(--navy);color:#fff;border-radius:8px;font-size:12px">
                     <i class="bi bi-pencil me-1"></i>Continue Editing
@@ -226,13 +238,13 @@ $statusColor = fn($s) => match($s) {
                         <i class="bi bi-arrow-counterclockwise me-1"></i>Edit & Resubmit
                     </button>
                 </form>
-                <a href="{{ route('budget.show', $v) }}"
+                <a href="{{ route('budget.show-pnl', $v) }}"
                    class="btn btn-sm btn-outline-secondary"
                    style="border-radius:8px;font-size:12px">
                     <i class="bi bi-eye me-1"></i>View
                 </a>
                 @else
-                <a href="{{ route('budget.show', $v) }}"
+                <a href="{{ route('budget.show-pnl', $v) }}"
                    class="btn btn-sm btn-outline-secondary"
                    style="border-radius:8px;font-size:12px">
                     <i class="bi bi-eye me-1"></i>View

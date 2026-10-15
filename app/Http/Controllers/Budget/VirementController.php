@@ -107,27 +107,50 @@ class VirementController extends Controller
             return back()->with('error', 'Invalid destination line item selection.');
         }
 
-        // Enforce 10% rule
-        $maxAllowed = $fromItem->maxVirementAmount();
+        // ── Cross-type check ────────────────────────────────────────────────
+        $isCrossType = $this->isCrossType($fromItem->line_type, $toItem->line_type);
+
+        if ($isCrossType) {
+            if (!\App\Models\SystemSetting::get('allow_cross_type_virement', false)) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['to_line_item_id' =>
+                        'Cross-type virements are not allowed. The source (' . $fromItem->line_type .
+                        ') and destination (' . $toItem->line_type . ') are in different budget type groups. ' .
+                        'Enable "Allow Cross-Type Virements" in System Settings to permit this.'
+                    ]);
+            }
+        }
+
+        // ── Limit enforcement ────────────────────────────────────────────────
+        $limitPct   = $isCrossType
+            ? (int) \App\Models\SystemSetting::get('cross_type_virement_limit_pct', 5)
+            : (int) \App\Models\SystemSetting::get('virement_limit_pct', 10);
+
+        $maxAllowed = round($fromItem->total_amount * ($limitPct / 100), 2);
+
         if ($request->amount > $maxAllowed) {
             return back()
                 ->withInput()
                 ->withErrors([
-                    'amount' => "Amount exceeds the 10% virement limit. Maximum allowed from this account: {{ currency() }} " . number_format($maxAllowed, 2)
+                    'amount' => "Amount exceeds the {$limitPct}% virement limit" .
+                                ($isCrossType ? ' (cross-type rate)' : '') .
+                                ". Maximum allowed from this account: " . number_format($maxAllowed, 2)
                 ]);
         }
 
-        // Check if total virements already requested from this line item
-        // don't exceed the 10% cap in aggregate
+        // Check cumulative cap — use the same limit percentage
         $alreadyRequested = Virement::where('from_line_item_id', $fromItem->id)
                                     ->whereIn('status', ['pending', 'approved'])
                                     ->sum('amount');
 
-        if (($alreadyRequested + $request->amount) > $fromItem->total_amount * 0.10) {
+        if (($alreadyRequested + $request->amount) > $fromItem->total_amount * ($limitPct / 100)) {
             return back()
                 ->withInput()
                 ->withErrors([
-                    'amount' => "This request would exceed the cumulative 10% virement limit for this account. Already requested: {{ currency() }} " . number_format($alreadyRequested, 2)
+                    'amount' => "This request would exceed the cumulative {$limitPct}% virement limit" .
+                                ($isCrossType ? ' (cross-type rate)' : '') .
+                                " for this account. Already requested: " . number_format($alreadyRequested, 2)
                 ]);
         }
 
@@ -309,6 +332,24 @@ class VirementController extends Controller
         $item->update($update);
     }
 
+    /**
+     * Group line_type values into broad budget-type groups.
+     * Returns true when from and to are in different groups.
+     */
+    private function isCrossType(?string $fromType, ?string $toType): bool
+    {
+        $group = static function (?string $t): string {
+            return match ($t) {
+                'revenue', 'both'          => 'revenue',
+                'expense', 'ex_pump_item'  => 'expense',
+                'capital_expenditure'      => 'capital',
+                'assets', 'liabilities'    => 'balance',
+                default                    => 'other',
+            };
+        };
+        return $group($fromType) !== $group($toType);
+    }
+
     private function notifyFinance(Virement $virement): void
     {
 
@@ -323,8 +364,8 @@ class VirementController extends Controller
             \App\Models\BudgetNotification::create([
                 'user_id'         => $user->id,
                 'type'            => 'virement_pending',
-                'subject'         => "Virement request — {$virement->department->name}",
-                'message'         => "{$virement->department->name} has requested a virement of {{ currency() }} " . number_format($virement->amount, 2) . ". Please review.",
+                'subject'         => "Virement request — " . ($virement->department?->name ?? '—'),
+                'message'         => ($virement->department?->name ?? '—') . " has requested a virement of " . currency() . " " . number_format($virement->amount, 2) . ". Please review.",
                 'notifiable_id'   => $virement->id,
                 'notifiable_type' => Virement::class,
             ]);
@@ -337,17 +378,20 @@ class VirementController extends Controller
     if (!\App\Models\SystemSetting::get('notify_on_virement', true)) {
         return;
     }
-        $members = \App\Models\User::where('department_id', $virement->department_id)
-                                   ->where('is_active', true)
-                                   ->get();
+        $members = $virement->department_id
+            ? \App\Models\User::where('department_id', $virement->department_id)
+                               ->where('is_active', true)
+                               ->get()
+            : collect();
 
         $subject = $decision === 'approved'
             ? 'Virement Approved'
             : 'Virement Rejected';
 
+        $cur = currency();
         $message = $decision === 'approved'
-            ? "Your virement request of {{ currency() }} " . number_format($virement->amount, 2) . " has been approved. Budget lines have been adjusted."
-            : "Your virement request of {{ currency() }} " . number_format($virement->amount, 2) . " has been rejected. Reason: {$virement->approval_comments}";
+            ? "Your virement request of {$cur} " . number_format($virement->amount, 2) . " has been approved. Budget lines have been adjusted."
+            : "Your virement request of {$cur} " . number_format($virement->amount, 2) . " has been rejected. Reason: {$virement->approval_comments}";
 
         foreach ($members as $member) {
             \App\Models\BudgetNotification::create([
