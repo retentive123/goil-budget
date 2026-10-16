@@ -4,9 +4,11 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use App\Models\User;
 use App\Models\Department;
 use App\Models\Subsidiary;
+use App\Mail\WelcomeUserMail;
 
 /**
  * Assigns department_head role and department(s) to known heads.
@@ -29,37 +31,35 @@ class DeptHeadsSeeder extends Seeder
          *   sub_code      => primary subsidiary code (or null for dept users)
          *   extra_depts   => array of additional dept codes for approval scope
          */
+        $defaultPassword = 'Goil@' . now()->year;
+
         $heads = [
             // ── Single-department heads ───────────────────────────────────────
-            ['email' => 'denis.amui@goil.com.gh',          'dept_code' => '02001', 'sub_code' => null,  'extra_depts' => []],          // Operations
-            ['email' => 'nanaama.kusi-appouh@goil.com.gh',  'dept_code' => '01004', 'sub_code' => null,  'extra_depts' => []],          // Legal
-            ['email' => 'joshua.kduodu@goil.com.gh',        'dept_code' => '03001', 'sub_code' => null,  'extra_depts' => []],          // TSPM
-            ['email' => 'amentor.aziakar@goil.com.gh',      'dept_code' => '16000', 'sub_code' => null,  'extra_depts' => []],          // Technical Services
-            ['email' => 'millicent.ocquaye@goil.com.gh',    'dept_code' => '07000', 'sub_code' => null,  'extra_depts' => []],          // Admin/HR
-            ['email' => 'robert.kyere@goil.com.gh',         'dept_code' => '08001', 'sub_code' => null,  'extra_depts' => []],          // Corporate Affairs (CAD)
-            ['email' => 'kingsley.ansah@goil.com.gh',       'dept_code' => '18000', 'sub_code' => null,  'extra_depts' => []],          // Estates
-            ['email' => 'emmanuel.agyiri@goil.com.gh',      'dept_code' => '04001', 'sub_code' => null,  'extra_depts' => []],          // Fuels Marketing
-            ['email' => 'gloria.otoo@goil.com.gh',          'dept_code' => '01002', 'sub_code' => null,  'extra_depts' => []],          // CIA
-            ['email' => 'marian.fordjor@goil.com.gh',       'dept_code' => '01003', 'sub_code' => null,  'extra_depts' => []],          // HSSE/HSSEQ
-            ['email' => 'edward.bawa@goil.com.gh',          'dept_code' => '01001', 'sub_code' => null,  'extra_depts' => []],          // GCEO/MD Office (Upstream)
+            ['name' => 'Denis Amui',            'email' => 'denis.amui@goil.com.gh',          'dept_code' => '02001', 'sub_code' => null,  'extra_depts' => []],
+            ['name' => 'Nanaama Kusi-Appouh',   'email' => 'nanaama.kusi-appouh@goil.com.gh',  'dept_code' => '01004', 'sub_code' => null,  'extra_depts' => []],
+            ['name' => 'Joshua K. Duodu',       'email' => 'joshua.kduodu@goil.com.gh',        'dept_code' => '03001', 'sub_code' => null,  'extra_depts' => []],
+            ['name' => 'Amentor Aziakar',       'email' => 'amentor.aziakar@goil.com.gh',      'dept_code' => '16000', 'sub_code' => null,  'extra_depts' => []],
+            ['name' => 'Millicent Ocquaye',     'email' => 'millicent.ocquaye@goil.com.gh',    'dept_code' => '07000', 'sub_code' => null,  'extra_depts' => []],
+            ['name' => 'Robert Kyere',          'email' => 'robert.kyere@goil.com.gh',         'dept_code' => '08001', 'sub_code' => null,  'extra_depts' => []],
+            ['name' => 'Kingsley Ansah',        'email' => 'kingsley.ansah@goil.com.gh',       'dept_code' => '18000', 'sub_code' => null,  'extra_depts' => []],
+            ['name' => 'Emmanuel Agyiri',       'email' => 'emmanuel.agyiri@goil.com.gh',      'dept_code' => '04001', 'sub_code' => null,  'extra_depts' => []],
+            ['name' => 'Gloria Otoo',           'email' => 'gloria.otoo@goil.com.gh',          'dept_code' => '01002', 'sub_code' => null,  'extra_depts' => []],
+            ['name' => 'Marian Fordjor',        'email' => 'marian.fordjor@goil.com.gh',       'dept_code' => '01003', 'sub_code' => null,  'extra_depts' => []],
+            ['name' => 'Edward Bawa',           'email' => 'edward.bawa@goil.com.gh',          'dept_code' => '01001', 'sub_code' => null,  'extra_depts' => []],
 
             // ── Multi-department heads ────────────────────────────────────────
-            // Primary dept = COO office; also approves Non Fuels
-            ['email' => 'marcus.dake@goil.com.gh',          'dept_code' => '15000', 'sub_code' => null,  'extra_depts' => ['17000']],   // COO + Non Fuels
-
-            // Primary dept = Procurement; also approves Business Dev + Risk
-            ['email' => 'mark.ofori-amanfo@goil.com.gh',    'dept_code' => '01007', 'sub_code' => null,  'extra_depts' => ['01006', '01008']], // Procurement + BDU + Risk
+            ['name' => 'Marcus Dake',           'email' => 'marcus.dake@goil.com.gh',          'dept_code' => '15000', 'sub_code' => null,  'extra_depts' => ['17000']],
+            ['name' => 'Mark Ofori-Amanfo',     'email' => 'mark.ofori-amanfo@goil.com.gh',    'dept_code' => '01007', 'sub_code' => null,  'extra_depts' => ['01006', '01008']],
 
             // ── Subsidiary heads ─────────────────────────────────────────────
-            ['email' => 'theophilus.otchere@goenery.com.gh','dept_code' => null,    'sub_code' => 'GEL', 'extra_depts' => []],          // Go Energy Ltd
+            ['name' => 'Theophilus Otchere',    'email' => 'theophilus.otchere@goenery.com.gh','dept_code' => null,    'sub_code' => 'GEL', 'extra_depts' => []],
 
-            // anyeyure@goil.com.gh (GOBITUMEN) — entity not yet in system; skipped below
-            ['email' => 'anyeyure@goil.com.gh',             'dept_code' => null,    'sub_code' => null,  'extra_depts' => [],
+            // anyeyure@goil.com.gh (GOBITUMEN) — entity not yet in system
+            ['name' => '',                       'email' => 'anyeyure@goil.com.gh',             'dept_code' => null,    'sub_code' => null,  'extra_depts' => [],
              '_note' => 'GOBITUMEN not found — create the department/subsidiary first then re-run'],
         ];
 
-        $ok      = 0;
-        $missing = [];
+        $ok = 0;
 
         foreach ($heads as $row) {
             $email = strtolower(trim($row['email']));
@@ -73,8 +73,29 @@ class DeptHeadsSeeder extends Seeder
             $user = User::where('email', $email)->first();
 
             if (!$user) {
-                $missing[] = $email;
-                continue;
+                $deptId = $row['dept_code'] ? ($deptByCode[$row['dept_code']] ?? null) : null;
+                $subId  = $row['sub_code']  ? ($subByCode[$row['sub_code']]   ?? null) : null;
+
+                $user = User::create([
+                    'name'                 => $row['name'],
+                    'email'                => $email,
+                    'password'             => bcrypt($defaultPassword),
+                    'must_change_password' => true,
+                    'is_active'            => true,
+                    'department_id'        => $subId ? null : $deptId,
+                    'subsidiary_id'        => $subId,
+                ]);
+
+                try {
+                    Mail::to($user->email)->send(new WelcomeUserMail(
+                        $user,
+                        $defaultPassword,
+                        url('/login')
+                    ));
+                    $this->command->info("  NEW   {$user->name} ({$email}) — created & welcome email sent");
+                } catch (\Exception $e) {
+                    $this->command->warn("  NEW   {$user->name} ({$email}) — created but email failed: " . $e->getMessage());
+                }
             }
 
             // Resolve dept / subsidiary IDs
@@ -120,13 +141,5 @@ class DeptHeadsSeeder extends Seeder
         $this->command->newLine();
         $this->command->info("  {$ok} head(s) updated.");
 
-        if ($missing) {
-            $this->command->newLine();
-            $this->command->warn('  The following users were not found (not in DB yet):');
-            foreach ($missing as $m) {
-                $this->command->warn("    • {$m}");
-            }
-            $this->command->warn('  Create them via Admin → Users, then re-run this seeder.');
-        }
     }
 }
