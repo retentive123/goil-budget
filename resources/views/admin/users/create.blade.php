@@ -128,6 +128,36 @@
                         @error('role')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
                 </div>
+
+                {{-- Additional approval departments --}}
+                <div class="mt-3">
+                    <label class="form-label small fw-semibold" style="color:#1B2A4A">
+                        Additional Approval Departments
+                        <span style="font-weight:400;color:#64748B;font-size:11px;margin-left:4px">
+                            — lets this user approve budgets for departments other than their primary one
+                        </span>
+                    </label>
+                    <div style="border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;
+                                max-height:180px;overflow-y:auto;background:#FAFAFA">
+                        @foreach($departments->where('entity_type','department') as $dept)
+                        <div class="form-check form-check-inline" style="margin-bottom:6px;min-width:200px">
+                            <input type="checkbox"
+                                   class="form-check-input"
+                                   name="approval_department_ids[]"
+                                   value="{{ $dept->id }}"
+                                   id="apd_{{ $dept->id }}"
+                                   {{ in_array($dept->id, old('approval_department_ids', [])) ? 'checked' : '' }}>
+                            <label class="form-check-label small" for="apd_{{ $dept->id }}">
+                                {{ $dept->name }}
+                                <span style="color:#94A3B8;font-size:10px">({{ $dept->code }})</span>
+                            </label>
+                        </div>
+                        @endforeach
+                    </div>
+                    <div class="form-text" style="font-size:11px;color:#64748B;margin-top:4px">
+                        Primary department always grants approval scope automatically — only tick extras here.
+                    </div>
+                </div>
             </div>
         </div>
 

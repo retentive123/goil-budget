@@ -72,15 +72,31 @@
 
 @php
     $lineItems = $budgetVersion->lineItems ?? collect();
+    $isMonthly = ($entryMode ?? 'quarterly') === 'monthly';
 
-    $grandTotal    = $lineItems->sum('total_amount')
-                   + $lineItems->sum(fn($i) => $i->approvedSupplementaryTotal());
-    $isMonthly     = ($entryMode ?? 'quarterly') === 'monthly';
-    $grandQ1 = $lineItems->sum('q1_amount');
-    $grandQ2 = $lineItems->sum('q2_amount');
-    $grandQ3 = $lineItems->sum('q3_amount');
-    $grandQ4 = $lineItems->sum('q4_amount');
-    $grandMonthly  = $isMonthly
+    // Latest reduction per line item across all decisions (item_id => approved_amount)
+    $reductions    = collect();
+    $reductionLias = collect(); // item_id => LineItemApproval (for period amounts)
+    foreach ($budgetVersion->approvalDecisions as $dec) {
+        foreach ($dec->lineItemApprovals as $lia) {
+            if ($lia->status === 'reduced' && $lia->approved_amount !== null) {
+                $reductions[$lia->budget_line_item_id]    = (float) $lia->approved_amount;
+                $reductionLias[$lia->budget_line_item_id] = $lia;
+            }
+        }
+    }
+
+    // Helper: effective total for a single item, honouring any reduction
+    $effTotal = fn($item) => $reductions->has($item->id)
+        ? $reductions[$item->id]
+        : ((float) $item->total_amount + $item->approvedSupplementaryTotal());
+
+    $grandTotal   = $lineItems->sum($effTotal);
+    $grandQ1      = $lineItems->sum('q1_amount');
+    $grandQ2      = $lineItems->sum('q2_amount');
+    $grandQ3      = $lineItems->sum('q3_amount');
+    $grandQ4      = $lineItems->sum('q4_amount');
+    $grandMonthly = $isMonthly
         ? array_map(fn($n) => $lineItems->sum("m{$n}_amount"), range(1, 12))
         : [];
 
@@ -93,11 +109,11 @@
     $hasCapex   = $cxItems->isNotEmpty();
     $hasBalance = $blItems->isNotEmpty();
 
-    // Chart data: only IS items
-    $isItems     = $revItems->merge($expItems);
-    $byCategory  = $isItems->groupBy('accountCode.category.name');
-    $catNames    = $byCategory->keys()->toArray();
-    $catTotals   = $byCategory->map(fn($i) => $i->sum('total_amount'))->values()->toArray();
+    // Chart data: only IS items (use effective totals)
+    $isItems    = $revItems->merge($expItems);
+    $byCategory = $isItems->groupBy('accountCode.category.name');
+    $catNames   = $byCategory->keys()->toArray();
+    $catTotals  = $byCategory->map(fn($items) => $items->sum($effTotal))->values()->toArray();
 @endphp
 
 <div class="row g-4">
@@ -188,8 +204,8 @@
             @php
                 $revByCategory = $revItems->groupBy('accountCode.category.name');
                 $expByCategory = $expItems->groupBy('accountCode.category.name');
-                $revTotal = $revItems->sum('total_amount') + $revItems->sum(fn($i) => $i->approvedSupplementaryTotal());
-                $expTotal = $expItems->sum('total_amount') + $expItems->sum(fn($i) => $i->approvedSupplementaryTotal());
+                $revTotal = $revItems->sum($effTotal);
+                $expTotal = $expItems->sum($effTotal);
                 $netTotal = $revTotal - $expTotal;
             @endphp
             @include('approval._history_section_table', [
@@ -197,9 +213,11 @@
                     ['label' => 'REVENUE INCOME',     'bg' => '#1B2A4A', 'catBg' => '#EFF3F9', 'totalBg' => '#1E3A5F', 'totalLabel' => 'TOTAL REVENUE',   'byCategory' => $revByCategory, 'sectionTotal' => $revTotal, 'textColor' => '#1B2A4A'],
                     ['label' => 'OPERATING EXPENSES',  'bg' => '#7C2D12', 'catBg' => '#FFF7ED', 'totalBg' => '#431407', 'totalLabel' => 'TOTAL EXPENSES',  'byCategory' => $expByCategory, 'sectionTotal' => $expTotal, 'textColor' => '#7C2D12'],
                 ],
-                'grandTotal' => $grandTotal,
-                'netRow'     => ['label' => 'NET INCOME / (LOSS)', 'value' => $netTotal, 'color' => $netTotal >= 0 ? '#10B981' : '#F43F5E'],
-                'entryMode'  => $entryMode,
+                'grandTotal'    => $grandTotal,
+                'netRow'        => ['label' => 'NET INCOME / (LOSS)', 'value' => $netTotal, 'color' => $netTotal >= 0 ? '#10B981' : '#F43F5E'],
+                'entryMode'     => $entryMode,
+                'reductions'    => $reductions,
+                'reductionLias' => $reductionLias,
             ])
         </div>
 
@@ -208,15 +226,17 @@
         <div class="tab-pane fade" id="htab-capex" role="tabpanel">
             @php
                 $cxByCategory = $cxItems->groupBy('accountCode.category.name');
-                $cxTotal = $cxItems->sum('total_amount') + $cxItems->sum(fn($i) => $i->approvedSupplementaryTotal());
+                $cxTotal = $cxItems->sum($effTotal);
             @endphp
             @include('approval._history_section_table', [
                 'sections' => [
                     ['label' => 'CAPITAL EXPENDITURE', 'bg' => '#78350F', 'catBg' => '#FEF3C7', 'totalBg' => '#92400E', 'totalLabel' => 'TOTAL CAPITAL EXPENDITURE', 'byCategory' => $cxByCategory, 'sectionTotal' => $cxTotal, 'textColor' => '#78350F'],
                 ],
-                'grandTotal' => $grandTotal,
-                'netRow'     => null,
-                'entryMode'  => $entryMode,
+                'grandTotal'    => $grandTotal,
+                'netRow'        => null,
+                'entryMode'     => $entryMode,
+                'reductions'    => $reductions,
+                'reductionLias' => $reductionLias,
             ])
         </div>
         @endif
@@ -226,15 +246,17 @@
         <div class="tab-pane fade" id="htab-balance" role="tabpanel">
             @php
                 $blByCategory = $blItems->groupBy('accountCode.category.name');
-                $blTotal = $blItems->sum('total_amount') + $blItems->sum(fn($i) => $i->approvedSupplementaryTotal());
+                $blTotal = $blItems->sum($effTotal);
             @endphp
             @include('approval._history_section_table', [
                 'sections' => [
                     ['label' => 'ASSETS & LIABILITIES', 'bg' => '#4C1D95', 'catBg' => '#EDE9FE', 'totalBg' => '#5B21B6', 'totalLabel' => 'TOTAL ASSETS & LIABILITIES', 'byCategory' => $blByCategory, 'sectionTotal' => $blTotal, 'textColor' => '#4C1D95'],
                 ],
-                'grandTotal' => $grandTotal,
-                'netRow'     => null,
-                'entryMode'  => $entryMode,
+                'grandTotal'    => $grandTotal,
+                'netRow'        => null,
+                'entryMode'     => $entryMode,
+                'reductions'    => $reductions,
+                'reductionLias' => $reductionLias,
             ])
         </div>
         @endif

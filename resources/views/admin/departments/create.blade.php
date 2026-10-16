@@ -67,6 +67,26 @@
                 @error('zone_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
 
+            <div class="mb-3">
+                <label class="form-label small fw-semibold">Approval Route</label>
+                <select name="approval_route"
+                        class="form-select @error('approval_route') is-invalid @enderror">
+                    <option value="gceo" {{ old('approval_route','gceo')==='gceo'?'selected':'' }}>
+                        Via GCEO / MD then Board
+                    </option>
+                    <option value="coo" {{ old('approval_route')==='coo'?'selected':'' }}>
+                        Via COO then Board
+                    </option>
+                    <option value="direct" {{ old('approval_route')==='direct'?'selected':'' }}>
+                        Finance → Board (skip middle)
+                    </option>
+                </select>
+                <div class="form-text text-muted" style="font-size:11px">
+                    Dept Head → Finance → <strong>GCEO / MD or COO</strong> → Board
+                </div>
+                @error('approval_route')<div class="invalid-feedback">{{ $message }}</div>@enderror
+            </div>
+
             <div class="mb-4">
                 <label class="form-label small fw-semibold">Description</label>
                 <textarea name="description" rows="3"

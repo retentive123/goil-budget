@@ -239,10 +239,20 @@
                                 @endif
                             </tr>
                             @foreach($cat['items'] as $item)
-                            @php $ig = ($hasPrev && $item['prev_actual'] > 0) ? (($item['effective'] - $item['prev_actual']) / abs($item['prev_actual'])) * 100 : null; @endphp
+                            @php $ig = ($hasPrev && $item['prev_actual'] > 0) ? (($item['effective'] - $item['prev_actual']) / abs($item['prev_actual'])) * 100 : null;
+                                $hasSubs = !empty($item['sub_entries']);
+                                $subGrp  = 'subs-rev-'.$catId.'-'.$loop->index; @endphp
                             <tr class="cat-items-{{ $catId }}" style="display:none;background:#F8FAFC">
                                 <td style="padding-left:28px;color:#475569;font-size:11px">
+                                    @if($hasSubs)
+                                    <span onclick="toggleSubItems('{{ $subGrp }}', this)" style="cursor:pointer;display:inline-flex;align-items:center;gap:3px">
+                                        <i class="bi bi-chevron-right sub-chevron" style="font-size:9px;color:#818CF8;transition:transform .15s"></i>
+                                        <code style="font-size:10px;color:#94A3B8;margin-right:2px;background:transparent">{{ $item['code'] }}</code>{{ $item['name'] }}
+                                        <span style="font-size:10px;color:#818CF8;background:#EEF2FF;border-radius:8px;padding:1px 5px">{{ count($item['sub_entries']) }}</span>
+                                    </span>
+                                    @else
                                     <code style="font-size:10px;color:#94A3B8;margin-right:4px;background:transparent">{{ $item['code'] }}</code>{{ $item['name'] }}
+                                    @endif
                                 </td>
                                 @foreach($periodCols as $key => $label)
                                 <td class="text-end small {{ $loop->first ? 'border-start' : '' }}" style="color:#64748B">{{ number_format($item[$key], 2) }}</td>
@@ -257,6 +267,25 @@
                                 </td>
                                 @endif
                             </tr>
+                            @if($hasSubs)
+                            @foreach($item['sub_entries'] as $si => $sub)
+                            <tr class="cat-items-{{ $catId }} sub-items-{{ $subGrp }}" style="display:none;background:#F5F3FF">
+                                <td style="padding-left:46px;color:#6D28D9;font-size:11px">
+                                    <span style="color:#818CF8;font-weight:700;margin-right:4px;font-size:10px">{{ $si + 1 }}</span>
+                                    <span style="color:#4338CA">{{ $sub['name'] }}</span>
+                                </td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end small {{ $loop->first ? 'border-start' : '' }}" style="color:#818CF8">{{ number_format($sub[$key], 2) }}</td>
+                                @endforeach
+                                <td class="text-end small fw-semibold" style="color:#4338CA">{{ number_format($sub['total'], 2) }}</td>
+                                @if($hasPrev)
+                                <td class="text-end small border-start text-muted">—</td>
+                                <td class="text-end small text-muted">—</td>
+                                <td class="text-end small text-muted">—</td>
+                                @endif
+                            </tr>
+                            @endforeach
+                            @endif
                             @endforeach
                             @empty
                             <tr><td colspan="99" class="text-center text-muted py-3 small">No revenue items</td></tr>
@@ -305,10 +334,20 @@
                                 @endif
                             </tr>
                             @foreach($cat['items'] as $item)
-                            @php $ig = ($hasPrev && $item['prev_actual'] > 0) ? (($item['effective'] - $item['prev_actual']) / abs($item['prev_actual'])) * 100 : null; @endphp
+                            @php $ig = ($hasPrev && $item['prev_actual'] > 0) ? (($item['effective'] - $item['prev_actual']) / abs($item['prev_actual'])) * 100 : null;
+                                $hasSubs = !empty($item['sub_entries']);
+                                $subGrp  = 'subs-exp-'.$catId.'-'.$loop->index; @endphp
                             <tr class="cat-items-{{ $catId }}" style="display:none;background:#FFFBF5">
                                 <td style="padding-left:28px;color:#475569;font-size:11px">
+                                    @if($hasSubs)
+                                    <span onclick="toggleSubItems('{{ $subGrp }}', this)" style="cursor:pointer;display:inline-flex;align-items:center;gap:3px">
+                                        <i class="bi bi-chevron-right sub-chevron" style="font-size:9px;color:#818CF8;transition:transform .15s"></i>
+                                        <code style="font-size:10px;color:#94A3B8;margin-right:2px;background:transparent">{{ $item['code'] }}</code>{{ $item['name'] }}
+                                        <span style="font-size:10px;color:#818CF8;background:#EEF2FF;border-radius:8px;padding:1px 5px">{{ count($item['sub_entries']) }}</span>
+                                    </span>
+                                    @else
                                     <code style="font-size:10px;color:#94A3B8;margin-right:4px;background:transparent">{{ $item['code'] }}</code>{{ $item['name'] }}
+                                    @endif
                                 </td>
                                 @foreach($periodCols as $key => $label)
                                 <td class="text-end small {{ $loop->first ? 'border-start' : '' }}" style="color:#64748B">{{ number_format($item[$key], 2) }}</td>
@@ -323,6 +362,25 @@
                                 </td>
                                 @endif
                             </tr>
+                            @if($hasSubs)
+                            @foreach($item['sub_entries'] as $si => $sub)
+                            <tr class="cat-items-{{ $catId }} sub-items-{{ $subGrp }}" style="display:none;background:#FFF5F0">
+                                <td style="padding-left:46px;font-size:11px">
+                                    <span style="color:#818CF8;font-weight:700;margin-right:4px;font-size:10px">{{ $si + 1 }}</span>
+                                    <span style="color:#4338CA">{{ $sub['name'] }}</span>
+                                </td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end small {{ $loop->first ? 'border-start' : '' }}" style="color:#818CF8">{{ number_format($sub[$key], 2) }}</td>
+                                @endforeach
+                                <td class="text-end small fw-semibold" style="color:#4338CA">{{ number_format($sub['total'], 2) }}</td>
+                                @if($hasPrev)
+                                <td class="text-end small border-start text-muted">—</td>
+                                <td class="text-end small text-muted">—</td>
+                                <td class="text-end small text-muted">—</td>
+                                @endif
+                            </tr>
+                            @endforeach
+                            @endif
                             @endforeach
                             @empty
                             <tr><td colspan="99" class="text-center text-muted py-3 small">No expense items</td></tr>
@@ -410,10 +468,20 @@
                                 @endif
                             </tr>
                             @foreach($cat['items'] as $item)
-                            @php $ig = ($hasPrev && $item['prev_actual'] > 0) ? (($item['effective'] - $item['prev_actual']) / abs($item['prev_actual'])) * 100 : null; @endphp
+                            @php $ig = ($hasPrev && $item['prev_actual'] > 0) ? (($item['effective'] - $item['prev_actual']) / abs($item['prev_actual'])) * 100 : null;
+                                $hasSubs = !empty($item['sub_entries']);
+                                $subGrp  = 'subs-cpx-'.$catId.'-'.$loop->index; @endphp
                             <tr class="cat-items-{{ $catId }}" style="display:none;background:#FFFDF0">
                                 <td style="padding-left:28px;color:#475569;font-size:11px">
+                                    @if($hasSubs)
+                                    <span onclick="toggleSubItems('{{ $subGrp }}', this)" style="cursor:pointer;display:inline-flex;align-items:center;gap:3px">
+                                        <i class="bi bi-chevron-right sub-chevron" style="font-size:9px;color:#818CF8;transition:transform .15s"></i>
+                                        <code style="font-size:10px;color:#94A3B8;margin-right:2px;background:transparent">{{ $item['code'] }}</code>{{ $item['name'] }}
+                                        <span style="font-size:10px;color:#818CF8;background:#EEF2FF;border-radius:8px;padding:1px 5px">{{ count($item['sub_entries']) }}</span>
+                                    </span>
+                                    @else
                                     <code style="font-size:10px;color:#94A3B8;margin-right:4px;background:transparent">{{ $item['code'] }}</code>{{ $item['name'] }}
+                                    @endif
                                 </td>
                                 @foreach($periodCols as $key => $label)
                                 <td class="text-end small {{ $loop->first ? 'border-start' : '' }}" style="color:#64748B">{{ number_format($item[$key], 2) }}</td>
@@ -428,6 +496,25 @@
                                 </td>
                                 @endif
                             </tr>
+                            @if($hasSubs)
+                            @foreach($item['sub_entries'] as $si => $sub)
+                            <tr class="cat-items-{{ $catId }} sub-items-{{ $subGrp }}" style="display:none;background:#FFFAEB">
+                                <td style="padding-left:46px;font-size:11px">
+                                    <span style="color:#818CF8;font-weight:700;margin-right:4px;font-size:10px">{{ $si + 1 }}</span>
+                                    <span style="color:#4338CA">{{ $sub['name'] }}</span>
+                                </td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end small {{ $loop->first ? 'border-start' : '' }}" style="color:#818CF8">{{ number_format($sub[$key], 2) }}</td>
+                                @endforeach
+                                <td class="text-end small fw-semibold" style="color:#4338CA">{{ number_format($sub['total'], 2) }}</td>
+                                @if($hasPrev)
+                                <td class="text-end small border-start text-muted">—</td>
+                                <td class="text-end small text-muted">—</td>
+                                <td class="text-end small text-muted">—</td>
+                                @endif
+                            </tr>
+                            @endforeach
+                            @endif
                             @endforeach
                             @endforeach
                             <tr style="background:#92400E;color:#fff;font-weight:700">
@@ -496,10 +583,20 @@
                                 @endif
                             </tr>
                             @foreach($cat['items'] as $item)
-                            @php $ig = ($hasPrev && $item['prev_actual'] > 0) ? (($item['effective'] - $item['prev_actual']) / abs($item['prev_actual'])) * 100 : null; @endphp
+                            @php $ig = ($hasPrev && $item['prev_actual'] > 0) ? (($item['effective'] - $item['prev_actual']) / abs($item['prev_actual'])) * 100 : null;
+                                $hasSubs = !empty($item['sub_entries']);
+                                $subGrp  = 'subs-bal-'.$catId.'-'.$loop->index; @endphp
                             <tr class="cat-items-{{ $catId }}" style="display:none;background:#F5F3FF">
                                 <td style="padding-left:28px;color:#475569;font-size:11px">
+                                    @if($hasSubs)
+                                    <span onclick="toggleSubItems('{{ $subGrp }}', this)" style="cursor:pointer;display:inline-flex;align-items:center;gap:3px">
+                                        <i class="bi bi-chevron-right sub-chevron" style="font-size:9px;color:#818CF8;transition:transform .15s"></i>
+                                        <code style="font-size:10px;color:#94A3B8;margin-right:2px;background:transparent">{{ $item['code'] }}</code>{{ $item['name'] }}
+                                        <span style="font-size:10px;color:#818CF8;background:#EEF2FF;border-radius:8px;padding:1px 5px">{{ count($item['sub_entries']) }}</span>
+                                    </span>
+                                    @else
                                     <code style="font-size:10px;color:#94A3B8;margin-right:4px;background:transparent">{{ $item['code'] }}</code>{{ $item['name'] }}
+                                    @endif
                                 </td>
                                 @foreach($periodCols as $key => $label)
                                 <td class="text-end small {{ $loop->first ? 'border-start' : '' }}" style="color:#64748B">{{ number_format($item[$key], 2) }}</td>
@@ -514,6 +611,25 @@
                                 </td>
                                 @endif
                             </tr>
+                            @if($hasSubs)
+                            @foreach($item['sub_entries'] as $si => $sub)
+                            <tr class="cat-items-{{ $catId }} sub-items-{{ $subGrp }}" style="display:none;background:#EDE9FE">
+                                <td style="padding-left:46px;font-size:11px">
+                                    <span style="color:#818CF8;font-weight:700;margin-right:4px;font-size:10px">{{ $si + 1 }}</span>
+                                    <span style="color:#4338CA">{{ $sub['name'] }}</span>
+                                </td>
+                                @foreach($periodCols as $key => $label)
+                                <td class="text-end small {{ $loop->first ? 'border-start' : '' }}" style="color:#818CF8">{{ number_format($sub[$key], 2) }}</td>
+                                @endforeach
+                                <td class="text-end small fw-semibold" style="color:#4338CA">{{ number_format($sub['total'], 2) }}</td>
+                                @if($hasPrev)
+                                <td class="text-end small border-start text-muted">—</td>
+                                <td class="text-end small text-muted">—</td>
+                                <td class="text-end small text-muted">—</td>
+                                @endif
+                            </tr>
+                            @endforeach
+                            @endif
                             @endforeach
                             @endforeach
                             <tr style="background:#5B21B6;color:#fff;font-weight:700">
@@ -630,6 +746,24 @@ function toggleCatItems(row) {
     const icon   = row.querySelector('.cat-chevron');
     const isOpen = items.length > 0 && items[0].style.display !== 'none';
     items.forEach(r => r.style.display = isOpen ? 'none' : '');
+    if (icon) icon.style.transform = isOpen ? '' : 'rotate(90deg)';
+    // Collapse any open sub-groups when the category collapses
+    if (isOpen) {
+        items.forEach(r => {
+            r.querySelectorAll('.sub-chevron').forEach(ic => {
+                const grp = ic.closest('[onclick^="toggleSubItems"]')?.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
+                if (grp) document.querySelectorAll('.sub-items-' + grp).forEach(s => s.style.display = 'none');
+                ic.style.transform = '';
+            });
+        });
+    }
+}
+
+function toggleSubItems(grp, el) {
+    const rows   = document.querySelectorAll('.sub-items-' + grp);
+    const icon   = el.querySelector('.sub-chevron');
+    const isOpen = rows.length > 0 && rows[0].style.display !== 'none';
+    rows.forEach(r => r.style.display = isOpen ? 'none' : '');
     if (icon) icon.style.transform = isOpen ? '' : 'rotate(90deg)';
 }
 

@@ -181,6 +181,13 @@
                                     <i class="fas fa-{{ $dept->is_active ? 'circle' : 'circle' }}" style="font-size: 8px; margin-right: 4px; color: {{ $dept->is_active ? '#10B981' : '#F43F5E' }};"></i>
                                     {{ $dept->is_active ? 'Active' : 'Inactive' }}
                                 </span>
+                                @php $route = $dept->approval_route ?? 'gceo'; @endphp
+                                <span class="badge px-2 py-1 mt-1 d-inline-block"
+                                      style="border-radius:20px;font-size:10px;font-weight:600;
+                                             background:{{ $route==='coo'?'#EEF2FF':($route==='direct'?'#FEF9C3':'#F0FDF4') }};
+                                             color:{{ $route==='coo'?'#4338CA':($route==='direct'?'#92400E':'#166534') }}">
+                                    {{ $route==='gceo'?'Via GCEO':($route==='coo'?'Via COO':'Direct→Board') }}
+                                </span>
                             </td>
                             <td style="padding: 10px 16px; text-align: center;">
                                 <div class="d-flex gap-1 justify-content-center">

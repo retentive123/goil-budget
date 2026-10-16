@@ -322,7 +322,7 @@ public function isOverBudget(int $departmentId, int $periodId): array
      */
     public function buildPnlData(BudgetVersion $version, ?BudgetPeriod $prevPeriod): array
     {
-        $items = $version->lineItems;
+        $items = $version->lineItems()->with('subEntries')->get();
 
         $prevActuals = [];
         $prevBudgets = [];
@@ -419,6 +419,17 @@ public function isOverBudget(int $departmentId, int $periodId): array
                 'justification' => $item->justification ?? '',
                 'line_type'     => $item->line_type,
                 'common_size'   => 0,
+                'sub_entries'   => $item->subEntries->map(function ($s) {
+                    $months = [];
+                    foreach (range(1, 12) as $n) $months["m{$n}"] = (float) $s->{"m{$n}_amount"};
+                    return array_merge(['name' => $s->name, 'sort_order' => $s->sort_order,
+                        'q1' => $s->m1_amount + $s->m2_amount + $s->m3_amount,
+                        'q2' => $s->m4_amount + $s->m5_amount + $s->m6_amount,
+                        'q3' => $s->m7_amount + $s->m8_amount + $s->m9_amount,
+                        'q4' => $s->m10_amount + $s->m11_amount + $s->m12_amount,
+                        'total' => (float) $s->total_amount,
+                    ], $months);
+                })->toArray(),
             ]);
 
             foreach (['q1','q2','q3','q4'] as $k) {

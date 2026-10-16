@@ -197,10 +197,6 @@ class BudgetEntryController extends Controller
     // Show the budget entry form
     public function show(BudgetVersion $budgetVersion, Request $request)
     {
-        if (!$request->boolean('classic')) {
-            return redirect()->route('budget.show-pnl', $budgetVersion);
-        }
-
         $this->authorizeBudgetAccess($budgetVersion);
 
         // Sync any account codes assigned to the dept after this version was created
@@ -208,7 +204,12 @@ class BudgetEntryController extends Controller
             $this->calculator->populateLineItems($budgetVersion);
         }
 
-        $budgetVersion->load('lineItems.accountCode.category', 'lineItems.customValues', 'period', 'department', 'subsidiary.category', 'originalVersion');
+        $budgetVersion->load([
+            'lineItems.accountCode.category', 'lineItems.accountCode.subEntryTemplates',
+            'lineItems.customValues', 'lineItems.subEntries',
+            'period', 'department', 'subsidiary.category', 'originalVersion',
+            'approvalDecisions.lineItemApprovals',
+        ]);
 
         $summary      = $this->calculator->summaryByCategory($budgetVersion);
         $grandTotals  = $this->calculator->grandTotals($budgetVersion);
@@ -222,6 +223,17 @@ class BudgetEntryController extends Controller
         $adminSetsRate = $period->adminSetsRate();
         $adminSetsFreq = $period->adminSetsFreq();
 
+        // Build approved-reduction map: item_id → approved_amount
+        // Same pattern as ApprovalController — later stage overwrites earlier for each item.
+        $reductions = [];
+        foreach ($budgetVersion->approvalDecisions as $dec) {
+            foreach ($dec->lineItemApprovals as $lia) {
+                if ($lia->status === 'reduced' && $lia->approved_amount !== null) {
+                    $reductions[$lia->budget_line_item_id] = (float) $lia->approved_amount;
+                }
+            }
+        }
+
         // Revenue categories first, then expense
         $revenueTypes = ['revenue', 'both'];
         uasort($summary, function ($a, $b) use ($revenueTypes) {
@@ -234,7 +246,8 @@ class BudgetEntryController extends Controller
 
         return view('budget.show', compact(
             'budgetVersion', 'summary', 'grandTotals', 'entryMode',
-            'calcMode', 'adminSetsRate', 'adminSetsFreq', 'manualSplit', 'customFields'
+            'calcMode', 'adminSetsRate', 'adminSetsFreq', 'manualSplit', 'customFields',
+            'reductions'
         ));
     }
 
@@ -456,6 +469,68 @@ class BudgetEntryController extends Controller
                     }
                 });
             }
+        }
+
+        // ── Sub-entries: save child rows for items that have them ────────────────
+        $subData = $request->input('sub_entries', []);
+        if (!empty($subData)) {
+            DB::transaction(function () use ($subData, $budgetVersion) {
+                foreach ($subData as $itemId => $subs) {
+                    $parent = BudgetLineItem::where('id', $itemId)
+                        ->where('budget_version_id', $budgetVersion->id)
+                        ->first();
+                    if (!$parent) continue;
+
+                    $keptIds = [];
+                    foreach ((array) $subs as $idx => $s) {
+                        $monthly = [];
+                        for ($m = 1; $m <= 12; $m++) {
+                            $monthly["m{$m}_amount"] = round((float) ($s["m{$m}"] ?? 0), 2);
+                        }
+                        $total = array_sum($monthly);
+
+                        $attrs = array_merge($monthly, [
+                            'name'         => mb_substr(trim($s['name'] ?? 'Sub-item'), 0, 255),
+                            'quantity'     => ($v = (float)($s['qty']  ?? 0)) !== 0.0 ? $v : null,
+                            'rate'         => ($v = (float)($s['rate'] ?? 0)) !== 0.0 ? $v : null,
+                            'frequency'    => ($v = (float)($s['freq'] ?? 0)) !== 0.0 ? $v : 1.0,
+                            'total_amount' => $total,
+                            'sort_order'   => (int) $idx,
+                        ]);
+
+                        if (!empty($s['id'])) {
+                            $sub = \App\Models\BudgetLineSubEntry::where('id', $s['id'])
+                                ->where('budget_line_item_id', $itemId)
+                                ->first();
+                            if ($sub) {
+                                $sub->update($attrs);
+                                $keptIds[] = $sub->id;
+                                continue;
+                            }
+                        }
+
+                        $sub = \App\Models\BudgetLineSubEntry::create(
+                            array_merge(['budget_line_item_id' => $itemId], $attrs)
+                        );
+                        $keptIds[] = $sub->id;
+                    }
+
+                    // Remove deleted sub-entries
+                    \App\Models\BudgetLineSubEntry::where('budget_line_item_id', $itemId)
+                        ->whereNotIn('id', $keptIds)
+                        ->delete();
+
+                    // Recompute parent monthly totals from remaining sub-entries
+                    $remaining = \App\Models\BudgetLineSubEntry::where('budget_line_item_id', $itemId)->get();
+                    if ($remaining->isNotEmpty()) {
+                        $parentUpd = [];
+                        for ($m = 1; $m <= 12; $m++) {
+                            $parentUpd["m{$m}_amount"] = round($remaining->sum("m{$m}_amount"), 2);
+                        }
+                        $parent->update($parentUpd);
+                    }
+                }
+            });
         }
 
         // Save custom field values if any were submitted

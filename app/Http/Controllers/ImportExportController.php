@@ -67,7 +67,7 @@ class ImportExportController extends Controller
     {
         $this->authorizeBudgetAccess($budgetVersion);
 
-        $budgetVersion->load('lineItems.accountCode.category', 'department', 'subsidiary', 'period');
+        $budgetVersion->load('lineItems.accountCode.category', 'lineItems.subEntries', 'department', 'subsidiary', 'period');
 
         $actualsPerItem = BudgetActual::where('budget_period_id', $budgetVersion->budget_period_id)
             ->when($budgetVersion->subsidiary_id,
@@ -95,7 +95,7 @@ class ImportExportController extends Controller
     {
         $this->authorizeBudgetAccess($budgetVersion);
 
-        $budgetVersion->load('lineItems.accountCode.category', 'department', 'subsidiary', 'period');
+        $budgetVersion->load('lineItems.accountCode.category', 'lineItems.subEntries', 'department', 'subsidiary', 'period');
 
         $actualsPerItem = BudgetActual::where('budget_period_id', $budgetVersion->budget_period_id)
             ->when($budgetVersion->subsidiary_id,
@@ -306,7 +306,7 @@ class ImportExportController extends Controller
             'file' => ['required','file','mimes:xlsx,xls,csv','max:5120'],
         ]);
 
-        $import = new AccountCodeImport();
+        $import = new AccountCodeImport('department');
 
         try {
             Excel::import($import, $request->file('file'));
@@ -314,7 +314,7 @@ class ImportExportController extends Controller
             return back()->with('error', 'File error: '.$e->getMessage());
         }
 
-        $msg = "Imported {$import->imported} new, updated {$import->updated} existing codes.";
+        $msg = "Imported {$import->imported} new, updated {$import->updated} existing department codes.";
         if ($import->skipped) $msg .= " {$import->skipped} blank rows skipped.";
 
         if (!empty($import->errors)) {
@@ -322,6 +322,30 @@ class ImportExportController extends Controller
         }
 
         return redirect()->route('admin.account-codes.index')->with('success', $msg);
+    }
+
+    public function uploadSubsidiaryCodes(Request $request)
+    {
+        $request->validate([
+            'file' => ['required','file','mimes:xlsx,xls,csv','max:5120'],
+        ]);
+
+        $import = new AccountCodeImport('subsidiary');
+
+        try {
+            Excel::import($import, $request->file('file'));
+        } catch (\Exception $e) {
+            return back()->with('error', 'File error: '.$e->getMessage());
+        }
+
+        $msg = "Imported {$import->imported} new, updated {$import->updated} existing subsidiary codes.";
+        if ($import->skipped) $msg .= " {$import->skipped} blank rows skipped.";
+
+        if (!empty($import->errors)) {
+            return back()->with('warning', $msg)->with('import_errors', $import->errors);
+        }
+
+        return redirect()->route('admin.account-codes.index', ['scope' => 'subsidiary'])->with('success', $msg);
     }
 
     public function downloadDepartmentTemplate()

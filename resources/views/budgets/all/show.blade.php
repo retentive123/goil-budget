@@ -145,12 +145,14 @@
             $grandQ3    = $budgetVersion->lineItems->sum('q3_amount');
             $grandQ4    = $budgetVersion->lineItems->sum('q4_amount');
             $grandMonthly = $isMonthly
-                ? array_map(fn($n) => $budgetVersion->lineItems->sum("m{$n}_amount"), range(1,12))
+                ? array_map(fn($n) => $budgetVersion->lineItems->sum(
+                      fn($i) => $monthlyReductions[$i->id][$n] ?? $i->{"m{$n}_amount"}
+                  ), range(1,12))
                 : [];
 
             $totalSupplementary = $budgetVersion->lineItems->sum(fn($i) => $i->approvedSupplementaryTotal());
             $grandTotal = $grandTotals['total'] - $totalSupplementary;
-            $effectiveTotal = $grandTotal + $totalSupplementary;
+            $effectiveTotal = $budgetVersion->lineItems->sum(fn($i) => ($reductions[$i->id] ?? $i->total_amount) + $i->approvedSupplementaryTotal());
             $totalActual = $actualsPerItem->sum();
             $utilPct    = $effectiveTotal > 0 ? round(($totalActual/$effectiveTotal)*100,1) : 0;
         @endphp
@@ -231,7 +233,7 @@
                     $typeAgg[$key] = ['label' => $meta['label'], 'color' => $meta['color'], 'effective' => 0, 'actual' => 0];
                 }
                 foreach ($catData['items'] as $_ci) {
-                    $typeAgg[$key]['effective'] += $_ci->effectiveBudget();
+                    $typeAgg[$key]['effective'] += ($reductions[$_ci->id] ?? $_ci->total_amount) + $_ci->approvedSupplementaryTotal();
                     $typeAgg[$key]['actual']    += $actualsPerItem->get($_ci->id, 0);
                 }
             }
@@ -322,12 +324,14 @@
                     $tabTotQ4 += $cd['items']->sum('q4_amount');
                     if ($isMonthly) {
                         for ($mn = 1; $mn <= 12; $mn++) {
-                            $tabTotMonthly[$mn] += $cd['items']->sum("m{$mn}_amount");
+                            foreach ($cd['items'] as $_mi) {
+                                $tabTotMonthly[$mn] += $monthlyReductions[$_mi->id][$mn] ?? $_mi->{"m{$mn}_amount"};
+                            }
                         }
                     }
                     foreach ($cd['items'] as $_ti) {
                         $tabTotSupp += $_ti->approvedSupplementaryTotal();
-                        $tabTotEff  += $_ti->effectiveBudget();
+                        $tabTotEff  += ($reductions[$_ti->id] ?? $_ti->total_amount) + $_ti->approvedSupplementaryTotal();
                         $tabTotAct  += $actualsPerItem->get($_ti->id, 0);
                     }
                 }
@@ -402,7 +406,7 @@
                     $cAct = $cEff = $cSupp = 0;
                     foreach ($catData['items'] as $_ci) {
                         $cAct  += $actualsPerItem->get($_ci->id, 0);
-                        $cEff  += $_ci->effectiveBudget();
+                        $cEff  += ($reductions[$_ci->id] ?? $_ci->total_amount) + $_ci->approvedSupplementaryTotal();
                         $cSupp += $_ci->approvedSupplementaryTotal();
                     }
                     $cUtil = $cEff > 0 ? round(($cAct/$cEff)*100,1) : 0;
@@ -436,7 +440,7 @@
                 @php
                     $iAct  = $actualsPerItem->get($item->id, 0);
                     $iSupp = $item->approvedSupplementaryTotal();
-                    $iEff  = $item->effectiveBudget();
+                    $iEff  = ($reductions[$item->id] ?? $item->total_amount) + $iSupp;
                     $iVar  = $iAct - $iEff;
                 @endphp
                 <tr class="ci-{{ $cid }}">
@@ -455,7 +459,7 @@
                     </td>
                     @if($isMonthly)
                         @foreach(range(1,12) as $mn)
-                        <td class="text-end">{{ number_format($item->{'m'.$mn.'_amount'},2) }}</td>
+                        <td class="text-end">{{ number_format($monthlyReductions[$item->id][$mn] ?? $item->{'m'.$mn.'_amount'},2) }}</td>
                         @endforeach
                     @else
                         <td class="text-end">{{ number_format($item->q1_amount,2) }}</td>
@@ -463,7 +467,14 @@
                         <td class="text-end">{{ number_format($item->q3_amount,2) }}</td>
                         <td class="text-end">{{ number_format($item->q4_amount,2) }}</td>
                     @endif
-                    <td class="text-end">{{ number_format($item->total_amount,2) }}</td>
+                    <td class="text-end">
+                        @if(isset($reductions[$item->id]))
+                            <span style="text-decoration:line-through;color:#9CA3AF;font-size:10px">{{ number_format($item->total_amount,2) }}</span>
+                            <span style="display:block;color:#DC2626;font-weight:600;font-size:11px">{{ number_format($reductions[$item->id],2) }}</span>
+                        @else
+                            {{ number_format($item->total_amount,2) }}
+                        @endif
+                    </td>
                     <td class="text-end" style="color:{{ $iSupp>0?'#10B981':'var(--slate)' }}">
                         {{ $iSupp>0?'+'.number_format($iSupp,2):'—' }}
                     </td>
@@ -484,7 +495,7 @@
                     </td>
                     @if($isMonthly)
                         @foreach(range(1,12) as $mn)
-                        <td class="text-end">{{ number_format($catData['items']->sum("m{$mn}_amount"),2) }}</td>
+                        <td class="text-end">{{ number_format($catData['items']->sum(fn($_si) => $monthlyReductions[$_si->id][$mn] ?? $_si->{"m{$mn}_amount"}),2) }}</td>
                         @endforeach
                     @else
                         <td class="text-end">{{ number_format($catData['items']->sum('q1_amount'),2) }}</td>

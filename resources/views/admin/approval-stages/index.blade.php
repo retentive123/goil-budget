@@ -29,33 +29,79 @@
 
 {{-- Visual flow --}}
 <div class="chart-card mb-4">
-    <div class="chart-title">Current Approval Flow</div>
-    <div class="d-flex align-items-center gap-0 flex-wrap">
-        @php $activeStages = $stages->where('is_active', true)->sortBy('order'); @endphp
-        @foreach($activeStages as $idx => $stage)
-        <div style="display:flex;align-items:center">
-            <div style="background:var(--navy);color:#fff;border-radius:10px;
-                        padding:10px 16px;text-align:center;min-width:120px">
-                <div style="font-size:10px;color:rgba(255,255,255,.5);
-                            text-transform:uppercase;letter-spacing:.5px">
-                    Stage {{ $stage->order }}
-                </div>
-                <div style="font-size:13px;font-weight:700;margin-top:2px">
-                    {{ $stage->name }}
-                </div>
-                <div style="font-size:10px;color:var(--gold);margin-top:2px">
-                    {{ ucfirst(str_replace('_',' ',$stage->role_name)) }}
-                </div>
-            </div>
-            @if(!$loop->last)
-            <div style="padding:0 6px;color:var(--slate);font-size:18px">→</div>
-            @endif
-        </div>
+    <div class="chart-title mb-3">Current Approval Flow</div>
+    @php
+        $activeStages  = $stages->where('is_active', true)->sortBy('order');
+        $universals    = $activeStages->where('route_key', null)->values();
+        $branchStages  = $activeStages->whereNotNull('route_key')->values();
+        // Split universal stages into before-branch and after-branch
+        $minBranchOrder = $branchStages->min('order') ?? 999;
+        $beforeBranch  = $universals->filter(fn($s) => $s->order < $minBranchOrder)->values();
+        $afterBranch   = $universals->filter(fn($s) => $s->order > $minBranchOrder)->values();
+    @endphp
+
+    <div style="display:flex;align-items:center;gap:0;flex-wrap:wrap;overflow-x:auto;padding-bottom:4px">
+
+        {{-- Universal stages before the branch --}}
+        @foreach($beforeBranch as $stage)
+        @include('admin.approval-stages._flow_node', ['stage' => $stage, 'color' => 'var(--navy)', 'label' => 'All depts'])
+        <div style="padding:0 6px;color:var(--slate);font-size:20px;line-height:1">→</div>
         @endforeach
 
-        @if($activeStages->isEmpty())
-        <div class="text-muted small">No active stages defined.</div>
+        {{-- Branch fork (GCEO / COO) or straight line --}}
+        @if($branchStages->isNotEmpty())
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:center">
+            @foreach($branchStages as $branch)
+            <div style="display:flex;align-items:center;gap:6px">
+                <div style="background:{{ $branch->route_key === 'gceo' ? '#4F46E5' : '#0891B2' }};
+                            color:#fff;border-radius:10px;padding:10px 16px;text-align:center;
+                            min-width:120px;border:2px dashed rgba(255,255,255,.3)">
+                    <div style="font-size:9px;color:rgba(255,255,255,.65);text-transform:uppercase;
+                                letter-spacing:.5px;margin-bottom:2px">
+                        {{ $branch->route_key === 'gceo' ? 'Via GCEO route' : 'Via COO route' }}
+                    </div>
+                    <div style="font-size:13px;font-weight:700">{{ $branch->name }}</div>
+                    <div style="font-size:10px;color:rgba(255,255,255,.7);margin-top:2px">
+                        {{ ucfirst(str_replace('_',' ',$branch->role_name)) }}
+                    </div>
+                </div>
+                @if(!$loop->last)
+                <div style="font-size:11px;color:#94A3B8;font-style:italic;white-space:nowrap">or</div>
+                @endif
+            </div>
+            @endforeach
+            <div style="font-size:10px;color:#94A3B8;font-style:italic;margin-top:2px">
+                ↑ only one branch runs per department
+            </div>
+        </div>
+        @elseif($beforeBranch->isNotEmpty() && $afterBranch->isNotEmpty())
+        {{-- No active branch stages — just show a dashed "skipped" placeholder --}}
+        <div style="background:#F1F5F9;border:2px dashed #CBD5E1;border-radius:10px;
+                    padding:10px 16px;text-align:center;min-width:120px;color:#94A3B8;font-size:12px">
+            (no branch stages active)
+        </div>
         @endif
+
+        {{-- Arrow into universal after-branch --}}
+        @if($afterBranch->isNotEmpty())
+        <div style="padding:0 6px;color:var(--slate);font-size:20px;line-height:1">→</div>
+        @foreach($afterBranch as $stage)
+        @include('admin.approval-stages._flow_node', ['stage' => $stage, 'color' => 'var(--navy)', 'label' => 'All depts'])
+        @if(!$loop->last)
+        <div style="padding:0 6px;color:var(--slate);font-size:20px;line-height:1">→</div>
+        @endif
+        @endforeach
+        @endif
+
+    </div>
+
+    <div style="margin-top:12px;padding:8px 12px;background:#F0F4FF;border-radius:8px;
+                font-size:12px;color:#4338CA;border-left:3px solid #818CF8">
+        <strong>How it works:</strong>
+        All departments go through <strong>Dept Head → Finance → Board</strong>.
+        In between, each department is routed through either <strong>GCEO/MD</strong> or <strong>COO</strong>
+        (or skips that step entirely) — configured per department under
+        <a href="{{ route('admin.departments.index') }}" style="color:#4338CA;font-weight:600">Admin → Departments</a>.
     </div>
 </div>
 
@@ -77,6 +123,7 @@
                     <th style="width:60px">Order</th>
                     <th>Stage Name</th>
                     <th>Role</th>
+                    <th>Applies To</th>
                     <th>Active Budgets</th>
                     <th>Status</th>
                     <th>Move</th>
@@ -118,6 +165,26 @@
                                      font-size:12px;font-weight:600">
                             {{ ucfirst(str_replace('_',' ',$stage->role_name)) }}
                         </span>
+                    </td>
+
+                    {{-- Applies To --}}
+                    <td>
+                        @if(is_null($stage->route_key))
+                            <span style="background:#D1FAE5;color:#065F46;border-radius:20px;
+                                         padding:3px 10px;font-size:11px;font-weight:600">
+                                All departments
+                            </span>
+                        @elseif($stage->route_key === 'gceo')
+                            <span style="background:#EEF2FF;color:#4338CA;border-radius:20px;
+                                         padding:3px 10px;font-size:11px;font-weight:600">
+                                Via GCEO route only
+                            </span>
+                        @elseif($stage->route_key === 'coo')
+                            <span style="background:#E0F2FE;color:#0369A1;border-radius:20px;
+                                         padding:3px 10px;font-size:11px;font-weight:600">
+                                Via COO route only
+                            </span>
+                        @endif
                     </td>
 
                     <td>
@@ -176,7 +243,14 @@
                                 Edit
                             </a>
 
-                            @if(($stageBudgetCounts[$stage->id] ?? 0) === 0)
+                            @if(is_null($stage->route_key))
+                            {{-- Universal stages (Dept Head, Finance, Board) cannot be deleted --}}
+                            <button class="btn btn-sm btn-outline-secondary"
+                                    style="font-size:12px;padding:3px 10px"
+                                    disabled title="Core stage — always required, cannot be deleted">
+                                Delete
+                            </button>
+                            @elseif(($stageBudgetCounts[$stage->id] ?? 0) === 0)
                             <form method="POST"
                                   action="{{ route('admin.approval-stages.destroy', $stage) }}"
                                   data-confirm-name="{{ $stage->name }}">
@@ -198,7 +272,7 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="8" class="text-center text-muted py-5">
+                    <td colspan="9" class="text-center text-muted py-5">
                         No approval stages defined.
                         <a href="{{ route('admin.approval-stages.create') }}">Add one</a>.
                     </td>

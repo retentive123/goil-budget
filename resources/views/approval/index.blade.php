@@ -94,7 +94,7 @@
                             <span class="badge px-3 py-2" style="background: #FEF3C7; color: #92400E; font-size: 11px; border-radius: 20px;">
                                 <i class="bi bi-clock"></i> Pending
                             </span>
-                            <a href="{{ route('approvals.show-pnl', $version) }}"
+                            <a href="{{ route('approvals.show', $version) }}"
                                class="btn btn-sm px-3 py-2"
                                style="background: #E65C00; color: #fff; border-radius: 8px; border: none; font-size: 12px; transition: all 0.2s;">
                                 <i class="bi bi-eye"></i> Review
@@ -105,8 +105,21 @@
                     {{-- Quick Summary --}}
                     <div class="mt-2 pt-2 border-top" style="border-color: #F1F5F9 !important;">
                         <div class="d-flex gap-3 flex-wrap small" style="color: #64748B;">
-                            <span><i class="bi bi-wallet2" style="color: #E65C00;"></i> GHS {{ number_format($version->lineItems()->sum('total_amount'), 0) }}</span>
-                            <span><i class="bi bi-list-ul" style="color: #E65C00;"></i> {{ $version->lineItems()->count() }} line items</span>
+                            @php
+                                $vOriginal  = (float) $version->lineItems->sum('total_amount');
+                                $vEffective = $version->effectiveTotal();
+                                $vReduced   = $version->approvalDecisions->flatMap->lineItemApprovals->contains('status', 'reduced');
+                            @endphp
+                            <span>
+                                <i class="bi bi-wallet2" style="color: #E65C00;"></i>
+                                @if($vReduced)
+                                    <span style="text-decoration:line-through;color:#9CA3AF">GHS {{ number_format($vOriginal, 0) }}</span>
+                                    <span style="color:#DC2626;font-weight:700">GHS {{ number_format($vEffective, 0) }}</span>
+                                @else
+                                    GHS {{ number_format($vEffective, 0) }}
+                                @endif
+                            </span>
+                            <span><i class="bi bi-list-ul" style="color: #E65C00;"></i> {{ $version->lineItems->count() }} line items</span>
                             @if($version->submission_notes)
                             <span><i class="bi bi-chat-dots" style="color: #E65C00;"></i> {{ Str::limit($version->submission_notes, 50) }}</span>
                             @endif

@@ -55,6 +55,22 @@ class User extends Authenticatable
         return $this->belongsTo(Department::class);
     }
 
+    // Extra departments this user can approve budgets for (in addition to their primary dept)
+    public function approvalDepartments()
+    {
+        return $this->belongsToMany(Department::class, 'user_approval_departments')->withTimestamps();
+    }
+
+    // All department IDs this user can act on (primary + approval extras)
+    public function approvalDepartmentIds(): array
+    {
+        $ids = $this->approvalDepartments->pluck('id')->toArray();
+        if ($this->department_id && !in_array($this->department_id, $ids)) {
+            $ids[] = $this->department_id;
+        }
+        return $ids;
+    }
+
     public function auditLogs()
     {
         return $this->hasMany(\App\Models\SystemAuditLog::class, 'user_id');

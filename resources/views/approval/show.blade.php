@@ -56,8 +56,7 @@
                     </div>
                     <div class="col">
                         <div class="small text-muted">Total Budget</div>
-                        {{-- Use effective total --}}
-                        <div class="fw-bold text-success">{{ currency() }} {{ number_format($grandTotals['total'], 2) }}</div>
+                        <div class="fw-bold text-success">{{ currency() }} {{ number_format($adjustedGrandTotal ?? $grandTotals['total'], 2) }}</div>
                     </div>
                 </div>
             </div>
@@ -72,6 +71,36 @@
 
         {{-- Split summary by budget type --}}
         @php
+            // Effective total per item — honours any prior-stage reduction
+            $effTotal = fn($item) => ($priorReductions ?? collect())->has($item->id)
+                ? ($priorReductions ?? collect())->get($item->id)
+                : $item->effectiveBudget();
+
+            // Effective period amount per item per month — honours LIA period data
+            $effMonth = function($item, int $mn) use ($priorReductionLias) {
+                $lia = ($priorReductionLias ?? collect())->get($item->id);
+                if ($lia && $lia->m1_amount !== null) {
+                    return (float) ($lia->{'m'.$mn.'_amount'} ?? 0);
+                }
+                return (float) $item->{'m'.$mn.'_amount'};
+            };
+            $effQtr = function($item, string $qk) use ($priorReductionLias) {
+                $lia = ($priorReductionLias ?? collect())->get($item->id);
+                if ($lia && $lia->m1_amount !== null) {
+                    $map = [
+                        'q1' => $lia->m1_amount + $lia->m2_amount + $lia->m3_amount,
+                        'q2' => $lia->m4_amount + $lia->m5_amount + $lia->m6_amount,
+                        'q3' => $lia->m7_amount + $lia->m8_amount + $lia->m9_amount,
+                        'q4' => $lia->m10_amount + $lia->m11_amount + $lia->m12_amount,
+                    ];
+                    return (float) ($map[$qk] ?? 0);
+                }
+                return (float) $item->{$qk.'_amount'};
+            };
+
+            // Adjusted grand total for the info bar
+            $adjustedGrandTotal = $budgetVersion->lineItems->sum($effTotal);
+
             $pnlTypes       = ['revenue', 'expense', 'both'];
             $summaryPnl     = array_filter($summary, fn($d) => in_array(
                 $d['items']->first()?->accountCode?->category?->budget_type ?? 'expense', $pnlTypes));
@@ -108,15 +137,19 @@
         @foreach($aprvTabGroups as $atab)
         @if($atab['active'] || !empty($atab['summary']))
         @php
-            $tabGrandEff  = collect(array_values($atab['summary']))->sum(fn($c) => $c['items']->sum(fn($i) => $i->effectiveBudget()));
-            $tabGrandSupp = collect(array_values($atab['summary']))->sum(fn($c) => $c['items']->sum(fn($i) => $i->approvedSupplementaryTotal()));
+            $tabGrandEff  = collect(array_values($atab['summary']))->sum(fn($c) => $c['items']->sum($effTotal));
+            $tabGrandSupp = collect(array_values($atab['summary']))->sum(fn($c) => $c['items']->sum(fn($i) =>
+                ($priorReductions ?? collect())->has($i->id) ? 0 : $i->approvedSupplementaryTotal()
+            ));
         @endphp
         <div class="tab-pane fade {{ $atab['active'] ? 'show active' : '' }} p-3"
              id="{{ $atab['id'] }}" role="tabpanel">
             @forelse($atab['summary'] as $categoryName => $categoryData)
             @php
-                $catEffectiveTotal = $categoryData['items']->sum(fn($item) => $item->effectiveBudget());
-                $catSuppTotal = $categoryData['items']->sum(fn($item) => $item->approvedSupplementaryTotal());
+                $catEffectiveTotal = $categoryData['items']->sum($effTotal);
+                $catSuppTotal = $categoryData['items']->sum(fn($item) =>
+                    ($priorReductions ?? collect())->has($item->id) ? 0 : $item->approvedSupplementaryTotal()
+                );
             @endphp
             <div class="card shadow-sm mb-3">
                 <div class="card-header bg-light py-2 d-flex justify-content-between">
@@ -132,7 +165,7 @@
                 </div>
                 <div class="card-body p-0" style="overflow-x:auto">
                     <table class="table table-sm table-hover mb-0" style="{{ $entryMode === 'monthly' ? 'min-width:1400px' : '' }}">
-                        <thead class="table-light">
+                        <thead class="table-light" style="position:sticky;top:0;z-index:2">
                             <tr>
                                 <th style="width:{{ $calcMode !== 'none' ? '22%' : '30%' }}">Account</th>
                                 @if($calcMode !== 'none')
@@ -161,10 +194,23 @@
                         <tbody>
                             @foreach($categoryData['items'] as $item)
                             @php
-                                $itemSupp = $item->approvedSupplementaryTotal();
-                                $itemEffective = $item->effectiveBudget();
-                                $itemQty  = $item->quantity ?? '—';
-                                $itemRate = $item->rate     ?? '—';
+                                $itemSupp          = $item->approvedSupplementaryTotal();
+                                $itemOrigEffective = $item->effectiveBudget(); // before any reduction
+                                $priorReduction    = ($priorReductions ?? collect())->get($item->id);
+                                $priorLia          = ($priorReductionLias ?? collect())->get($item->id);
+                                // Cap: prior reduction (unless restore is allowed, then use original)
+                                $itemEffective     = ($priorReduction !== null && !($allowRestore ?? false))
+                                    ? $priorReduction
+                                    : $itemOrigEffective;
+                                $liaHasPeriods     = $priorLia && $priorLia->m1_amount !== null;
+                                $liaQ              = $liaHasPeriods ? [
+                                    'q1' => $priorLia->m1_amount + $priorLia->m2_amount + $priorLia->m3_amount,
+                                    'q2' => $priorLia->m4_amount + $priorLia->m5_amount + $priorLia->m6_amount,
+                                    'q3' => $priorLia->m7_amount + $priorLia->m8_amount + $priorLia->m9_amount,
+                                    'q4' => $priorLia->m10_amount + $priorLia->m11_amount + $priorLia->m12_amount,
+                                ] : null;
+                                $itemQty  = $item->quantity  ?? '—';
+                                $itemRate = $item->rate      ?? '—';
                                 $itemFreq = $item->frequency ?? '—';
                                 $itemYearTotal = ($item->quantity !== null && $item->rate !== null)
                                     ? ($item->quantity * $item->rate * ($calcMode === 'qty_rate_freq' ? ($item->frequency ?? 1) : 1))
@@ -198,44 +244,189 @@
                                 @endif
                                 @if($entryMode === 'monthly')
                                     @foreach(range(1,12) as $mn)
-                                    <td class="text-end small">{{ number_format($item->{'m'.$mn.'_amount'}, 2) }}</td>
+                                    @php
+                                        $cellAmt   = $liaHasPeriods ? (float)($priorLia->{'m'.$mn.'_amount'} ?? 0) : $item->{'m'.$mn.'_amount'};
+                                        $cellStyle = $priorReduction !== null ? ($liaHasPeriods ? 'color:#B45309;font-weight:600' : 'color:#94A3B8') : '';
+                                        $cellTitle = $priorReduction !== null ? ($liaHasPeriods ? 'Reduced by prior approver' : 'Original period; total reduced') : '';
+                                    @endphp
+                                    <td class="text-end small" style="{{ $cellStyle }}" title="{{ $cellTitle }}">{{ number_format($cellAmt, 2) }}</td>
                                     @endforeach
                                 @else
-                                    <td class="text-end small">{{ number_format($item->q1_amount, 2) }}</td>
-                                    <td class="text-end small">{{ number_format($item->q2_amount, 2) }}</td>
-                                    <td class="text-end small">{{ number_format($item->q3_amount, 2) }}</td>
-                                    <td class="text-end small">{{ number_format($item->q4_amount, 2) }}</td>
+                                    @foreach(['q1','q2','q3','q4'] as $qi => $qk)
+                                    @php
+                                        if ($liaHasPeriods && $liaQ) {
+                                            $cellAmt   = $liaQ[$qk];
+                                            $cellStyle = 'color:#B45309;font-weight:600';
+                                            $cellTitle = 'Reduced by prior approver';
+                                        } else {
+                                            $cellAmt   = $item->{$qk.'_amount'};
+                                            $cellStyle = $priorReduction !== null ? 'color:#94A3B8' : '';
+                                            $cellTitle = $priorReduction !== null ? 'Original period; total reduced' : '';
+                                        }
+                                    @endphp
+                                    <td class="text-end small" style="{{ $cellStyle }}" title="{{ $cellTitle }}">{{ number_format($cellAmt, 2) }}</td>
+                                    @endforeach
                                 @endif
                                 <td class="text-end small" style="color:{{ $itemSupp > 0 ? '#10B981' : 'inherit' }}">
                                     {{ $itemSupp > 0 ? '+'.number_format($itemSupp, 2) : '—' }}
                                 </td>
-                                <td class="text-end small fw-semibold" style="color:var(--navy)">
-                                    {{ number_format($itemEffective, 2) }}
+                                <td class="text-end small fw-semibold">
+                                    @if($priorReduction !== null)
+                                        <span style="text-decoration:line-through;color:#94A3B8;font-size:10px">{{ number_format($itemOrigEffective, 2) }}</span><br>
+                                        <span style="color:#B45309" title="Reduced by prior approver">
+                                            {{ number_format($priorReduction, 2) }}
+                                            <i class="bi bi-arrow-down-circle-fill" style="font-size:9px"></i>
+                                        </span>
+                                    @else
+                                        <span style="color:var(--navy)">{{ number_format($itemEffective, 2) }}</span>
+                                    @endif
                                 </td>
                                 @if($canDecide)
+                                @php
+                                    $oldStatus  = old("line_items.{$item->id}.status", '');
+                                    $hasSubs    = $item->subEntries->isNotEmpty();
+                                @endphp
                                 <td>
                                     <select name="line_items[{{ $item->id }}][status]"
                                         class="form-select form-select-sm li-decision"
                                         form="decision-form"
                                         data-item="{{ $item->id }}">
                                         <option value="">—</option>
-                                        <option value="approved">Approve</option>
-                                        <option value="reduced">Reduce</option>
-                                        <option value="rejected">Reject</option>
+                                        <option value="approved" @selected($oldStatus === 'approved')>Approve</option>
+                                        @if(!$hasSubs)
+                                        <option value="reduced"  @selected($oldStatus === 'reduced')>Reduce</option>
+                                        @endif
+                                        <option value="rejected" @selected($oldStatus === 'rejected')>Reject</option>
                                     </select>
+                                    @if($hasSubs)
+                                    <div class="text-muted" style="font-size:10px;margin-top:2px">Has sub-items; reduce not allowed</div>
+                                    @endif
                                 </td>
-                                <td>
+                                <td style="min-width:180px">
+                                    @if(!$hasSubs)
                                     <input type="number"
                                         name="line_items[{{ $item->id }}][approved_amount]"
                                         class="form-control form-control-sm li-amount"
                                         form="decision-form"
                                         id="amount-{{ $item->id }}"
                                         placeholder="{{ currency() }}"
-                                        min="0" step="0.01"
-                                        style="display:none">
+                                        min="0.01" step="0.01"
+                                        max="{{ $itemEffective }}"
+                                        value="{{ old("line_items.{$item->id}.approved_amount") }}"
+                                        title="Enter a reduced amount (max: {{ currency() }} {{ number_format($itemEffective, 2) }})"
+                                        data-bs-toggle="tooltip"
+                                        data-bs-placement="top"
+                                        style="{{ $oldStatus === 'reduced' ? 'display:block' : 'display:none' }}">
+
+                                    {{-- Restore hint (restore allowed + item was previously reduced) --}}
+                                    @if(($allowRestore ?? false) && $priorReduction !== null)
+                                    <div style="font-size:9px;color:#6D28D9;margin-top:3px;display:none" id="restore-hint-{{ $item->id }}">
+                                        <i class="bi bi-arrow-up-circle-fill" style="font-size:9px"></i>
+                                        Can restore up to {{ currency() }} {{ number_format($itemOrigEffective, 2) }}
+                                        (prior: {{ number_format($priorReduction, 2) }})
+                                    </div>
+                                    @endif
+
+                                    {{-- Period breakdown (shown when Reduce is chosen) --}}
+                                    <div id="periods-{{ $item->id }}"
+                                         style="{{ $oldStatus === 'reduced' ? 'display:block' : 'display:none' }};margin-top:6px">
+                                        <div style="font-size:9px;color:#64748B;font-weight:600;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px">
+                                            Period Breakdown
+                                        </div>
+                                        @if($entryMode === 'monthly')
+                                        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:2px">
+                                            @foreach(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] as $mi => $ml)
+                                            <div>
+                                                <div style="font-size:8px;color:#94A3B8;text-align:center">{{ $ml }}</div>
+                                                <input type="number"
+                                                    name="line_items[{{ $item->id }}][period_amounts][m{{ $mi + 1 }}]"
+                                                    class="form-control form-control-sm period-input"
+                                                    data-period-for="{{ $item->id }}"
+                                                    form="decision-form"
+                                                    placeholder="0" min="0" step="0.01"
+                                                    value="{{ old('line_items.' . $item->id . '.period_amounts.m' . ($mi + 1)) }}"
+                                                    style="padding:2px 3px;font-size:10px;text-align:right">
+                                            </div>
+                                            @endforeach
+                                        </div>
+                                        @else
+                                        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:3px">
+                                            @foreach(['Q1','Q2','Q3','Q4'] as $qi => $ql)
+                                            <div>
+                                                <div style="font-size:8px;color:#94A3B8;text-align:center">{{ $ql }}</div>
+                                                <input type="number"
+                                                    name="line_items[{{ $item->id }}][period_amounts][q{{ $qi + 1 }}]"
+                                                    class="form-control form-control-sm period-input"
+                                                    data-period-for="{{ $item->id }}"
+                                                    form="decision-form"
+                                                    placeholder="0" min="0" step="0.01"
+                                                    value="{{ old('line_items.' . $item->id . '.period_amounts.q' . ($qi + 1)) }}"
+                                                    style="padding:2px 4px;font-size:11px;text-align:right">
+                                            </div>
+                                            @endforeach
+                                        </div>
+                                        @endif
+                                        <div class="d-flex justify-content-between align-items-center" style="margin-top:4px">
+                                            <button type="button"
+                                                onclick="splitEqual('{{ $item->id }}')"
+                                                style="font-size:9px;padding:1px 7px;border:1px solid #6D28D9;color:#6D28D9;background:#EDE9FE;border-radius:10px;cursor:pointer;line-height:1.6">
+                                                ÷ Split Equal
+                                            </button>
+                                            <span style="font-size:10px;color:#94A3B8">
+                                                Balance: <span id="period-balance-{{ $item->id }}" style="font-weight:600">—</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    @endif
                                 </td>
                                 @endif
                             </tr>
+                            @foreach($item->subEntries as $si => $sub)
+                            @php
+                                $subQ1 = $sub->m1_amount + $sub->m2_amount + $sub->m3_amount;
+                                $subQ2 = $sub->m4_amount + $sub->m5_amount + $sub->m6_amount;
+                                $subQ3 = $sub->m7_amount + $sub->m8_amount + $sub->m9_amount;
+                                $subQ4 = $sub->m10_amount + $sub->m11_amount + $sub->m12_amount;
+                                $subQty  = $sub->quantity  ?? '—';
+                                $subRate = $sub->rate      ?? '—';
+                                $subFreq = $sub->frequency ?? '—';
+                            @endphp
+                            <tr style="background:#F0F4FF;border-left:3px solid #818CF8">
+                                <td style="padding-left:28px;font-size:11px">
+                                    <span style="color:#818CF8;font-weight:700;margin-right:4px">{{ $si + 1 }}</span>
+                                    <span style="color:#4338CA">↳ {{ $sub->name }}</span>
+                                </td>
+                                @if($calcMode !== 'none')
+                                <td class="text-end small" style="color:#818CF8">
+                                    {{ is_numeric($subQty) ? number_format((float)$subQty, 2) : $subQty }}
+                                </td>
+                                <td class="text-end small" style="color:#818CF8">
+                                    {{ is_numeric($subRate) ? number_format((float)$subRate, 4) : $subRate }}
+                                </td>
+                                @if($calcMode === 'qty_rate_freq')
+                                <td class="text-end small" style="color:#818CF8">
+                                    {{ is_numeric($subFreq) ? number_format((float)$subFreq, 2) : $subFreq }}
+                                </td>
+                                @endif
+                                <td class="text-end small fw-semibold" style="color:#818CF8">{{ number_format($sub->total_amount, 2) }}</td>
+                                @endif
+                                @if($entryMode === 'monthly')
+                                    @foreach(range(1,12) as $mn)
+                                    <td class="text-end small" style="color:#818CF8">{{ number_format($sub->{'m'.$mn.'_amount'}, 2) }}</td>
+                                    @endforeach
+                                @else
+                                    <td class="text-end small" style="color:#818CF8">{{ number_format($subQ1, 2) }}</td>
+                                    <td class="text-end small" style="color:#818CF8">{{ number_format($subQ2, 2) }}</td>
+                                    <td class="text-end small" style="color:#818CF8">{{ number_format($subQ3, 2) }}</td>
+                                    <td class="text-end small" style="color:#818CF8">{{ number_format($subQ4, 2) }}</td>
+                                @endif
+                                <td></td>
+                                <td class="text-end small fw-semibold" style="color:#4338CA">{{ number_format($sub->total_amount, 2) }}</td>
+                                @if($canDecide)
+                                <td colspan="2"></td>
+                                @endif
+                            </tr>
+                            @endforeach
                             @endforeach
                         </tbody>
                         <tfoot style="background:#F8FAFC;font-weight:700;font-size:11px">
@@ -249,13 +440,12 @@
                                 @endif
                                 @if($entryMode === 'monthly')
                                     @foreach(range(1,12) as $mn)
-                                    <td class="text-end">{{ number_format($categoryData['items']->sum("m{$mn}_amount"), 2) }}</td>
+                                    <td class="text-end">{{ number_format($categoryData['items']->sum(fn($i) => $effMonth($i, $mn)), 2) }}</td>
                                     @endforeach
                                 @else
-                                    <td class="text-end">{{ number_format($categoryData['items']->sum('q1_amount'), 2) }}</td>
-                                    <td class="text-end">{{ number_format($categoryData['items']->sum('q2_amount'), 2) }}</td>
-                                    <td class="text-end">{{ number_format($categoryData['items']->sum('q3_amount'), 2) }}</td>
-                                    <td class="text-end">{{ number_format($categoryData['items']->sum('q4_amount'), 2) }}</td>
+                                    @foreach(['q1','q2','q3','q4'] as $qk)
+                                    <td class="text-end">{{ number_format($categoryData['items']->sum(fn($i) => $effQtr($i, $qk)), 2) }}</td>
+                                    @endforeach
                                 @endif
                                 <td class="text-end" style="color:{{ $catSuppTotal > 0 ? '#10B981' : 'inherit' }}">
                                     {{ $catSuppTotal > 0 ? '+'.number_format($catSuppTotal, 2) : '—' }}
@@ -413,62 +603,6 @@
                             @enderror
                         </div>
 
-                        {{-- Line Item Controls (Partial Approval) --}}
-                        @if($roleConfig?->can_partial_approve)
-                        <div class="mb-3">
-                            <div class="small fw-semibold mb-2" style="color:#64748B">
-                                Line Item Decisions
-                                <span style="font-weight:400;color:#94A3B8;font-size:11px">(optional)</span>
-                            </div>
-
-                            <div style="max-height: 400px; overflow-y: auto; border-radius: 10px; border: 1px solid #E2E8F0;">
-                                @foreach($summary as $catName => $catData)
-                                <div style="background: #F8FAFC; padding: 8px 16px; font-size: 11px; font-weight: 700; color: #1B2A4A; text-transform: uppercase; border-bottom: 1px solid #E2E8F0;">
-                                    {{ $catName }}
-                                </div>
-                                @foreach($catData['items'] as $item)
-                                @php
-                                    $itemEffective = $item->effectiveBudget();
-                                @endphp
-                                <div class="d-flex align-items-center gap-2 px-3 py-2 border-bottom" style="font-size: 12px; background: #fff;">
-                                    <div style="flex: 1; font-family: monospace; font-weight: 600; color: #1B2A4A;">
-                                        {{ $item->accountCode->code }}
-                                    </div>
-                                    <div style="flex: 2; color: #475569; font-size: 11px;">
-                                        {{ $item->accountCode->name }}
-                                    </div>
-                                    <div style="font-weight: 600; min-width: 90px; text-align: right; color: #1B2A4A;">
-                                        GHS {{ number_format($itemEffective, 2) }}
-                                    </div>
-                                    <select name="line_items[{{ $item->id }}][status]"
-                                            class="form-select form-select-sm li-decision"
-                                            form="decision-form"
-                                            data-item="{{ $item->id }}"
-                                            style="max-width: 110px; border-radius: 6px; font-size: 11px;">
-                                        <option value="">—</option>
-                                        <option value="approved">Approve</option>
-                                        @if($roleConfig?->can_reduce_amounts)
-                                        <option value="reduced">Reduce</option>
-                                        @endif
-                                        <option value="rejected">Reject</option>
-                                    </select>
-                                    @if($roleConfig?->can_reduce_amounts)
-                                    <input type="number"
-                                        name="line_items[{{ $item->id }}][approved_amount]"
-                                        class="form-control form-control-sm li-amount"
-                                        form="decision-form"
-                                        id="amount-{{ $item->id }}"
-                                        placeholder="New GHS"
-                                        min="0" step="0.01"
-                                        style="max-width: 110px; border-radius: 6px; display: none;">
-                                    @endif
-                                </div>
-                                @endforeach
-                                @endforeach
-                            </div>
-                        </div>
-                        @endif
-
                         {{-- Submit Button --}}
                         <button type="button" id="submit-decision-btn" class="btn w-100 py-2 fw-semibold"
                                 style="background:#E65C00;color:#fff;border-radius:8px;border:none;font-size:14px">
@@ -477,21 +611,6 @@
                     </form>
                 </div>
             </div>
-
-            {{-- Line Item Script --}}
-            @if($roleConfig?->can_partial_approve && $roleConfig?->can_reduce_amounts)
-            <script>
-                document.querySelectorAll('.li-decision').forEach(select => {
-                    select.addEventListener('change', function() {
-                        const itemId = this.dataset.item;
-                        const amountInput = document.getElementById('amount-' + itemId);
-                        if (amountInput) {
-                            amountInput.style.display = this.value === 'reduced' ? 'inline-block' : 'none';
-                        }
-                    });
-                });
-            </script>
-            @endif
 
         {{-- ── Cannot Action / Access Denied ── --}}
         @else
@@ -515,7 +634,13 @@
                         if ($currentStage) {
                             $role = \Spatie\Permission\Models\Role::where('name', $currentStage->role_name)->first();
                             if ($role && $role->scope === 'own') {
-                                $wrongScope = auth()->user()->department_id !== $version->department_id;
+                                $authUser = auth()->user();
+                                if ($version->subsidiary_id !== null) {
+                                    $wrongScope = $authUser->subsidiary_id !== $version->subsidiary_id;
+                                } else {
+                                    $authUser->loadMissing('approvalDepartments');
+                                    $wrongScope = !in_array($version->department_id, $authUser->approvalDepartmentIds());
+                                }
                             }
                         }
                     @endphp
@@ -564,7 +689,7 @@
 
                     {{-- View Only Button --}}
                     <div class="mt-3">
-                        <a href="{{ route('budget.show-pnl', $budgetVersion) }}" class="btn btn-outline-secondary btn-sm px-4" style="border-radius: 8px;">
+                        <a href="{{ route('budget.show', $budgetVersion) }}" class="btn btn-outline-secondary btn-sm px-4" style="border-radius: 8px;">
                             <i class="bi bi-eye"></i> View Budget
                         </a>
                     </div>
@@ -576,13 +701,86 @@
 </div>
 
 <script>
-// Show/hide reduced amount field based on line item decision
+// Initialise Bootstrap tooltips on amount inputs (only if bootstrap is a global)
+if (typeof bootstrap !== 'undefined') {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+        new bootstrap.Tooltip(el);
+    });
+}
+
+// Show/hide reduced amount field and period inputs based on line item decision
 document.querySelectorAll('.li-decision').forEach(sel => {
     sel.addEventListener('change', function () {
-        const itemId = this.dataset.item;
-        const amountField = document.getElementById('amount-' + itemId);
-        amountField.style.display = this.value === 'reduced' ? 'block' : 'none';
+        const itemId     = this.dataset.item;
+        const amountField  = document.getElementById('amount-' + itemId);
+        const periodsDiv   = document.getElementById('periods-' + itemId);
+        const restoreHint  = document.getElementById('restore-hint-' + itemId);
+        if (!amountField) return;
+        const isReduced = this.value === 'reduced';
+        amountField.style.display = isReduced ? 'block' : 'none';
+        if (periodsDiv)  periodsDiv.style.display  = isReduced ? 'block' : 'none';
+        if (restoreHint) restoreHint.style.display = isReduced ? 'block' : 'none';
+        if (isReduced) amountField.focus();
+        checkPeriodBalance(itemId);
     });
+});
+
+// Live period balance indicator
+function checkPeriodBalance(itemId) {
+    const amountField = document.getElementById('amount-' + itemId);
+    const balanceEl   = document.getElementById('period-balance-' + itemId);
+    if (!amountField || !balanceEl) return;
+    const target = parseFloat(amountField.value) || 0;
+    let sum = 0;
+    document.querySelectorAll('.period-input[data-period-for="' + itemId + '"]').forEach(inp => {
+        sum += parseFloat(inp.value) || 0;
+    });
+    sum = Math.round(sum * 100) / 100;
+    const diff = Math.abs(sum - target);
+    const ok   = target > 0 && diff <= 0.01;
+    balanceEl.textContent = sum.toFixed(2) + ' / ' + target.toFixed(2);
+    balanceEl.style.color = ok ? '#10B981' : (sum === 0 && target === 0 ? '#94A3B8' : '#EF4444');
+}
+
+function splitEqual(itemId) {
+    const amountField = document.getElementById('amount-' + itemId);
+    if (!amountField) return;
+    const total = Math.round(parseFloat(amountField.value || 0) * 100) / 100;
+    if (total <= 0) return;
+    const inputs = [...document.querySelectorAll('.period-input[data-period-for="' + itemId + '"]')];
+    if (!inputs.length) return;
+    const n    = inputs.length;
+    const each = Math.floor(total / n * 100) / 100;
+    const last = Math.round((total - each * (n - 1)) * 100) / 100;
+    inputs.forEach((inp, i) => { inp.value = i === n - 1 ? last : each; });
+    checkPeriodBalance(itemId);
+}
+
+document.querySelectorAll('.period-input').forEach(inp => {
+    inp.addEventListener('input', () => checkPeriodBalance(inp.dataset.periodFor));
+});
+
+// Real-time red border on amount inputs when value is invalid
+function validateAmountInput(inp) {
+    const max = parseFloat(inp.getAttribute('max'));
+    const val = parseFloat(inp.value);
+    const invalid = inp.value !== '' && (isNaN(val) || val <= 0 || (!isNaN(max) && val >= max));
+    inp.style.borderColor  = invalid ? '#EF4444' : '';
+    inp.style.background   = invalid ? '#FFF1F2' : '';
+    inp.style.color        = invalid ? '#991B1B' : '';
+}
+document.querySelectorAll('.li-amount').forEach(inp => {
+    inp.addEventListener('input', () => {
+        validateAmountInput(inp);
+        checkPeriodBalance(inp.id.replace('amount-', ''));
+    });
+    // Highlight immediately if page reloaded with an invalid old value
+    if (inp.value !== '') validateAmountInput(inp);
+});
+
+// Initial balance check for pages loaded with old values after failed submit
+document.querySelectorAll('.li-amount').forEach(inp => {
+    if (inp.value !== '') checkPeriodBalance(inp.id.replace('amount-', ''));
 });
 
 // Decision toggle cards — highlight selected, show comments hint on reject

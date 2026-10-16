@@ -124,6 +124,19 @@ class BudgetPnlReadOnlyExport implements FromCollection, WithHeadings, WithTitle
                     }
                     $rows->push($itemRow);
                     $this->rowTypes[] = 'item';
+
+                    foreach ($item['sub_entries'] ?? [] as $si => $sub) {
+                        $subRow = array_merge(
+                            [($si + 1) . '. ↳ ' . $sub['name']],
+                            array_map(fn($k) => (float) ($sub[$k] ?? 0), $this->periodKeys),
+                            [(float) ($sub['total'] ?? 0), '', '']
+                        );
+                        if ($this->hasPrev) {
+                            $subRow[] = ''; $subRow[] = ''; $subRow[] = '';
+                        }
+                        $rows->push($subRow);
+                        $this->rowTypes[] = 'sub_entry';
+                    }
                 }
             }
 
@@ -247,6 +260,16 @@ class BudgetPnlReadOnlyExport implements FromCollection, WithHeadings, WithTitle
 
                 case 'item':
                     $sheet->getStyle("A{$r}")->getFont()->getColor()->setARGB('FF334155');
+                    break;
+
+                case 'sub_entry':
+                    $sheet->getStyle($rng)->applyFromArray([
+                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFF0F4FF']],
+                    ]);
+                    $sheet->getStyle("A{$r}")->applyFromArray([
+                        'font' => ['italic' => true, 'color' => ['argb' => 'FF4338CA']],
+                        'alignment' => ['indent' => 2],
+                    ]);
                     break;
 
                 case 'total_revenue':

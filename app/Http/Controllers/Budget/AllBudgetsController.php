@@ -38,7 +38,8 @@ class AllBudgetsController extends Controller
             : null;
 
         // Build query — scope to departments or subsidiaries depending on filter
-        $query = BudgetVersion::with('department', 'subsidiary.category', 'period', 'submittedBy', 'lineItems')
+        $query = BudgetVersion::with('department', 'subsidiary.category', 'period', 'submittedBy', 'lineItems',
+            'approvalDecisions.lineItemApprovals')
             ->when($period,                   fn($q) => $q->where('budget_period_id', $period->id))
             ->when($request->status,         fn($q) => $q->where('status', $request->status))
             ->when($request->version_number, fn($q) => $q->where('version_number', $request->version_number));
@@ -68,7 +69,8 @@ class AllBudgetsController extends Controller
         $budgets = $query->orderByDesc('version_number')->paginate(30)->withQueryString();
 
         // Summary stats — scoped to selected period or all periods
-        $allVersions = BudgetVersion::when($period, fn($q) => $q->where('budget_period_id', $period->id))->get();
+        $allVersions = BudgetVersion::with('lineItems', 'approvalDecisions.lineItemApprovals')
+            ->when($period, fn($q) => $q->where('budget_period_id', $period->id))->get();
         $totalDepts  = $departments->count();
         $totalSubs   = $subsidiaries->count();
 
@@ -81,6 +83,7 @@ class AllBudgetsController extends Controller
             'draft'             => $allVersions->where('status','draft')->count(),
             'not_started_depts' => max(0, $totalDepts  - $allVersions->whereNotNull('department_id')->unique('department_id')->count()),
             'not_started_subs'  => max(0, $totalSubs   - $allVersions->whereNotNull('subsidiary_id')->unique('subsidiary_id')->count()),
+            'not_started'       => max(0, $totalDepts  - $allVersions->whereNotNull('department_id')->unique('department_id')->count()),
             'total_value'       => $allVersions->where('status','approved')->sum(fn($v) => $v->effectiveTotal()),
         ];
 
@@ -137,10 +140,6 @@ class AllBudgetsController extends Controller
     // ── View a single budget version in detail ────────────────
     public function show(Request $request, BudgetVersion $budgetVersion)
     {
-        if (!$request->boolean('classic')) {
-            return redirect()->route('budgets.show-pnl', $budgetVersion);
-        }
-
         $budgetVersion->load(
             'department',
             'period',
@@ -187,10 +186,27 @@ class AllBudgetsController extends Controller
 
         $entryMode = $budgetVersion->period->entry_mode ?? 'quarterly';
 
+        // Build reductions map: last approved reduction per line item wins
+        $reductions = [];
+        $monthlyReductions = []; // [item_id => [1..12 => amount]]
+        foreach ($budgetVersion->approvalDecisions as $dec) {
+            foreach ($dec->lineItemApprovals as $lia) {
+                if ($lia->status === 'reduced' && $lia->approved_amount !== null) {
+                    $reductions[$lia->budget_line_item_id] = (float) $lia->approved_amount;
+                    $monthly = [];
+                    for ($m = 1; $m <= 12; $m++) {
+                        $monthly[$m] = (float) $lia->{"m{$m}_amount"};
+                    }
+                    $monthlyReductions[$lia->budget_line_item_id] = $monthly;
+                }
+            }
+        }
+
         return view('budgets.all.show', compact(
             'budgetVersion', 'summary', 'grandTotals',
             'progress', 'canDecide', 'currentStage',
-            'actualsPerItem', 'allVersions', 'supplementaries', 'entryMode'
+            'actualsPerItem', 'allVersions', 'supplementaries', 'entryMode',
+            'reductions', 'monthlyReductions'
         ));
     }
 

@@ -190,6 +190,14 @@
                                 <td class="px-4 py-2"><span class="badge" style="background:#F0FDF4;color:#166534;">Optional</span></td>
                                 <td class="px-4 py-2 text-muted">Blank → default used</td>
                             </tr>
+                            <tr>
+                                <td class="px-4 py-2"><code>approval_departments</code></td>
+                                <td class="px-4 py-2"><span class="badge" style="background:#F0FDF4;color:#166534;">Optional</span></td>
+                                <td class="px-4 py-2 text-muted">
+                                    Extra depts this user can approve (pipe-separated codes),
+                                    e.g. <code>02001|04001</code>. For dept heads with multiple depts.
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>

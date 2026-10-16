@@ -29,7 +29,7 @@
 
     <div class="d-flex gap-2 align-items-center flex-wrap">
         <div class="btn-group btn-group-sm" role="group">
-            <a href="{{ route('budget.show', $budgetVersion) }}?classic=1" class="btn btn-outline-secondary">Classic View</a>
+            <a href="{{ route('budget.show', $budgetVersion) }}" class="btn btn-outline-secondary">Classic View</a>
             <span class="btn btn-secondary" style="pointer-events:none;">P&amp;L View</span>
         </div>
         <div class="dropdown">
@@ -326,7 +326,7 @@ $periodColW    = $isMonthly ? '65px' : '90px';
     {{-- Editable / category-based grid --}}
         <div class="table-responsive">
             <table class="table table-sm mb-0" id="pnl-table">
-                <thead>
+                <thead style="position:sticky;top:0;z-index:3">
                     <tr style="background:#1B2A4A;color:#fff;font-size:12px">
                         <th rowspan="2" style="min-width:220px;vertical-align:middle">Account</th>
                         <th colspan="{{ $periodColspan }}" class="text-center border-start border-secondary py-2">
@@ -378,7 +378,7 @@ $periodColW    = $isMonthly ? '65px' : '90px';
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-sm mb-0" id="capex-table">
-                <thead>
+                <thead style="position:sticky;top:0;z-index:3">
                     <tr style="background:#1B2A4A;color:#fff;font-size:12px">
                         <th rowspan="2" style="min-width:220px;vertical-align:middle">Account</th>
                         <th colspan="{{ $periodColspan }}" class="text-center border-start border-secondary py-2">
@@ -428,7 +428,7 @@ $periodColW    = $isMonthly ? '65px' : '90px';
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-sm mb-0" id="balance-table">
-                <thead>
+                <thead style="position:sticky;top:0;z-index:3">
                     <tr style="background:#1B2A4A;color:#fff;font-size:12px">
                         <th rowspan="2" style="min-width:220px;vertical-align:middle">Account</th>
                         <th colspan="{{ $periodColspan }}" class="text-center border-start border-secondary py-2">
@@ -623,14 +623,17 @@ function renderSection(type, label) {
 
             // Build period input/display cells dynamically
             const itemPeriodCells = PERIOD_COLS.map((col, i) => {
-                const val  = parseFloat(item[col] || 0).toFixed(2);
+                const val      = parseFloat(item[col] || 0).toFixed(2);
+                const fmtVal   = numFmt(item[col]);
+                const label    = PERIOD_LABELS[PERIOD_COLS.indexOf(col)];
+                const tipText  = `${label}: ${fmtVal}`;
                 const cell = EDITABLE
-                    ? `<input type="number" class="form-control form-control-sm q-input ${col}" value="${val}" min="0" step="0.01" style="min-width:${ENTRY_MODE==='monthly'?'75px':'85px'};text-align:right">`
-                    : `<span class="text-end d-block">${numFmt(item[col])}</span>`;
+                    ? `<input type="number" class="form-control form-control-sm q-input ${col}" value="${val}" min="0" step="0.01" style="min-width:${ENTRY_MODE==='monthly'?'75px':'85px'};text-align:right" title="${tipText}">`
+                    : `<span class="text-end d-block">${fmtVal}</span>`;
                 const tdClass = EDITABLE
                     ? `p-1${i===0?' border-start':''}`
                     : `text-end${i===0?' border-start':''}`;
-                return `<td class="${tdClass}">${cell}</td>`;
+                return `<td class="${tdClass}" title="${tipText}">${cell}</td>`;
             }).join('');
 
             html += `<tr class="pnl-item-row ${collapsed ? 'd-none' : ''}" style="font-size:12px"
@@ -894,6 +897,12 @@ async function saveBudget() {
 
         const data = await res.json();
 
+        if (res.status === 419) {
+            if (status) { status.style.color = '#F43F5E'; status.textContent = 'Session expired — please refresh the page (F5).'; }
+            Swal.fire({ icon:'warning', title:'Session Expired', text:'Your session has expired. Please refresh the page (F5) to continue.', confirmButtonColor:'#E65C00' });
+            return false;
+        }
+
         if (!res.ok) {
             const msg = data?.error || 'Save failed (' + res.status + ')';
             if (status) { status.style.color = '#F43F5E'; status.textContent = msg; }
@@ -916,6 +925,11 @@ async function saveBudget() {
 }
 
 document.addEventListener('DOMContentLoaded', renderPnl);
+
+// Keep session alive — ping every 10 minutes so users aren't auto-logged-out
+setInterval(() => {
+    fetch('/dashboard', { credentials: 'same-origin', cache: 'no-store' }).catch(() => {});
+}, 10 * 60 * 1000);
 
 // ── Submit guard: save first, then navigate ──────────────
 document.getElementById('submit-btn')?.addEventListener('click', async function (e) {

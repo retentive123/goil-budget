@@ -5,14 +5,18 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AccountCode;
 use App\Models\AccountCategory;
+use App\Models\AccountCodeSubEntryTemplate;
 use Illuminate\Http\Request;
 
 class AccountCodeController extends Controller
 {
    public function index(Request $request)
     {
+        $scope = $request->input('scope', 'department');
+
         // Start the query with category and departments relationships
-        $query = AccountCode::with(['category', 'departments']);
+        $query = AccountCode::with(['category', 'departments'])
+            ->where('scope', $scope);
 
         // Apply category filter if present
         if ($request->filled('category')) {
@@ -44,11 +48,11 @@ class AccountCodeController extends Controller
         // Order and paginate with query string preservation
         $codes = $query->orderBy('code')
                        ->paginate($perPage)
-                       ->withQueryString(); // This preserves filters in pagination links
+                       ->withQueryString();
 
         $categories = AccountCategory::orderBy('name')->get();
 
-        return view('admin.account-codes.index', compact('codes', 'categories'));
+        return view('admin.account-codes.index', compact('codes', 'categories', 'scope'));
     }
 
     public function create()
@@ -60,9 +64,12 @@ class AccountCodeController extends Controller
 
     public function store(Request $request)
     {
+        $scope = $request->input('scope', 'department');
+
         $validated = $request->validate([
             'account_category_id' => ['required', 'exists:account_categories,id'],
-            'code'                => ['required', 'string', 'max:50', 'unique:account_codes,code'],
+            'code'                => ['required', 'string', 'max:50',
+                                      \Illuminate\Validation\Rule::unique('account_codes')->where('scope', $scope)],
             'name'                => ['required', 'string', 'max:255'],
             'description'         => ['nullable', 'string'],
             'unit'                => ['nullable', 'string', 'max:50'],
@@ -77,15 +84,15 @@ class AccountCodeController extends Controller
             $calcConfig = json_decode($request->input('calc_config'), true) ?: null;
         }
 
-        AccountCode::create([...$validated, 'calc_config' => $calcConfig, 'is_active' => true]);
+        AccountCode::create([...$validated, 'calc_config' => $calcConfig, 'is_active' => true, 'scope' => $scope]);
 
-        return redirect()->route('admin.account-codes.index')
+        return redirect()->route('admin.account-codes.index', ['scope' => $scope])
             ->with('success', 'Account code created successfully.');
     }
 
     public function show(AccountCode $accountCode)
     {
-        $accountCode->load('category', 'departments');
+        $accountCode->load('category', 'departments', 'subEntryTemplates');
         return view('admin.account-codes.show', compact('accountCode'));
     }
 
@@ -143,6 +150,26 @@ class AccountCodeController extends Controller
 
         return redirect()->route('admin.account-codes.index')
             ->with('success', 'Account code deleted successfully.');
+    }
+
+    public function storeTemplate(Request $request, AccountCode $accountCode)
+    {
+        $request->validate(['name' => ['required', 'string', 'max:255']]);
+
+        $maxOrder = $accountCode->subEntryTemplates()->max('sort_order') ?? 0;
+        $tpl = $accountCode->subEntryTemplates()->create([
+            'name'       => $request->name,
+            'sort_order' => $maxOrder + 1,
+        ]);
+
+        return response()->json(['id' => $tpl->id, 'name' => $tpl->name, 'sort_order' => $tpl->sort_order]);
+    }
+
+    public function destroyTemplate(AccountCode $accountCode, AccountCodeSubEntryTemplate $template)
+    {
+        abort_if($template->account_code_id !== $accountCode->id, 404);
+        $template->delete();
+        return response()->json(['ok' => true]);
     }
 
     public function bulkDestroy(Request $request)

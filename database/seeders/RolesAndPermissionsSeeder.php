@@ -145,7 +145,18 @@ class RolesAndPermissionsSeeder extends Seeder
             'export reports',
         ]);
 
-        // 5. Board — final approval
+        // 5. COO — Chief Operating Officer approval (alternative to GCEO for some depts)
+        $coo = Role::firstOrCreate(['name' => 'coo']);
+        $coo->syncPermissions([
+            'view all budgets',
+            'approve budget',
+            'reject budget',
+            'approve virement',
+            'view reports',
+            'export reports',
+        ]);
+
+        // 6. Board — final approval
         $board = Role::firstOrCreate(['name' => 'board']);
         $board->syncPermissions([
             'view all budgets',
@@ -155,7 +166,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'export reports',
         ]);
 
-        // 6. BDU Admin — configures the system, manages mappings
+        // 7. BDU Admin — configures the system, manages mappings
         $bduAdmin = Role::firstOrCreate(['name' => 'bdu_admin']);
         $bduAdmin->syncPermissions([
             'view all budgets',
@@ -176,7 +187,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'reopen actuals',
         ]);
 
-        // 7. Super Admin — unrestricted access
+        // 8. Super Admin — unrestricted access
         $superAdmin = Role::firstOrCreate(['name' => 'super_admin']);
         $superAdmin->syncPermissions(Permission::all());
     }

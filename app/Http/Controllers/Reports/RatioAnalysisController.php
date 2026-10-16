@@ -203,7 +203,22 @@ class RatioAnalysisController extends Controller
         $versionIds = $this->effectiveVersionIds($period, $basis, $department?->id);
         if (empty($versionIds)) return 0;
 
-        $q = BudgetLineItem::whereIn('budget_version_id', $versionIds);
+        // Build reductions map (approved reduced amounts override total_amount)
+        $versions = BudgetVersion::with('approvalDecisions.lineItemApprovals')
+            ->whereIn('id', $versionIds)->get();
+        $reductions = [];
+        foreach ($versions as $v) {
+            foreach ($v->approvalDecisions as $dec) {
+                foreach ($dec->lineItemApprovals as $lia) {
+                    if ($lia->status === 'reduced' && $lia->approved_amount !== null) {
+                        $reductions[$lia->budget_line_item_id] = (float) $lia->approved_amount;
+                    }
+                }
+            }
+        }
+
+        $q = BudgetLineItem::whereIn('budget_version_id', $versionIds)
+            ->with('accountCode.category');
         if (!$hasAll && ($hasTypes || $hasCats || $hasCodes)) {
             $q->where(function ($sub) use ($types, $catIds, $codes, $hasTypes, $hasCats, $hasCodes) {
                 if ($hasTypes) $sub->orWhereHas('accountCode.category', fn($c) => $c->whereIn('budget_type', $types));
@@ -212,7 +227,7 @@ class RatioAnalysisController extends Controller
             });
         }
 
-        return (float) $q->sum('total_amount');
+        return (float) $q->get()->sum(fn($item) => $reductions[$item->id] ?? $item->total_amount);
     }
 
     private function effectiveVersionIds(BudgetPeriod $period, string $basis, ?int $departmentId = null): array

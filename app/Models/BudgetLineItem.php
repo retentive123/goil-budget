@@ -72,6 +72,11 @@ class BudgetLineItem extends Model
         return $this->hasMany(BudgetLineItemCustomValue::class);
     }
 
+    public function subEntries()
+    {
+        return $this->hasMany(BudgetLineSubEntry::class)->orderBy('sort_order');
+    }
+
 public function actualTotal(): float
 {
     return $this->actuals()->where('status','confirmed')->sum('amount');

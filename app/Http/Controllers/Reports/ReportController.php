@@ -62,7 +62,8 @@ public function executive(Request $request)
     $versionIds = $this->effectiveVersionIds($period, $basis);
     $monthKeys  = ['m1','m2','m3','m4','m5','m6','m7','m8','m9','m10','m11','m12'];
 
-    $versions = BudgetVersion::with('department', 'lineItems.accountCode.category')
+    $versions = BudgetVersion::with('department', 'lineItems.accountCode.category',
+            'approvalDecisions.lineItemApprovals')
         ->whereIn('id', $versionIds)
         ->get();
 
@@ -70,7 +71,7 @@ public function executive(Request $request)
     $deptTotals = $versions->map(function($v) use ($monthKeys) {
         $original = $v->lineItems->sum('total_amount');
         $supplementary = $v->lineItems->sum(fn($i) => $i->approvedSupplementaryTotal());
-        $effective = $original + $supplementary;
+        $effective = $v->effectiveTotal();
 
         $row = [
             'name'         => $v->subsidiary?->name ?? $v->department?->name ?? '—',
@@ -101,12 +102,14 @@ public function executive(Request $request)
         'assets'               => 'Assets',
         'liabilities'          => 'Liabilities',
     ];
+    [$execRed] = $this->buildReductionsMap($versions);
     $budgetTypeTotals = [];
     foreach ($versions as $v) {
         foreach ($v->lineItems as $item) {
             $type  = $item->accountCode->category->budget_type ?? 'expense';
             $label = $typeLabels[$type] ?? ucfirst(str_replace('_', ' ', $type));
-            $budgetTypeTotals[$label] = ($budgetTypeTotals[$label] ?? 0) + $item->effectiveBudget();
+            $budgetTypeTotals[$label] = ($budgetTypeTotals[$label] ?? 0)
+                + ($execRed[$item->id] ?? $item->total_amount) + $item->approvedSupplementaryTotal();
         }
     }
     arsort($budgetTypeTotals);
@@ -171,7 +174,8 @@ public function department(Request $request)
     // Load versions — single dept or all depts aggregated
     if ($department) {
         $versionIds  = $this->effectiveVersionIds($period, $basis, $department->id);
-        $allVersions = BudgetVersion::with('lineItems.accountCode.category')
+        $allVersions = BudgetVersion::with('lineItems.accountCode.category',
+                'approvalDecisions.lineItemApprovals')
             ->whereIn('id', $versionIds)->get();
         $versionHistory = BudgetVersion::where('budget_period_id', $period->id)
             ->where('department_id', $department->id)
@@ -179,7 +183,8 @@ public function department(Request $request)
         $yoyData = $this->deptYoY($department->id);
     } else {
         $versionIds  = $this->effectiveVersionIds($period, $basis);
-        $allVersions = BudgetVersion::with('lineItems.accountCode.category')
+        $allVersions = BudgetVersion::with('lineItems.accountCode.category',
+                'approvalDecisions.lineItemApprovals')
             ->whereIn('id', $versionIds)->get();
         $versionHistory = collect();
         $yoyData = [];
@@ -190,6 +195,8 @@ public function department(Request $request)
     $emptyRow   = array_fill_keys(array_merge(['q1','q2','q3','q4'], $monthKeys), 0);
     $byCategory = [];
     $periodSums = array_merge($emptyRow, ['total'=>0,'supplementary'=>0,'original'=>0]);
+
+    [$deptRed] = $this->buildReductionsMap($allVersions);
 
     foreach ($allVersions as $v) {
         foreach ($v->lineItems as $item) {
@@ -205,7 +212,7 @@ public function department(Request $request)
             }
 
             $supplementary   = $item->approvedSupplementaryTotal();
-            $effectiveBudget = $item->effectiveBudget();
+            $effectiveBudget = ($deptRed[$item->id] ?? $item->total_amount) + $supplementary;
 
             $byCategory[$cat]['items'][] = $item;
             foreach (['q1','q2','q3','q4'] as $qk) {
@@ -398,14 +405,17 @@ public function deptComparison(Request $request)
     if ($period) {
         foreach ($selectedDeptIds as $deptId) {
             $dept    = Department::find($deptId);
-            $version = BudgetVersion::with('lineItems.accountCode.category')
+            $version = BudgetVersion::with('lineItems.accountCode.category',
+                    'approvalDecisions.lineItemApprovals')
                 ->whereIn('id', $allEffectiveIds)
                 ->where('department_id', $deptId)
                 ->first();
 
-            $original = $version?->lineItems->sum('total_amount') ?? 0;
+            $original      = $version?->lineItems->sum('total_amount') ?? 0;
             $supplementary = $version?->lineItems->sum(fn($i) => $i->approvedSupplementaryTotal()) ?? 0;
-            $effective = $original + $supplementary;
+            $effective     = $version ? $version->effectiveTotal() : 0;
+
+            [$dcRed] = $version ? $this->buildReductionsMap(collect([$version])) : [[]];
 
             $compData[] = [
                 'dept'  => $dept?->name,
@@ -414,12 +424,14 @@ public function deptComparison(Request $request)
                 'q2'    => $version?->lineItems->sum('q2_amount') ?? 0,
                 'q3'    => $version?->lineItems->sum('q3_amount') ?? 0,
                 'q4'    => $version?->lineItems->sum('q4_amount') ?? 0,
-                'original' => $original,
+                'original'      => $original,
                 'supplementary' => $supplementary,
-                'total' => $effective, // âœ… Effective total
+                'total'         => $effective,
                 'categories' => $version
                     ? $version->lineItems->groupBy('accountCode.category.name')
-                        ->map(fn($items) => $items->sum(fn($item) => $item->effectiveBudget()))
+                        ->map(fn($items) => $items->sum(fn($item) =>
+                            ($dcRed[$item->id] ?? $item->total_amount) + $item->approvedSupplementaryTotal()
+                        ))
                         ->sortDesc()->toArray()
                     : [],
             ];
@@ -579,12 +591,15 @@ public function deptComparison(Request $request)
         $basis      = request('budget_basis', 'original');
         $versionIds = $this->effectiveVersionIds($period, $basis);
 
-        $versions = BudgetVersion::with('department','lineItems.accountCode.category')
+        $versions = BudgetVersion::with('department','lineItems.accountCode.category',
+                'approvalDecisions.lineItemApprovals')
             ->whereIn('id', $versionIds)
             ->get();
 
-        $utilisation = $versions->map(function ($v) {
-            $approved = $v->lineItems->sum('total_amount');
+        [$utilRed] = $this->buildReductionsMap($versions);
+
+        $utilisation = $versions->map(function ($v) use ($utilRed) {
+            $approved = $v->effectiveTotal();
 
             $actual = \App\Models\BudgetActual::when($v->subsidiary_id,
                     fn($q) => $q->where('subsidiary_id', $v->subsidiary_id),
@@ -596,14 +611,13 @@ public function deptComparison(Request $request)
 
             $pct = $approved > 0 ? round(($actual / $approved) * 100, 1) : 0;
 
-            // Per-line-item utilisation
             $lineItems = $v->lineItems->sortBy(fn($i) => [
                 $i->accountCode->category_id ?? PHP_INT_MAX,
                 $i->accountCode->code ?? '',
-            ])->map(function ($item) {
+            ])->map(function ($item) use ($utilRed) {
                 $itemActual  = \App\Models\BudgetActual::where('budget_line_item_id', $item->id)
                     ->where('status', 'confirmed')->sum('amount');
-                $itemBudget  = $item->effectiveBudget();
+                $itemBudget  = ($utilRed[$item->id] ?? $item->total_amount) + $item->approvedSupplementaryTotal();
                 $itemPct     = $itemBudget > 0 ? round(($itemActual / $itemBudget) * 100, 1) : 0;
                 return [
                     'code'     => $item->accountCode->code ?? '—',
@@ -1076,6 +1090,7 @@ public function codeExplorerExport(Request $request)
         $versionsQuery = BudgetVersion::with([
                 'subsidiary.category',
                 'lineItems.accountCode.category',
+                'approvalDecisions.lineItemApprovals',
             ])
             ->whereNotNull('subsidiary_id')
             ->where('status', 'approved')
@@ -1121,8 +1136,10 @@ public function codeExplorerExport(Request $request)
             );
         }
 
-        $rows = $versions->map(function ($v) {
-            $items = $v->lineItems->map(function ($li) {
+        [$subRed] = $this->buildReductionsMap($versions);
+
+        $rows = $versions->map(function ($v) use ($subRed) {
+            $items = $v->lineItems->map(function ($li) use ($subRed) {
                 return [
                     'code'     => $li->accountCode->code ?? '—',
                     'name'     => $li->accountCode->name ?? '—',
@@ -1131,7 +1148,7 @@ public function codeExplorerExport(Request $request)
                     'q2'       => (float)($li->q2_amount ?? 0),
                     'q3'       => (float)($li->q3_amount ?? 0),
                     'q4'       => (float)($li->q4_amount ?? 0),
-                    'total'    => (float)($li->total_amount ?? 0),
+                    'total'    => (float)($subRed[$li->id] ?? $li->total_amount ?? 0),
                 ];
             })->sortBy('code')->values();
 
@@ -1179,24 +1196,27 @@ public function codeExplorerExport(Request $request)
         }
 
         $deptVersionIds = $this->effectiveVersionIds($period, $basis);
-        $deptVersions   = BudgetVersion::with('department', 'lineItems')
+        $deptVersions   = BudgetVersion::with('department', 'lineItems', 'approvalDecisions.lineItemApprovals')
             ->whereIn('id', $deptVersionIds)
             ->whereNotNull('department_id')
             ->get();
 
-        $subVersions = BudgetVersion::with('subsidiary', 'lineItems')
+        $subVersions = BudgetVersion::with('subsidiary', 'lineItems', 'approvalDecisions.lineItemApprovals')
             ->where('budget_period_id', $period->id)
             ->whereNotNull('subsidiary_id')
             ->where('status', 'approved')
             ->where('is_revision', false)
             ->get();
 
-        $buildRow = function ($type, $name, $code, $lineItems, $status) use ($entryMode) {
+        $allConsolidated = $deptVersions->merge($subVersions);
+        [$conRed] = $this->buildReductionsMap($allConsolidated);
+
+        $buildRow = function ($type, $name, $code, $lineItems, $status) use ($entryMode, $conRed) {
             $row = [
                 'type'   => $type,
                 'name'   => $name,
                 'code'   => $code,
-                'total'  => $lineItems->sum('total_amount'),
+                'total'  => $lineItems->sum(fn($i) => $conRed[$i->id] ?? $i->total_amount),
                 'supp'   => $lineItems->sum(fn($i) => $i->approvedSupplementaryTotal()),
                 'status' => $status,
             ];
@@ -1403,7 +1423,7 @@ public function codeExplorerExport(Request $request)
             ]);
         }
 
-        $versions = BudgetVersion::with('department', 'lineItems')
+        $versions = BudgetVersion::with('department', 'lineItems', 'approvalDecisions.lineItemApprovals')
             ->where('budget_period_id', $period->id)
             ->whereNotNull('department_id')
             ->where('status', 'approved')
@@ -1413,7 +1433,7 @@ public function codeExplorerExport(Request $request)
         $rows = $versions->map(function ($v) use ($period) {
             $approved  = $v->lineItems->sum('total_amount');
             $supp      = $v->lineItems->sum(fn($i) => $i->approvedSupplementaryTotal());
-            $effective = $approved + $supp;
+            $effective = $v->effectiveTotal();
 
             $actuals = \App\Models\BudgetActual::where('budget_period_id', $period->id)
                 ->where('department_id', $v->department_id)
@@ -1594,7 +1614,7 @@ public function codeExplorerExport(Request $request)
         }
 
         $rows = $stations->map(function ($station) use ($period) {
-            $version = BudgetVersion::with('lineItems')
+            $version = BudgetVersion::with('lineItems', 'approvalDecisions.lineItemApprovals')
                 ->where('budget_period_id', $period->id)
                 ->where('department_id', $station->id)
                 ->where('status', 'approved')
@@ -1603,7 +1623,7 @@ public function codeExplorerExport(Request $request)
 
             $approved  = $version ? $version->lineItems->sum('total_amount') : 0;
             $supp      = $version ? $version->lineItems->sum(fn($i) => $i->approvedSupplementaryTotal()) : 0;
-            $effective = $approved + $supp;
+            $effective = $version ? $version->effectiveTotal() : 0;
 
             $actuals = \App\Models\BudgetActual::where('budget_period_id', $period->id)
                 ->where('department_id', $station->id)
@@ -1796,12 +1816,16 @@ public function codeExplorerExport(Request $request)
 
         $versions = BudgetVersion::where('budget_period_id', $period->id)->get();
 
+        $approvedVersions = BudgetVersion::with('lineItems', 'approvalDecisions.lineItemApprovals')
+            ->where('budget_period_id', $period->id)
+            ->where('status', 'approved')
+            ->where('is_revision', false)
+            ->get();
+
         return [
             'approved_count'  => $versions->where('status','approved')->unique('department_id')->count(),
             'pending_count'   => $versions->whereIn('status',['submitted','under_review'])->unique('department_id')->count(),
-            'total_value'     => BudgetLineItem::whereHas('budgetVersion', fn($q) =>
-                $q->where('budget_period_id', $period->id)->where('status','approved')->where('is_revision', false)
-            )->sum('total_amount'),
+            'total_value'     => $approvedVersions->sum(fn($v) => $v->effectiveTotal()),
             'virement_count'  => Virement::where('budget_period_id', $period->id)->count(),
         ];
     }
@@ -1852,6 +1876,12 @@ private function buildYoYComparison(
     $itemsA = $getVersionItems($idsA);
     $itemsB = $getVersionItems($idsB);
 
+    // Load reductions maps for both periods
+    $versionsForRedA = empty($idsA) ? collect() : BudgetVersion::with('approvalDecisions.lineItemApprovals')->whereIn('id', $idsA)->get();
+    $versionsForRedB = empty($idsB) ? collect() : BudgetVersion::with('approvalDecisions.lineItemApprovals')->whereIn('id', $idsB)->get();
+    [$yoyRedA] = $this->buildReductionsMap($versionsForRedA);
+    [$yoyRedB] = $this->buildReductionsMap($versionsForRedB);
+
     // Original budget per code
     $origA = $itemsA->groupBy('account_code_id')->map(fn($i) => $i->sum('total_amount'));
     $origB = $itemsB->groupBy('account_code_id')->map(fn($i) => $i->sum('total_amount'));
@@ -1860,9 +1890,13 @@ private function buildYoYComparison(
     $suppA = $itemsA->groupBy('account_code_id')->map(fn($i) => $i->sum(fn($x) => $x->approvedSupplementaryTotal()));
     $suppB = $itemsB->groupBy('account_code_id')->map(fn($i) => $i->sum(fn($x) => $x->approvedSupplementaryTotal()));
 
-    // Effective budget per code (original + supplementary)
-    $budgetA = $origA->map(fn($v, $code) => $v + ($suppA[$code] ?? 0));
-    $budgetB = $origB->map(fn($v, $code) => $v + ($suppB[$code] ?? 0));
+    // Effective budget per code (reduced or original + supplementary)
+    $budgetA = $itemsA->groupBy('account_code_id')->map(fn($i) =>
+        $i->sum(fn($x) => (float)($yoyRedA[$x->id] ?? $x->total_amount)) + $i->sum(fn($x) => $x->approvedSupplementaryTotal())
+    );
+    $budgetB = $itemsB->groupBy('account_code_id')->map(fn($i) =>
+        $i->sum(fn($x) => (float)($yoyRedB[$x->id] ?? $x->total_amount)) + $i->sum(fn($x) => $x->approvedSupplementaryTotal())
+    );
 
     $actualA = $itemsA->groupBy('account_code_id')->map(function ($codeItems) {
         $ids = $codeItems->pluck('id');
@@ -1987,12 +2021,12 @@ private function buildYoYComparison(
         // KPI cards â€” now correctly include supplementary
         'original_total_a'      => $itemsA->sum('total_amount'),
         'supplementary_total_a' => $itemsA->sum(fn($i) => $i->approvedSupplementaryTotal()),
-        'budget_total_a'        => $itemsA->sum('total_amount') + $itemsA->sum(fn($i) => $i->approvedSupplementaryTotal()),
+        'budget_total_a'        => $itemsA->sum(fn($i) => (float)($yoyRedA[$i->id] ?? $i->total_amount)) + $itemsA->sum(fn($i) => $i->approvedSupplementaryTotal()),
         'actual_total_a'        => $actualA->sum(),
 
         'original_total_b'      => $itemsB->sum('total_amount'),
         'supplementary_total_b' => $itemsB->sum(fn($i) => $i->approvedSupplementaryTotal()),
-        'budget_total_b'        => $itemsB->sum('total_amount') + $itemsB->sum(fn($i) => $i->approvedSupplementaryTotal()),
+        'budget_total_b'        => $itemsB->sum(fn($i) => (float)($yoyRedB[$i->id] ?? $i->total_amount)) + $itemsB->sum(fn($i) => $i->approvedSupplementaryTotal()),
         'actual_total_b'        => $actualB->sum(),
 
         'budget_change'  => 0, // computed below after totals are known
@@ -2003,19 +2037,19 @@ private function buildYoYComparison(
 private function buildBudgetData($versions): array
 {
     $raw     = [];
-    // Track the budget_type for each category so we can sort later
     $catType = [];
+
+    [$bdReductions, $bdMonthlyRed] = $this->buildReductionsMap($versions);
 
     foreach ($versions as $version) {
         foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
-            // Exclude balance-sheet and capex items from P&L-based reports
             $budgetType = $item->accountCode->category->budget_type ?? 'expense';
             if (!in_array($budgetType, ['revenue', 'expense', 'both'])) continue;
 
             $cat  = $item->accountCode->category->name;
             $code = $item->accountCode->code;
 
-            $catType[$cat] = $budgetType; // record for ordering
+            $catType[$cat] = $budgetType;
 
             if (!isset($raw[$cat][$code])) {
                 $raw[$cat][$code] = [
@@ -2027,19 +2061,28 @@ private function buildBudgetData($versions): array
                     'q4'            => 0,
                     'original'      => 0,
                     'supplementary' => 0,
-                    'total'         => 0, // effective = original + supplementary
+                    'total'         => 0,
                 ];
             }
 
-            $supp = $item->approvedSupplementaryTotal();
+            $supp          = $item->approvedSupplementaryTotal();
+            $reducedBudget = $bdReductions[$item->id] ?? $item->total_amount;
 
-            $raw[$cat][$code]['q1']            += $item->q1_amount;
-            $raw[$cat][$code]['q2']            += $item->q2_amount;
-            $raw[$cat][$code]['q3']            += $item->q3_amount;
-            $raw[$cat][$code]['q4']            += $item->q4_amount + $supp; // supplementary shown in Q4 bucket
+            if (isset($bdMonthlyRed[$item->id])) {
+                $mr = $bdMonthlyRed[$item->id];
+                $raw[$cat][$code]['q1'] += $mr[1] + $mr[2] + $mr[3];
+                $raw[$cat][$code]['q2'] += $mr[4] + $mr[5] + $mr[6];
+                $raw[$cat][$code]['q3'] += $mr[7] + $mr[8] + $mr[9];
+                $raw[$cat][$code]['q4'] += $mr[10] + $mr[11] + $mr[12] + $supp;
+            } else {
+                $raw[$cat][$code]['q1'] += $item->q1_amount;
+                $raw[$cat][$code]['q2'] += $item->q2_amount;
+                $raw[$cat][$code]['q3'] += $item->q3_amount;
+                $raw[$cat][$code]['q4'] += $item->q4_amount + $supp;
+            }
             $raw[$cat][$code]['original']      += $item->total_amount;
             $raw[$cat][$code]['supplementary'] += $supp;
-            $raw[$cat][$code]['total']          = $raw[$cat][$code]['original'] + $raw[$cat][$code]['supplementary'];
+            $raw[$cat][$code]['total']          = ($raw[$cat][$code]['total'] ?? 0) + $reducedBudget + $supp;
         }
     }
 
@@ -2402,6 +2445,8 @@ private function buildPnlData($versions, $period, ?int $deptId, ?BudgetPeriod $p
         $catSubCatId[$cat->name] = $cat->account_sub_category_id;
     }
 
+    [$pnlReductions, $pnlMonthlyRed] = $this->buildReductionsMap($versions);
+
     foreach ($versions as $version) {
         foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
             $cat     = $item->accountCode->category;
@@ -2419,11 +2464,20 @@ private function buildPnlData($versions, $period, ?int $deptId, ?BudgetPeriod $p
                     'budget' => 0, 'supp' => 0,
                 ];
             }
-            $raw[$type][$catName][$code]['q1']     += $item->q1_amount;
-            $raw[$type][$catName][$code]['q2']     += $item->q2_amount;
-            $raw[$type][$catName][$code]['q3']     += $item->q3_amount;
-            $raw[$type][$catName][$code]['q4']     += $item->q4_amount;
-            $raw[$type][$catName][$code]['budget'] += $item->total_amount;
+            $reducedBudget = $pnlReductions[$item->id] ?? $item->total_amount;
+            if (isset($pnlMonthlyRed[$item->id])) {
+                $mr = $pnlMonthlyRed[$item->id];
+                $raw[$type][$catName][$code]['q1'] += $mr[1] + $mr[2] + $mr[3];
+                $raw[$type][$catName][$code]['q2'] += $mr[4] + $mr[5] + $mr[6];
+                $raw[$type][$catName][$code]['q3'] += $mr[7] + $mr[8] + $mr[9];
+                $raw[$type][$catName][$code]['q4'] += $mr[10] + $mr[11] + $mr[12];
+            } else {
+                $raw[$type][$catName][$code]['q1'] += $item->q1_amount;
+                $raw[$type][$catName][$code]['q2'] += $item->q2_amount;
+                $raw[$type][$catName][$code]['q3'] += $item->q3_amount;
+                $raw[$type][$catName][$code]['q4'] += $item->q4_amount;
+            }
+            $raw[$type][$catName][$code]['budget'] += $reducedBudget;
             $raw[$type][$catName][$code]['supp']   += $supp;
         }
     }
@@ -2560,12 +2614,13 @@ private function buildConfiguredStatement(
     ?int $subsidiaryId = null
 ): array {
     // Effective budget amounts by sub_category_id from approved versions
+    [$csReductions] = $this->buildReductionsMap($versions);
     $budgetBySubCat = [];
     foreach ($versions as $version) {
         foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
             $subCatId = $item->accountCode->category->account_sub_category_id ?? null;
             if (!$subCatId) continue;
-            $eff = $item->total_amount + $item->approvedSupplementaryTotal();
+            $eff = ($csReductions[$item->id] ?? $item->total_amount) + $item->approvedSupplementaryTotal();
             $budgetBySubCat[$subCatId] = ($budgetBySubCat[$subCatId] ?? 0) + $eff;
         }
     }
@@ -2784,12 +2839,14 @@ private function buildConfiguredBalanceSheet(
     ?int $subsidiaryId = null
 ): array {
     // Budget by sub_category_id
+    [$bsConfigRed] = $this->buildReductionsMap($versions);
+
     $budgetBySubCat = [];
     foreach ($versions as $version) {
         foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
             $scId = $item->accountCode->category->account_sub_category_id ?? null;
             if (!$scId) continue;
-            $eff = $item->total_amount + $item->approvedSupplementaryTotal();
+            $eff = (float)($bsConfigRed[$item->id] ?? $item->total_amount) + $item->approvedSupplementaryTotal();
             $budgetBySubCat[$scId] = ($budgetBySubCat[$scId] ?? 0) + $eff;
         }
     }
@@ -2917,16 +2974,25 @@ private function buildCashFlowData($versions, $period, ?int $deptId, ?int $subsi
     // Quarterly budget by type (revenue / expense)
     $qBudget = ['revenue' => [1=>0,2=>0,3=>0,4=>0], 'expense' => [1=>0,2=>0,3=>0,4=>0]];
 
+    [$cfReductions, $cfMonthlyRed] = $this->buildReductionsMap($versions);
     foreach ($versions as $version) {
         foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
             if (!in_array($item->accountCode->category->budget_type, ['revenue', 'expense', 'both'])) continue;
             $type = in_array($item->accountCode->category->budget_type, ['revenue','both'])
                 ? 'revenue' : 'expense';
             $supp = $item->approvedSupplementaryTotal();
-            $qBudget[$type][1] += $item->q1_amount;
-            $qBudget[$type][2] += $item->q2_amount;
-            $qBudget[$type][3] += $item->q3_amount;
-            $qBudget[$type][4] += $item->q4_amount + $supp;
+            if (isset($cfMonthlyRed[$item->id])) {
+                $mr = $cfMonthlyRed[$item->id];
+                $qBudget[$type][1] += $mr[1] + $mr[2] + $mr[3];
+                $qBudget[$type][2] += $mr[4] + $mr[5] + $mr[6];
+                $qBudget[$type][3] += $mr[7] + $mr[8] + $mr[9];
+                $qBudget[$type][4] += $mr[10] + $mr[11] + $mr[12] + $supp;
+            } else {
+                $qBudget[$type][1] += $item->q1_amount;
+                $qBudget[$type][2] += $item->q2_amount;
+                $qBudget[$type][3] += $item->q3_amount;
+                $qBudget[$type][4] += $item->q4_amount + $supp;
+            }
         }
     }
 
@@ -3075,6 +3141,7 @@ private function buildBalanceSheetData($versions, $period, ?int $deptId, ?Budget
         ];
     }
 
+    [$bsReductions, $bsMonthlyRed] = $this->buildReductionsMap($versions);
     foreach ($versions as $version) {
         foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
             $cat     = $item->accountCode->category;
@@ -3096,11 +3163,20 @@ private function buildBalanceSheetData($versions, $period, ?int $deptId, ?Budget
                     'budget' => 0, 'supp' => 0,
                 ];
             }
-            $raw[$type][$catName][$code]['q1']     += $item->q1_amount;
-            $raw[$type][$catName][$code]['q2']     += $item->q2_amount;
-            $raw[$type][$catName][$code]['q3']     += $item->q3_amount;
-            $raw[$type][$catName][$code]['q4']     += $item->q4_amount;
-            $raw[$type][$catName][$code]['budget'] += $item->total_amount;
+            $reducedBudget = $bsReductions[$item->id] ?? $item->total_amount;
+            if (isset($bsMonthlyRed[$item->id])) {
+                $mr = $bsMonthlyRed[$item->id];
+                $raw[$type][$catName][$code]['q1'] += $mr[1] + $mr[2] + $mr[3];
+                $raw[$type][$catName][$code]['q2'] += $mr[4] + $mr[5] + $mr[6];
+                $raw[$type][$catName][$code]['q3'] += $mr[7] + $mr[8] + $mr[9];
+                $raw[$type][$catName][$code]['q4'] += $mr[10] + $mr[11] + $mr[12];
+            } else {
+                $raw[$type][$catName][$code]['q1'] += $item->q1_amount;
+                $raw[$type][$catName][$code]['q2'] += $item->q2_amount;
+                $raw[$type][$catName][$code]['q3'] += $item->q3_amount;
+                $raw[$type][$catName][$code]['q4'] += $item->q4_amount;
+            }
+            $raw[$type][$catName][$code]['budget'] += $reducedBudget;
             $raw[$type][$catName][$code]['supp']   += $supp;
         }
     }
@@ -3223,15 +3299,18 @@ private function buildCapexData($versions, $period, ?int $deptId, ?BudgetPeriod 
         }
     }
 
+    [$capexRed] = $this->buildReductionsMap($versions);
+
     $raw = [];
 
     foreach ($versions as $version) {
         foreach ($version->lineItems()->with('accountCode.category')->get() as $item) {
             if ($item->accountCode->category->budget_type !== 'capital_expenditure') continue;
 
-            $catName = $item->accountCode->category->name;
-            $code    = $item->accountCode->code;
-            $supp    = $item->approvedSupplementaryTotal();
+            $catName    = $item->accountCode->category->name;
+            $code       = $item->accountCode->code;
+            $supp       = $item->approvedSupplementaryTotal();
+            $itemBudget = (float)($capexRed[$item->id] ?? $item->total_amount);
 
             if (!isset($raw[$catName][$code])) {
                 $raw[$catName][$code] = [
@@ -3244,7 +3323,7 @@ private function buildCapexData($versions, $period, ?int $deptId, ?BudgetPeriod 
             $raw[$catName][$code]['q2']     += $item->q2_amount;
             $raw[$catName][$code]['q3']     += $item->q3_amount;
             $raw[$catName][$code]['q4']     += $item->q4_amount;
-            $raw[$catName][$code]['budget'] += $item->total_amount;
+            $raw[$catName][$code]['budget'] += $itemBudget;
             $raw[$catName][$code]['supp']   += $supp;
         }
     }
@@ -3328,7 +3407,8 @@ public function capex(Request $request)
         ]);
     }
 
-    $versions = BudgetVersion::where('budget_period_id', $period->id)
+    $versions = BudgetVersion::with(['approvalDecisions.lineItemApprovals'])
+        ->where('budget_period_id', $period->id)
         ->where('status', 'approved')
         ->where('is_revision', false)
         ->when($deptId,       fn($q) => $q->where('department_id', $deptId))
@@ -3432,6 +3512,8 @@ private function buildConfiguredCapex(
     }
 
     // â”€â”€ Budget by sub_cat + expand raw data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    [$confCapexRed] = $this->buildReductionsMap($versions);
+
     $budgetBySubCat = [];
     $expandRaw      = []; // sub_cat_id => cat_name => ['codes' => [], 'effective' => 0]
 
@@ -3442,7 +3524,7 @@ private function buildConfiguredCapex(
             $scId    = $item->accountCode->category->account_sub_category_id ?? null;
             $catName = $item->accountCode->category->name;
             $code    = $item->accountCode->code;
-            $eff     = $item->total_amount + $item->approvedSupplementaryTotal();
+            $eff     = (float)($confCapexRed[$item->id] ?? $item->total_amount) + $item->approvedSupplementaryTotal();
 
             if ($scId) {
                 $budgetBySubCat[$scId] = ($budgetBySubCat[$scId] ?? 0) + $eff;
@@ -3639,6 +3721,34 @@ private function revisionCount(?BudgetPeriod $period): int
         ->where('status', 'approved')
         ->distinct('department_id')
         ->count('department_id');
+}
+
+/**
+ * Build reductions maps from a versions collection.
+ * Returns [$reductions, $monthlyReductions]:
+ *   $reductions[item_id]        = approved_amount (last reduction wins)
+ *   $monthlyReductions[item_id] = [1..12 => amount]
+ */
+private function buildReductionsMap($versions): array
+{
+    $versions->loadMissing('approvalDecisions.lineItemApprovals');
+    $reductions        = [];
+    $monthlyReductions = [];
+    foreach ($versions as $version) {
+        foreach ($version->approvalDecisions as $dec) {
+            foreach ($dec->lineItemApprovals as $lia) {
+                if ($lia->status === 'reduced' && $lia->approved_amount !== null) {
+                    $reductions[$lia->budget_line_item_id] = (float) $lia->approved_amount;
+                    $mon = [];
+                    for ($m = 1; $m <= 12; $m++) {
+                        $mon[$m] = (float) $lia->{"m{$m}_amount"};
+                    }
+                    $monthlyReductions[$lia->budget_line_item_id] = $mon;
+                }
+            }
+        }
+    }
+    return [$reductions, $monthlyReductions];
 }
 
 }

@@ -75,6 +75,18 @@
             </ul>
         </div>
         @if($budgetVersion->isEditable())
+        @if($manualSplit ?? false)
+        <div class="btn-group btn-group-sm" role="group">
+            <button class="btn btn-outline-secondary" onclick="splitAllEqual()"
+                    title="Split every line item's total equally across all {{ $entryMode === 'monthly' ? 'months' : 'quarters' }}">
+                ÷ Split All
+            </button>
+            <button class="btn btn-outline-danger" onclick="clearAll()"
+                    title="Reset every line item's {{ $entryMode === 'monthly' ? 'month' : 'quarter' }} values to 0">
+                ✕ Clear All
+            </button>
+        </div>
+        @endif
         <span id="save-status" class="text-muted small"></span>
         <button id="save-btn" class="btn btn-outline-primary btn-sm" onclick="saveBudget()">Save</button>
         <a href="{{ route('budget.confirm', $budgetVersion) }}"
@@ -100,7 +112,9 @@
 @php
     $lineItems = $budgetVersion->lineItems ?? collect();
     $totalSupplementary = $lineItems->sum(fn($i) => $i->approvedSupplementaryTotal());
-    $effectiveTotal = $grandTotals['total'];
+    $effectiveTotal = $lineItems->sum(fn($i) =>
+        ($reductions[$i->id] ?? $i->total_amount) + $i->approvedSupplementaryTotal()
+    );
 @endphp
 
 @php
@@ -284,10 +298,10 @@
     @php $monthLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; @endphp
     @if(!empty($btab['summary']))
     <div class="card shadow-sm border-0">
-        <div class="card-body p-0" style="overflow-x:auto;">
+        <div class="card-body p-0" style="max-height:calc(100vh - 260px);overflow:auto;">
             <table class="table table-sm table-hover mb-0"
                    style="{{ $calcMode !== 'none' ? 'min-width:900px;' : ($entryMode === 'monthly' ? 'min-width:1400px;' : '') }}">
-                <thead class="table-light sticky-top" style="z-index:1">
+                <thead class="table-light" style="position:sticky;top:0;z-index:3">
                     <tr>
                         <th style="min-width:180px;">Account</th>
 
@@ -364,7 +378,7 @@
                     @foreach($categoryData['items'] as $item)
                     @php
                         $itemSupp      = $item->approvedSupplementaryTotal();
-                        $itemEffective = $item->effectiveBudget();
+                        $itemEffective = ($reductions[$item->id] ?? $item->total_amount) + $itemSupp;
                         $typeBadge     = match($item->line_type ?? '') {
                             'revenue'   => ['bg'=>'#D1FAE5','color'=>'#065F46'],
                             'expense'   => ['bg'=>'#FEE2E2','color'=>'#991B1B'],
@@ -381,7 +395,12 @@
                         // Map custom field id → saved value for this line item
                         $cvMap = $item->customValues->keyBy('custom_budget_field_id');
                     @endphp
-                    <tr data-item-id="{{ $item->id }}" data-supp="{{ $itemSupp }}" data-cat="{{ $catIdx }}">
+                    @php
+                        $hasSubEntries    = $item->subEntries->isNotEmpty();
+                        $hasTemplatedSubs = !$hasSubEntries && $budgetVersion->isEditable() && $item->accountCode->subEntryTemplates->isNotEmpty();
+                    @endphp
+                    <tr data-item-id="{{ $item->id }}" data-supp="{{ $itemSupp }}" data-cat="{{ $catIdx }}"
+                        data-has-subs="{{ ($hasSubEntries || $hasTemplatedSubs) ? '1' : '0' }}">
                         <td class="small">
                             <code>{{ $item->accountCode->code }}</code>
                             {{ $item->accountCode->name }}
@@ -390,6 +409,18 @@
                                          background:{{ $typeBadge['bg'] }};color:{{ $typeBadge['color'] }}">
                                 {{ ucfirst($item->line_type) }}
                             </span>
+                            @endif
+                            @if($budgetVersion->isEditable())
+                            <button type="button"
+                                    onclick="addSubRow({{ $item->id }})"
+                                    title="Add a sub-item under this line"
+                                    style="display:inline-flex;align-items:center;justify-content:center;
+                                           width:18px;height:18px;border-radius:50%;font-size:11px;
+                                           background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;
+                                           cursor:pointer;margin-left:5px;flex-shrink:0;font-weight:700;
+                                           line-height:1;padding:0">
+                                +
+                            </button>
                             @endif
                         </td>
 
@@ -472,15 +503,26 @@
                                             margin-top:3px;line-height:1.2">
                                     &nbsp;
                                 </div>
+                                <div style="display:flex;gap:3px;margin-top:4px;flex-wrap:wrap">
                                 <button type="button"
                                         onclick="autoSplitEqual(this)"
                                         title="Split total equally across {{ $entryMode === 'monthly' ? '12 months' : '4 quarters' }}"
-                                        style="margin-top:4px;font-size:9px;padding:1px 6px;border-radius:4px;
+                                        style="font-size:9px;padding:1px 6px;border-radius:4px;
                                                background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;
                                                cursor:pointer;white-space:nowrap;display:inline-block;
                                                line-height:1.5;font-weight:600;">
                                     ÷ equal
                                 </button>
+                                <button type="button"
+                                        onclick="clearSplitInputs(this)"
+                                        title="Reset all {{ $entryMode === 'monthly' ? 'month' : 'quarter' }} values to 0"
+                                        style="font-size:9px;padding:1px 6px;border-radius:4px;
+                                               background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;
+                                               cursor:pointer;white-space:nowrap;display:inline-block;
+                                               line-height:1.5;font-weight:600;">
+                                    ✕ 0
+                                </button>
+                                </div>
                                 @endif
                             </td>
 
@@ -488,12 +530,14 @@
                                 @if($manualSplit)
                                     {{-- Manual monthly split inputs --}}
                                     @foreach(range(1,12) as $mn)
+                                    @php $mnVal = $item->{'m'.$mn.'_amount'}; @endphp
                                     <td>
                                         <input type="number"
                                             class="form-control form-control-sm split-input m{{ $mn }}-split text-end"
-                                            value="{{ $item->{'m'.$mn.'_amount'} }}"
+                                            value="{{ $mnVal }}"
                                             min="0" step="0.01"
                                             placeholder="0.00"
+                                            data-split-tip="{{ number_format($mnVal, 2) }}"
                                             oninput="updateSplitBalance(this)">
                                     </td>
                                     @endforeach
@@ -511,6 +555,7 @@
                                             class="form-control form-control-sm split-input q1-split text-end"
                                             value="{{ number_format($displayQ1, 2, '.', '') }}"
                                             min="0" step="0.01"
+                                            data-split-tip="{{ number_format($displayQ1, 2) }}"
                                             oninput="updateSplitBalance(this)">
                                     </td>
                                     <td>
@@ -518,6 +563,7 @@
                                             class="form-control form-control-sm split-input q2-split text-end"
                                             value="{{ number_format($displayQ2, 2, '.', '') }}"
                                             min="0" step="0.01"
+                                            data-split-tip="{{ number_format($displayQ2, 2) }}"
                                             oninput="updateSplitBalance(this)">
                                     </td>
                                     <td>
@@ -525,6 +571,7 @@
                                             class="form-control form-control-sm split-input q3-split text-end"
                                             value="{{ number_format($displayQ3, 2, '.', '') }}"
                                             min="0" step="0.01"
+                                            data-split-tip="{{ number_format($displayQ3, 2) }}"
                                             oninput="updateSplitBalance(this)">
                                     </td>
                                     <td>
@@ -532,6 +579,7 @@
                                             class="form-control form-control-sm split-input q4-split text-end"
                                             value="{{ number_format($displayQ4, 2, '.', '') }}"
                                             min="0" step="0.01"
+                                            data-split-tip="{{ number_format($displayQ4, 2) }}"
                                             oninput="updateSplitBalance(this)">
                                     </td>
                                 @else
@@ -716,6 +764,211 @@
                             @endforeach
                         @endif
                     </tr>
+                    {{-- ── Sub-entry rows ── --}}
+                    @php
+                        $subRows    = $item->subEntries;
+                        $isTemplated = false;
+                        if ($hasTemplatedSubs) {
+                            $isTemplated = true;
+                            $subRows = $item->accountCode->subEntryTemplates->map(fn($tpl) => (object)[
+                                'id'           => null,
+                                'name'         => $tpl->name,
+                                'quantity'     => null, 'rate' => null, 'frequency' => null,
+                                'm1_amount'    => 0, 'm2_amount'  => 0, 'm3_amount'  => 0,
+                                'm4_amount'    => 0, 'm5_amount'  => 0, 'm6_amount'  => 0,
+                                'm7_amount'    => 0, 'm8_amount'  => 0, 'm9_amount'  => 0,
+                                'm10_amount'   => 0, 'm11_amount' => 0, 'm12_amount' => 0,
+                                'total_amount' => 0,
+                            ]);
+                        }
+                    @endphp
+                    @foreach($subRows as $sub)
+                    @php
+                        $subQ1 = $sub->m1_amount + $sub->m2_amount + $sub->m3_amount;
+                        $subQ2 = $sub->m4_amount + $sub->m5_amount + $sub->m6_amount;
+                        $subQ3 = $sub->m7_amount + $sub->m8_amount + $sub->m9_amount;
+                        $subQ4 = $sub->m10_amount + $sub->m11_amount + $sub->m12_amount;
+                    @endphp
+                    <tr class="{{ $isTemplated ? 'sub-entry-row sub-entry-new' : 'sub-entry-row' }}"
+                        data-sub-id="{{ $sub->id ?? '' }}"
+                        data-parent-id="{{ $item->id }}"
+                        data-cat="{{ $catIdx }}"
+                        style="background:#F0F4FF;border-left:3px solid #818CF8">
+                        <td style="padding-left:28px" class="small">
+                            @if($budgetVersion->isEditable())
+                            <div style="display:flex;align-items:center;gap:5px">
+                                <span class="sub-row-number" style="flex-shrink:0;min-width:18px;font-size:11px;font-weight:700;color:#818CF8;text-align:right">{{ $loop->iteration }}</span>
+                                <input type="text"
+                                       class="form-control form-control-sm sub-name-input"
+                                       value="{{ $sub->name }}"
+                                       placeholder="Sub-item name"
+                                       style="min-width:130px;font-size:12px"
+                                       oninput="scheduleAutoSave()">
+                                <button type="button"
+                                        onclick="removeSubRow(this)"
+                                        title="Remove this sub-item"
+                                        style="flex-shrink:0;width:20px;height:20px;border-radius:50%;
+                                               background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;
+                                               cursor:pointer;font-size:11px;font-weight:700;
+                                               display:flex;align-items:center;justify-content:center;
+                                               padding:0;line-height:1">
+                                    ×
+                                </button>
+                            </div>
+                            @else
+                            <span style="color:#4338CA;font-weight:500">↳ {{ $loop->iteration }}. {{ $sub->name }}</span>
+                            @endif
+                        </td>
+
+                        @if($budgetVersion->isEditable() && $calcMode !== 'none')
+                            <td>
+                                <input type="number"
+                                    class="form-control form-control-sm sub-qty text-end"
+                                    value="{{ $sub->quantity ?? '' }}"
+                                    min="0" step="any" placeholder="0"
+                                    oninput="subLiveUpdate(this)">
+                            </td>
+                            <td>
+                                @if($adminSetsRate)
+                                @php $displayRate = $sub->rate ?? $item->accountCode->default_rate ?? $item->accountCode->category->default_rate ?? 1; @endphp
+                                <input type="number" class="form-control form-control-sm sub-rate text-end"
+                                    value="{{ $displayRate }}" min="0" step="any" readonly
+                                    style="background:#F8FAFC;color:#475569;cursor:not-allowed;">
+                                @else
+                                <input type="number" class="form-control form-control-sm sub-rate text-end"
+                                    value="{{ $sub->rate ?? $item->rate ?? '' }}" min="0" step="any" placeholder="0.00"
+                                    oninput="subLiveUpdate(this)">
+                                @endif
+                            </td>
+                            @if($calcMode === 'qty_rate_freq')
+                            <td>
+                                @if($adminSetsFreq)
+                                @php $displayFreq = $sub->frequency ?? $item->accountCode->default_frequency ?? $item->accountCode->category->default_frequency ?? 1; @endphp
+                                <input type="number" class="form-control form-control-sm sub-freq text-end"
+                                    value="{{ $displayFreq }}" min="0" step="any" readonly
+                                    style="background:#F8FAFC;color:#475569;cursor:not-allowed;">
+                                @else
+                                <input type="number" class="form-control form-control-sm sub-freq text-end"
+                                    value="{{ $sub->frequency ?? $item->frequency ?? '' }}" min="0" step="any" placeholder="1"
+                                    oninput="subLiveUpdate(this)">
+                                @endif
+                            </td>
+                            @endif
+                            {{-- Year-total cell with split balance indicator when manualSplit --}}
+                            <td class="text-end fw-semibold" style="color:#4338CA;min-width:130px">
+                                <span class="sub-year-total">{{ number_format($sub->total_amount, 2) }}</span>
+                                @if($manualSplit)
+                                <div class="sub-split-remain"
+                                     data-computed="{{ $sub->total_amount }}"
+                                     style="font-size:10px;font-weight:600;margin-top:3px;line-height:1.2">&nbsp;</div>
+                                <div style="display:flex;gap:3px;margin-top:4px;flex-wrap:wrap">
+                                    <button type="button" onclick="autoSplitEqualSub(this)"
+                                            title="Split total equally"
+                                            style="font-size:9px;padding:1px 6px;border-radius:4px;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;cursor:pointer;white-space:nowrap;display:inline-block;line-height:1.5;font-weight:600;">÷ equal</button>
+                                    <button type="button" onclick="clearSplitInputsSub(this)"
+                                            title="Reset to 0"
+                                            style="font-size:9px;padding:1px 6px;border-radius:4px;background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;cursor:pointer;white-space:nowrap;display:inline-block;line-height:1.5;font-weight:600;">✕ 0</button>
+                                </div>
+                                @endif
+                            </td>
+                            @if($entryMode === 'monthly')
+                                @if($manualSplit)
+                                    @foreach(range(1,12) as $mn)
+                                    @php $mnVal = $sub->{'m'.$mn.'_amount'}; @endphp
+                                    <td><input type="number"
+                                        class="form-control form-control-sm split-input sub-m{{ $mn }}-split text-end"
+                                        value="{{ $mnVal }}" min="0" step="0.01"
+                                        data-split-tip="{{ number_format($mnVal, 2) }}"
+                                        oninput="updateSubSplitBalance(this)"></td>
+                                    @endforeach
+                                @else
+                                    @foreach(range(1,12) as $mn)
+                                    <td class="text-end small text-muted sub-m{{ $mn }}-display">
+                                        {{ number_format($sub->{'m'.$mn.'_amount'}, 2) }}
+                                    </td>
+                                    @endforeach
+                                @endif
+                            @else
+                                @if($manualSplit)
+                                    @php [$sq1,$sq2,$sq3,$sq4] = [$subQ1,$subQ2,$subQ3,$subQ4]; @endphp
+                                    @foreach([['sub-q1-split',$sq1],['sub-q2-split',$sq2],['sub-q3-split',$sq3],['sub-q4-split',$sq4]] as [$cls,$qv])
+                                    <td><input type="number"
+                                        class="form-control form-control-sm split-input {{ $cls }} text-end"
+                                        value="{{ number_format($qv, 2, '.', '') }}" min="0" step="0.01"
+                                        data-split-tip="{{ number_format($qv, 2) }}"
+                                        oninput="updateSubSplitBalance(this)"></td>
+                                    @endforeach
+                                @else
+                                    <td class="text-end small text-muted sub-q1-display">{{ number_format($subQ1, 2) }}</td>
+                                    <td class="text-end small text-muted sub-q2-display">{{ number_format($subQ2, 2) }}</td>
+                                    <td class="text-end small text-muted sub-q3-display">{{ number_format($subQ3, 2) }}</td>
+                                    <td class="text-end small text-muted sub-q4-display">{{ number_format($subQ4, 2) }}</td>
+                                @endif
+                            @endif
+
+                        @elseif($budgetVersion->isEditable() && $entryMode === 'monthly')
+                            @foreach(range(1,12) as $mn)
+                            <td><input type="number"
+                                class="form-control form-control-sm sub-m-input sub-m{{ $mn }} text-end"
+                                value="{{ $sub->{'m'.$mn.'_amount'} }}"
+                                min="0" step="0.01" oninput="subDirectUpdate(this)"></td>
+                            @endforeach
+                            <td class="text-end small fw-semibold sub-year-total" style="color:#4338CA">
+                                {{ number_format($sub->total_amount, 2) }}
+                            </td>
+
+                        @elseif($budgetVersion->isEditable())
+                            <td><input type="number" class="form-control form-control-sm sub-q-input sub-q1 text-end"
+                                value="{{ $subQ1 }}" min="0" step="0.01" oninput="subDirectUpdate(this)"></td>
+                            <td><input type="number" class="form-control form-control-sm sub-q-input sub-q2 text-end"
+                                value="{{ $subQ2 }}" min="0" step="0.01" oninput="subDirectUpdate(this)"></td>
+                            <td><input type="number" class="form-control form-control-sm sub-q-input sub-q3 text-end"
+                                value="{{ $subQ3 }}" min="0" step="0.01" oninput="subDirectUpdate(this)"></td>
+                            <td><input type="number" class="form-control form-control-sm sub-q-input sub-q4 text-end"
+                                value="{{ $subQ4 }}" min="0" step="0.01" oninput="subDirectUpdate(this)"></td>
+                            <td class="text-end small fw-semibold sub-year-total" style="color:#4338CA">
+                                {{ number_format($sub->total_amount, 2) }}
+                            </td>
+
+                        @else
+                            {{-- Read-only sub-entry --}}
+                            @if($calcMode !== 'none')
+                                <td class="text-end small">{{ $sub->quantity !== null ? number_format($sub->quantity, 4) : '—' }}</td>
+                                <td class="text-end small">{{ $sub->rate      !== null ? number_format($sub->rate, 4)     : '—' }}</td>
+                                @if($calcMode === 'qty_rate_freq')
+                                <td class="text-end small">{{ $sub->frequency !== null ? number_format($sub->frequency, 4) : '—' }}</td>
+                                @endif
+                                <td class="text-end small fw-semibold" style="color:#4338CA">{{ number_format($sub->total_amount, 2) }}</td>
+                                @if($entryMode === 'monthly')
+                                    @foreach(range(1,12) as $mn)
+                                    <td class="text-end small text-muted">{{ number_format($sub->{'m'.$mn.'_amount'}, 2) }}</td>
+                                    @endforeach
+                                @else
+                                <td class="text-end small text-muted">{{ number_format($subQ1, 2) }}</td>
+                                <td class="text-end small text-muted">{{ number_format($subQ2, 2) }}</td>
+                                <td class="text-end small text-muted">{{ number_format($subQ3, 2) }}</td>
+                                <td class="text-end small text-muted">{{ number_format($subQ4, 2) }}</td>
+                                @endif
+                            @elseif($entryMode === 'monthly')
+                                @foreach(range(1,12) as $mn)
+                                <td class="text-end small">{{ number_format($sub->{'m'.$mn.'_amount'}, 2) }}</td>
+                                @endforeach
+                                <td class="text-end small fw-semibold" style="color:#4338CA">{{ number_format($sub->total_amount, 2) }}</td>
+                            @else
+                                <td class="text-end small">{{ number_format($subQ1, 2) }}</td>
+                                <td class="text-end small">{{ number_format($subQ2, 2) }}</td>
+                                <td class="text-end small">{{ number_format($subQ3, 2) }}</td>
+                                <td class="text-end small">{{ number_format($subQ4, 2) }}</td>
+                                <td class="text-end small fw-semibold" style="color:#4338CA">{{ number_format($sub->total_amount, 2) }}</td>
+                            @endif
+                        @endif
+
+                        {{-- Supplementary / Effective / Notes: blank for sub-entries --}}
+                        <td></td><td></td>
+                        @if($budgetVersion->isEditable())<td></td>@endif
+                        @foreach($customFields ?? [] as $cf)<td></td>@endforeach
+                    </tr>
+                    @endforeach
                     @endforeach
     {{-- Category total row --}}
     <tr style="background:#F8FAFC;font-weight:700;" data-cat-foot="{{ $catIdx }}" data-cat-supp="{{ $catSupp }}">
@@ -783,6 +1036,7 @@
     const ENTRY_MODE   = '{{ $entryMode }}';
     const CALC_MODE    = '{{ $calcMode }}';
     const MANUAL_SPLIT = {{ $manualSplit ? 'true' : 'false' }};
+    const CUSTOM_FIELD_COUNT = {{ count($customFields ?? []) }};
 
     let autoSaveTimer = null;
     let isSaving      = false;
@@ -867,18 +1121,25 @@
             : inputOrRow;
         if (!row || !row.dataset?.itemId) return;
 
-        const qty  = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
-        const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
-        const freq = CALC_MODE === 'qty_rate_freq'
-            ? parseFloat(row.querySelector('.freq-input')?.value || '1')
-            : 1;
-        const liveComputed = Math.round(qty * rate * freq * 100) / 100;
-        // In direct-entry mode (no qty/rate inputs) liveComputed is 0;
-        // fall back to the server-rendered total stored in data-computed.
         const indicator = row.querySelector('.split-remain');
-        const computed = liveComputed > 0
-            ? liveComputed
-            : parseFloat(indicator?.dataset?.computed || '0');
+
+        let computed;
+        if (row.dataset.hasSubs === '1') {
+            // Parent is driven by sub-entries — use the live displayed year total
+            computed = parseFloat((row.querySelector('.year-total-num')?.textContent || '').replace(/,/g,'')) || 0;
+        } else {
+            const qty  = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
+            const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
+            const freq = CALC_MODE === 'qty_rate_freq'
+                ? parseFloat(row.querySelector('.freq-input')?.value || '1')
+                : 1;
+            const liveComputed = Math.round(qty * rate * freq * 100) / 100;
+            // In direct-entry mode (no qty/rate inputs) liveComputed is 0;
+            // fall back to the server-rendered total stored in data-computed.
+            computed = liveComputed > 0
+                ? liveComputed
+                : parseFloat(indicator?.dataset?.computed || '0');
+        }
 
         let splitSum = 0;
         if (ENTRY_MODE === 'monthly') {
@@ -896,16 +1157,26 @@
         const remaining = Math.round((computed - splitSum) * 100) / 100;
         const balanced  = Math.abs(remaining) <= 0.02;
 
-        // ── Border highlight on split inputs ──
+        // ── Border highlight + custom tooltip data on split inputs ──
+        let statusColor, statusText;
+        if (balanced) {
+            statusColor = '#6EE7B7'; statusText = '✓ Balanced';
+        } else if (remaining > 0) {
+            statusColor = '#FCD34D'; statusText = `Under by ${numFmt(remaining)}`;
+        } else {
+            statusColor = '#FCA5A5'; statusText = `Over by ${numFmt(Math.abs(remaining))}`;
+        }
+
         row.querySelectorAll('.split-input').forEach(el => {
             el.style.outline      = balanced
                 ? '2px solid #10B981'
                 : '2px solid ' + (remaining < 0 ? '#F43F5E' : '#F59E0B');
             el.style.borderRadius = '4px';
-            el.title = balanced ? 'Balanced ✓' :
-                (remaining > 0
-                    ? `Still need to allocate: ${numFmt(remaining)}`
-                    : `Over by: ${numFmt(Math.abs(remaining))}`);
+
+            const fmtVal = numFmt(parseFloat(el.value) || 0);
+            el.dataset.splitTip      = fmtVal;
+            el.dataset.splitTipSub   = statusText;
+            el.dataset.splitTipColor = statusColor;
         });
 
         // ── Inline remaining indicator in the year-total cell ──
@@ -969,6 +1240,110 @@
         updateSplitBalance(row.querySelector('.split-input') || row);
     }
 
+    // ── Clear (reset to 0) all split inputs on a row ─────────────────────────
+    function clearSplitInputs(btn) {
+        const row = btn.closest('tr[data-item-id]');
+        if (!row) return;
+        row.querySelectorAll('.split-input').forEach(inp => { inp.value = '0.00'; });
+        updateSplitBalance(row.querySelector('.split-input') || row);
+        scheduleAutoSave?.();
+    }
+
+    // ── Split ALL rows equally at once ────────────────────────────────────────
+    function splitAllEqual() {
+        document.querySelectorAll('tr[data-item-id]').forEach(row => {
+            if (!row.querySelector('.split-input')) return;
+            const qty  = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
+            const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
+            const freq = CALC_MODE === 'qty_rate_freq'
+                ? parseFloat(row.querySelector('.freq-input')?.value || '1') : 1;
+            const liveComputed = Math.round(qty * rate * freq * 100) / 100;
+            const indicator    = row.querySelector('.split-remain');
+            const total        = liveComputed > 0
+                ? liveComputed
+                : parseFloat(indicator?.dataset?.computed || '0');
+            if (total === 0) return;
+            if (ENTRY_MODE === 'monthly') {
+                const share = Math.floor(total / 12 * 100) / 100;
+                const last  = Math.round((total - share * 11) * 100) / 100;
+                for (let m = 1; m <= 12; m++) {
+                    const inp = row.querySelector(`.m${m}-split`);
+                    if (inp) inp.value = (m === 12 ? last : share).toFixed(2);
+                }
+            } else {
+                const share = Math.floor(total / 4 * 100) / 100;
+                const last  = Math.round((total - share * 3) * 100) / 100;
+                ['q1-split','q2-split','q3-split','q4-split'].forEach((cls, i) => {
+                    const inp = row.querySelector(`.${cls}`);
+                    if (inp) inp.value = (i === 3 ? last : share).toFixed(2);
+                });
+            }
+            updateSplitBalance(row.querySelector('.split-input') || row);
+        });
+        scheduleAutoSave?.();
+    }
+
+    // ── Clear ALL rows to 0 at once ───────────────────────────────────────────
+    function clearAll() {
+        document.querySelectorAll('tr[data-item-id]').forEach(row => {
+            if (!row.querySelector('.split-input')) return;
+            row.querySelectorAll('.split-input').forEach(inp => { inp.value = '0.00'; });
+            updateSplitBalance(row.querySelector('.split-input') || row);
+        });
+        scheduleAutoSave?.();
+    }
+
+    // ── Custom floating tooltip for split inputs ────────────────────────────
+    (function () {
+        const tip = document.createElement('div');
+        tip.id = 'split-tip';
+        tip.style.cssText = [
+            'position:fixed', 'z-index:9999', 'display:none',
+            'background:#1E293B', 'color:#fff', 'border-radius:6px',
+            'padding:6px 12px', 'font-size:12px', 'line-height:1.6',
+            'pointer-events:none', 'white-space:nowrap',
+            'box-shadow:0 4px 14px rgba(0,0,0,.35)'
+        ].join(';');
+        document.body.appendChild(tip);
+
+        function showTip(inp, x, y) {
+            if (!inp.dataset.splitTip) return;
+            tip.innerHTML =
+                `<span style="font-size:13px;font-weight:700">${inp.dataset.splitTip}</span>` +
+                `<br><span style="color:${inp.dataset.splitTipColor || '#94A3B8'}">${inp.dataset.splitTipSub || ''}</span>`;
+            tip.style.display = 'block';
+            const tw = tip.offsetWidth, th = tip.offsetHeight;
+            const top = y - th - 10;
+            tip.style.left = Math.max(4, Math.min(x - tw / 2, window.innerWidth - tw - 4)) + 'px';
+            tip.style.top  = (top < 4 ? y + 22 : top) + 'px';
+        }
+
+        document.addEventListener('mouseover', function (e) {
+            const inp = e.target.closest('.split-input');
+            if (!inp) { tip.style.display = 'none'; return; }
+            const r = inp.getBoundingClientRect();
+            showTip(inp, r.left + r.width / 2, r.top);
+        });
+        document.addEventListener('mouseout', function (e) {
+            if (e.target.closest('.split-input')) tip.style.display = 'none';
+        });
+    })();
+
+    // ── Initial setup after DOM ready ────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('tr[data-item-id]').forEach(row => {
+            if (row.querySelector('.split-input')) updateSplitBalance(row);
+        });
+        // Lock parent rows that already have sub-entries
+        document.querySelectorAll('tr[data-item-id][data-has-subs="1"]').forEach(row => {
+            setParentInputsReadonly(row, true);
+        });
+        // Initialize balance indicators on existing sub-entry rows with split inputs
+        document.querySelectorAll('tr.sub-entry-row').forEach(sub => {
+            if (sub.querySelector('input.split-input')) updateSubSplitBalance(sub);
+        });
+    });
+
     function updateCategoryFooter(itemRow) {
         const catIdx  = itemRow.dataset.cat;
         const tbody   = itemRow.closest('tbody');
@@ -988,23 +1363,44 @@
                 ['q1','q2','q3','q4'].forEach(k => ps[k] = 0);
             }
             rows.forEach(row => {
-                const qty  = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
-                const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
-                // Empty freq defaults to 1 so totals stay correct when field is blank
-                const freq = CALC_MODE === 'qty_rate_freq'
-                    ? parseFloat(row.querySelector('.freq-input')?.value || '1')
-                    : 1;
-                const rowTotal = qty * rate * freq;
+                let rowTotal;
+                if (row.dataset.hasSubs === '1') {
+                    // Parent with sub-entries: read the displayed year total
+                    const ytNum = row.querySelector('.year-total-num');
+                    rowTotal = parseFloat((ytNum?.textContent || '').replace(/,/g,'')) || 0;
+                } else {
+                    const qty  = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
+                    const rate = parseFloat(row.querySelector('.rate-input')?.value) || 0;
+                    // Empty freq defaults to 1 so totals stay correct when field is blank
+                    const freq = CALC_MODE === 'qty_rate_freq'
+                        ? parseFloat(row.querySelector('.freq-input')?.value || '1')
+                        : 1;
+                    rowTotal = qty * rate * freq;
+                }
                 orig += rowTotal;
                 if (ENTRY_MODE === 'monthly') {
-                    const share = Math.round(rowTotal / 12 * 100) / 100;
-                    for (let m = 1; m <= 12; m++) {
-                        ps[`m${m}`] += (m === 12 ? Math.round((rowTotal - share * 11) * 100) / 100 : share);
+                    if (row.dataset.hasSubs === '1') {
+                        for (let m = 1; m <= 12; m++) {
+                            const inp = row.querySelector(`.m${m}-split`) || row.querySelector(`.m${m}-display`) || row.querySelector(`.m${m}`);
+                            ps[`m${m}`] += parseFloat((inp?.value || inp?.textContent || '').replace(/,/g,'')) || 0;
+                        }
+                    } else {
+                        const share = Math.round(rowTotal / 12 * 100) / 100;
+                        for (let m = 1; m <= 12; m++) {
+                            ps[`m${m}`] += (m === 12 ? Math.round((rowTotal - share * 11) * 100) / 100 : share);
+                        }
                     }
                 } else {
-                    const qShare = rowTotal / 4;
-                    ps.q1 += qShare; ps.q2 += qShare; ps.q3 += qShare;
-                    ps.q4 += rowTotal - qShare * 3;
+                    if (row.dataset.hasSubs === '1') {
+                        ['q1','q2','q3','q4'].forEach(k => {
+                            const inp = row.querySelector(`.${k}-split`) || row.querySelector(`.${k}-display`) || row.querySelector(`.${k}`);
+                            ps[k] += parseFloat((inp?.value || inp?.textContent || '').replace(/,/g,'')) || 0;
+                        });
+                    } else {
+                        const qShare = rowTotal / 4;
+                        ps.q1 += qShare; ps.q2 += qShare; ps.q3 += qShare;
+                        ps.q4 += rowTotal - qShare * 3;
+                    }
                 }
             });
 
@@ -1071,7 +1467,14 @@
             const mTotals = new Array(12).fill(0);
             document.querySelectorAll('tr[data-item-id]').forEach(row => {
                 totalSupp += parseFloat(row.dataset.supp) || 0;
-                if (CALC_MODE !== 'none') {
+                if (row.dataset.hasSubs === '1') {
+                    // Use the sub-entry-driven displayed values
+                    for (let n = 1; n <= 12; n++) {
+                        const inp = row.querySelector(`.m${n}-split`) || row.querySelector(`.m${n}-display`) || row.querySelector(`.m${n}`);
+                        const v = parseFloat((inp?.value || inp?.textContent || '').replace(/,/g,'')) || 0;
+                        mTotals[n-1] += v; orig += v;
+                    }
+                } else if (CALC_MODE !== 'none') {
                     const qty      = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
                     const rate     = parseFloat(row.querySelector('.rate-input')?.value) || 0;
                     const freq     = CALC_MODE === 'qty_rate_freq'
@@ -1101,7 +1504,18 @@
             let q1=0, q2=0, q3=0, q4=0;
             document.querySelectorAll('tr[data-item-id]').forEach(row => {
                 totalSupp += parseFloat(row.dataset.supp) || 0;
-                if (CALC_MODE !== 'none') {
+                if (row.dataset.hasSubs === '1') {
+                    const getQ = (sel) => {
+                        const el = row.querySelector(sel);
+                        return parseFloat((el?.value || el?.textContent || '').replace(/,/g,'')) || 0;
+                    };
+                    const rq1 = getQ('.q1-split') || getQ('.q1-display') || getQ('.q1');
+                    const rq2 = getQ('.q2-split') || getQ('.q2-display') || getQ('.q2');
+                    const rq3 = getQ('.q3-split') || getQ('.q3-display') || getQ('.q3');
+                    const rq4 = getQ('.q4-split') || getQ('.q4-display') || getQ('.q4');
+                    q1 += rq1; q2 += rq2; q3 += rq3; q4 += rq4;
+                    orig += rq1+rq2+rq3+rq4;
+                } else if (CALC_MODE !== 'none') {
                     const qty      = parseFloat(row.querySelector('.qty-input')?.value)  || 0;
                     const rate     = parseFloat(row.querySelector('.rate-input')?.value) || 0;
                     const freq     = CALC_MODE === 'qty_rate_freq'
@@ -1215,7 +1629,7 @@
                     'X-CSRF-TOKEN': CSRF,
                     'Accept':       'application/json',
                 },
-                body: JSON.stringify({ items: collectItems(), custom_fields: collectCustomFields() }),
+                body: JSON.stringify({ items: collectItems(), custom_fields: collectCustomFields(), sub_entries: collectAllSubEntries() }),
             });
 
             const data = await res.json();
@@ -1281,20 +1695,52 @@
                 const ind = row.querySelector('.split-remain');
                 if (!ind) return false;
                 const text = ind.textContent.trim();
-                // Indicator shows something and it's not the "balanced" tick
                 return text.length > 0 && !text.includes('Balanced');
             });
-            if (unbalancedRows.length > 0) {
-                const n = unbalancedRows.length;
+            const unbalancedSubs = [...document.querySelectorAll('tr.sub-entry-row')].filter(sub => {
+                const ind = sub.querySelector('.sub-split-remain');
+                if (!ind) return false;
+                const text = ind.textContent.trim();
+                return text.length > 0 && !text.includes('Balanced');
+            });
+            const total = unbalancedRows.length + unbalancedSubs.length;
+            if (total > 0) {
                 Swal.fire({
                     icon: 'warning',
                     title: 'Unbalanced Splits',
-                    html: `<b>${n} line item${n === 1 ? '' : 's'}</b> ${n === 1 ? 'has' : 'have'} period splits that don't add up to the line total.<br><br>Look for <span style="color:#F59E0B">amber (↓ left)</span> or <span style="color:#F43F5E">red (↑ over)</span> indicators in the Year Total column.`,
+                    html: `<b>${total} row${total === 1 ? '' : 's'}</b> ${total === 1 ? 'has' : 'have'} period splits that don't add up to the line total.<br><br>Look for <span style="color:#F59E0B">amber (↓ left)</span> or <span style="color:#F43F5E">red (↑ over)</span> indicators in the Year Total column. Sub-item rows must also balance.`,
                     confirmButtonText: 'OK, I\'ll fix it',
                     confirmButtonColor: '#E65C00',
                 });
                 return;
             }
+        }
+
+        // ── Sub-item total balance check (all calc modes) ─────────────────────
+        // SUM(sub-entry year totals) must equal the parent's displayed year total
+        const subMismatch = [];
+        document.querySelectorAll('tr[data-item-id][data-has-subs="1"]').forEach(parentRow => {
+            const subRows = [...document.querySelectorAll(`.sub-entry-row[data-parent-id="${parentRow.dataset.itemId}"]`)];
+            if (!subRows.length) return;
+            const parentTotal = parseFloat((parentRow.querySelector('.year-total-num')?.textContent || '').replace(/,/g,'')) || 0;
+            let subSum = 0;
+            subRows.forEach(sub => {
+                subSum += parseFloat((sub.querySelector('.sub-year-total')?.textContent || '').replace(/,/g,'')) || 0;
+            });
+            subSum = Math.round(subSum * 100) / 100;
+            const pTotal = Math.round(parentTotal * 100) / 100;
+            if (Math.abs(subSum - pTotal) > 0.02) subMismatch.push({ parentRow, subSum, pTotal });
+        });
+        if (subMismatch.length > 0) {
+            const n = subMismatch.length;
+            Swal.fire({
+                icon: 'warning',
+                title: 'Sub-item Total Mismatch',
+                html: `<b>${n} line item${n === 1 ? '' : 's'}</b> ${n === 1 ? 'has' : 'have'} sub-item totals that do not equal the parent line total.<br><br>The sum of all sub-items must always equal the parent line total before submitting.`,
+                confirmButtonText: 'OK, I\'ll fix it',
+                confirmButtonColor: '#E65C00',
+            });
+            return;
         }
 
         btn.textContent = 'Saving…';
@@ -1320,6 +1766,450 @@
 
         window.location.href = href;
     });
+
+    // Keep session alive — ping every 10 minutes
+    setInterval(() => {
+        fetch('/dashboard', { credentials: 'same-origin', cache: 'no-store' }).catch(() => {});
+    }, 10 * 60 * 1000);
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // SUB-ENTRIES
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // Lock / unlock parent row period inputs when sub-entries exist
+    function setParentInputsReadonly(parentRow, readonly) {
+        parentRow.dataset.hasSubs = readonly ? '1' : '0';
+        // Use individual properties (not cssText) so outline set by updateSplitBalance is preserved
+        const applyLock = (inp) => {
+            inp.readOnly = readonly;
+            inp.style.background  = readonly ? '#EEF2FF' : '';
+            inp.style.color       = readonly ? '#4338CA' : '';
+            inp.style.cursor      = readonly ? 'not-allowed' : '';
+        };
+        parentRow.querySelectorAll('.q-input, .split-input').forEach(applyLock);
+        if (CALC_MODE !== 'none') {
+            parentRow.querySelectorAll('.qty-input, .rate-input, .freq-input').forEach(applyLock);
+        }
+        parentRow.querySelectorAll('[onclick^="autoSplitEqual"], [onclick^="clearSplitInputs"]')
+            .forEach(btn => { btn.style.display = readonly ? 'none' : ''; });
+    }
+
+    // Handle qty/rate/freq change on a sub-entry row (calcMode != none)
+    function subLiveUpdate(input) {
+        const sub = input.closest('.sub-entry-row');
+        if (!sub) return;
+        const qty  = parseFloat(sub.querySelector('.sub-qty')?.value)  || 0;
+        const rate = parseFloat(sub.querySelector('.sub-rate')?.value) || 0;
+        const freq = CALC_MODE === 'qty_rate_freq'
+            ? parseFloat(sub.querySelector('.sub-freq')?.value || '1') : 1;
+        const total = Math.round(qty * rate * freq * 100) / 100;
+
+        const ytEl = sub.querySelector('.sub-year-total');
+        if (ytEl) ytEl.textContent = numFmt(total);
+
+        // Keep data-computed on balance indicator in sync
+        const indicator = sub.querySelector('.sub-split-remain');
+        if (indicator) indicator.dataset.computed = total;
+
+        if (MANUAL_SPLIT) {
+            // With manual split: just update balance; user distributes manually
+            updateSubSplitBalance(sub);
+        } else {
+            // Without manual split: auto-distribute to display spans
+            if (ENTRY_MODE === 'monthly') {
+                const share = Math.floor(total / 12 * 100) / 100;
+                const last  = Math.round((total - share * 11) * 100) / 100;
+                for (let m = 1; m <= 12; m++) {
+                    const el = sub.querySelector(`.sub-m${m}-display`);
+                    if (el) el.textContent = numFmt(m === 12 ? last : share);
+                }
+            } else {
+                const share = Math.floor(total / 4 * 100) / 100;
+                const last  = Math.round((total - share * 3) * 100) / 100;
+                [1,2,3,4].forEach((q,i) => {
+                    const el = sub.querySelector(`.sub-q${q}-display`);
+                    if (el) el.textContent = numFmt(i === 3 ? last : share);
+                });
+            }
+            updateParentFromSubs(sub.dataset.parentId);
+        }
+    }
+
+    // Handle period input change on a sub-entry row (direct-entry modes)
+    function subDirectUpdate(input) {
+        const sub = input.closest('.sub-entry-row');
+        if (!sub) return;
+        let total = 0;
+        if (ENTRY_MODE === 'monthly') {
+            for (let m = 1; m <= 12; m++)
+                total += parseFloat(sub.querySelector(`.sub-m${m}`)?.value) || 0;
+        } else {
+            ['sub-q1','sub-q2','sub-q3','sub-q4'].forEach(c => {
+                total += parseFloat(sub.querySelector('.' + c)?.value) || 0;
+            });
+        }
+        const ytEl = sub.querySelector('.sub-year-total');
+        if (ytEl) ytEl.textContent = numFmt(total);
+        updateParentFromSubs(sub.dataset.parentId);
+    }
+
+    // ── Sub-entry split balance (mirrors updateSplitBalance for parents) ──────
+    function updateSubSplitBalance(inputOrSub) {
+        const sub = inputOrSub?.closest
+            ? (inputOrSub.closest('.sub-entry-row') || inputOrSub)
+            : inputOrSub;
+        if (!sub || !sub.classList.contains('sub-entry-row')) return;
+
+        const qty  = parseFloat(sub.querySelector('.sub-qty')?.value)  || 0;
+        const rate = parseFloat(sub.querySelector('.sub-rate')?.value) || 0;
+        const freq = CALC_MODE === 'qty_rate_freq'
+            ? parseFloat(sub.querySelector('.sub-freq')?.value || '1') : 1;
+        const liveComputed = Math.round(qty * rate * freq * 100) / 100;
+        const indicator = sub.querySelector('.sub-split-remain');
+        const computed = liveComputed > 0
+            ? liveComputed
+            : parseFloat(indicator?.dataset?.computed || '0');
+
+        let splitSum = 0;
+        if (ENTRY_MODE === 'monthly') {
+            for (let n = 1; n <= 12; n++)
+                splitSum += parseFloat(sub.querySelector(`.sub-m${n}-split`)?.value) || 0;
+        } else {
+            [1,2,3,4].forEach(q => {
+                splitSum += parseFloat(sub.querySelector(`.sub-q${q}-split`)?.value) || 0;
+            });
+        }
+        splitSum = Math.round(splitSum * 100) / 100;
+
+        const remaining = Math.round((computed - splitSum) * 100) / 100;
+        const balanced  = Math.abs(remaining) <= 0.02;
+
+        let statusColor, statusText;
+        if (balanced) {
+            statusColor = '#6EE7B7'; statusText = '✓ Balanced';
+        } else if (remaining > 0) {
+            statusColor = '#FCD34D'; statusText = `Under by ${numFmt(remaining)}`;
+        } else {
+            statusColor = '#FCA5A5'; statusText = `Over by ${numFmt(Math.abs(remaining))}`;
+        }
+
+        sub.querySelectorAll('input.split-input').forEach(el => {
+            el.style.outline      = balanced ? '2px solid #10B981' : '2px solid ' + (remaining < 0 ? '#F43F5E' : '#F59E0B');
+            el.style.borderRadius = '4px';
+            el.dataset.splitTip      = numFmt(parseFloat(el.value) || 0);
+            el.dataset.splitTipSub   = statusText;
+            el.dataset.splitTipColor = statusColor;
+        });
+
+        if (indicator) {
+            if (computed === 0) { indicator.textContent = ''; }
+            else if (balanced) {
+                indicator.innerHTML = '<span style="color:#10B981">✓ Balanced</span>';
+            } else if (remaining > 0) {
+                indicator.innerHTML = `<span style="color:#F59E0B">↓ ${numFmt(remaining)} left</span>`;
+            } else {
+                indicator.innerHTML = `<span style="color:#F43F5E">↑ ${numFmt(Math.abs(remaining))} over</span>`;
+            }
+        }
+
+        updateParentFromSubs(sub.dataset.parentId);
+    }
+
+    // ── Auto-split sub-entry equally ──────────────────────────────────────────
+    function autoSplitEqualSub(btn) {
+        const sub = btn.closest('.sub-entry-row');
+        if (!sub) return;
+        const qty  = parseFloat(sub.querySelector('.sub-qty')?.value)  || 0;
+        const rate = parseFloat(sub.querySelector('.sub-rate')?.value) || 0;
+        const freq = CALC_MODE === 'qty_rate_freq'
+            ? parseFloat(sub.querySelector('.sub-freq')?.value || '1') : 1;
+        const liveComputed = Math.round(qty * rate * freq * 100) / 100;
+        const indicator = sub.querySelector('.sub-split-remain');
+        const total = liveComputed > 0
+            ? liveComputed
+            : parseFloat(indicator?.dataset?.computed || '0');
+        if (total === 0) return;
+        if (ENTRY_MODE === 'monthly') {
+            const share = Math.floor(total / 12 * 100) / 100;
+            const last  = Math.round((total - share * 11) * 100) / 100;
+            for (let m = 1; m <= 12; m++) {
+                const inp = sub.querySelector(`.sub-m${m}-split`);
+                if (inp) inp.value = (m === 12 ? last : share).toFixed(2);
+            }
+        } else {
+            const share = Math.floor(total / 4 * 100) / 100;
+            const last  = Math.round((total - share * 3) * 100) / 100;
+            [1,2,3,4].forEach((q,i) => {
+                const inp = sub.querySelector(`.sub-q${q}-split`);
+                if (inp) inp.value = (i === 3 ? last : share).toFixed(2);
+            });
+        }
+        updateSubSplitBalance(sub.querySelector('input.split-input') || sub);
+    }
+
+    // ── Clear sub-entry split inputs to 0 ────────────────────────────────────
+    function clearSplitInputsSub(btn) {
+        const sub = btn.closest('.sub-entry-row');
+        if (!sub) return;
+        sub.querySelectorAll('input.split-input').forEach(inp => { inp.value = '0.00'; });
+        updateSubSplitBalance(sub.querySelector('input.split-input') || sub);
+    }
+
+    // Sum all sub-entries for a parent and reflect the totals in the parent row
+    function updateParentFromSubs(parentId) {
+        const parentRow = document.querySelector(`tr[data-item-id="${parentId}"]`);
+        if (!parentRow) return;
+        const subRows = [...document.querySelectorAll(`.sub-entry-row[data-parent-id="${parentId}"]`)];
+
+        if (subRows.length === 0) {
+            setParentInputsReadonly(parentRow, false);
+            updateCategoryFooter(parentRow);
+            updateGrandTotals();
+            return;
+        }
+        setParentInputsReadonly(parentRow, true);
+
+        const readDisp = (el) => parseFloat((el?.textContent || el?.value || '').replace(/,/g,'')) || 0;
+
+        // Sum sub qty values into parent qty (only when calcMode uses qty)
+        if (CALC_MODE !== 'none') {
+            let totalQty = 0;
+            subRows.forEach(sub => { totalQty += parseFloat(sub.querySelector('.sub-qty')?.value) || 0; });
+            const parentQtyInp = parentRow.querySelector('.qty-input');
+            if (parentQtyInp) parentQtyInp.value = totalQty % 1 === 0 ? totalQty : totalQty.toFixed(4).replace(/\.?0+$/, '');
+        }
+
+        // Parent year total = direct sum of sub year-total spans (always up-to-date
+        // even before period splits are filled in)
+        let subYearTotal = 0;
+        subRows.forEach(sub => {
+            subYearTotal += parseFloat((sub.querySelector('.sub-year-total')?.textContent || '').replace(/,/g,'')) || 0;
+        });
+        subYearTotal = Math.round(subYearTotal * 100) / 100;
+        const ytNum = parentRow.querySelector('.year-total-num');
+        if (ytNum) ytNum.textContent = numFmt(subYearTotal);
+        if (CALC_MODE === 'none') {
+            const origEl = parentRow.querySelector('.row-original');
+            if (origEl) { const n = origEl.querySelector('.year-total-num') ?? origEl; n.textContent = numFmt(subYearTotal); }
+        }
+
+        if (ENTRY_MODE === 'monthly') {
+            const ms = new Array(12).fill(0);
+            subRows.forEach(sub => {
+                for (let m = 1; m <= 12; m++) {
+                    if (CALC_MODE !== 'none' && MANUAL_SPLIT) {
+                        ms[m-1] += parseFloat(sub.querySelector(`.sub-m${m}-split`)?.value) || 0;
+                    } else if (CALC_MODE !== 'none') {
+                        ms[m-1] += readDisp(sub.querySelector(`.sub-m${m}-display`));
+                    } else {
+                        ms[m-1] += parseFloat(sub.querySelector(`.sub-m${m}`)?.value) || 0;
+                    }
+                }
+            });
+            for (let m = 1; m <= 12; m++) {
+                const inp = parentRow.querySelector(`.m${m}`);
+                const disp = parentRow.querySelector(`.m${m}-display`);
+                if (inp)  inp.value = ms[m-1].toFixed(2);
+                if (disp) disp.textContent = numFmt(ms[m-1]);
+                const split = parentRow.querySelector(`.m${m}-split`);
+                if (split) split.value = ms[m-1].toFixed(2);
+            }
+        } else {
+            let q1=0, q2=0, q3=0, q4=0;
+            subRows.forEach(sub => {
+                if (CALC_MODE !== 'none' && MANUAL_SPLIT) {
+                    q1 += parseFloat(sub.querySelector('.sub-q1-split')?.value) || 0;
+                    q2 += parseFloat(sub.querySelector('.sub-q2-split')?.value) || 0;
+                    q3 += parseFloat(sub.querySelector('.sub-q3-split')?.value) || 0;
+                    q4 += parseFloat(sub.querySelector('.sub-q4-split')?.value) || 0;
+                } else if (CALC_MODE !== 'none') {
+                    q1 += readDisp(sub.querySelector('.sub-q1-display'));
+                    q2 += readDisp(sub.querySelector('.sub-q2-display'));
+                    q3 += readDisp(sub.querySelector('.sub-q3-display'));
+                    q4 += readDisp(sub.querySelector('.sub-q4-display'));
+                } else {
+                    q1 += parseFloat(sub.querySelector('.sub-q1')?.value) || 0;
+                    q2 += parseFloat(sub.querySelector('.sub-q2')?.value) || 0;
+                    q3 += parseFloat(sub.querySelector('.sub-q3')?.value) || 0;
+                    q4 += parseFloat(sub.querySelector('.sub-q4')?.value) || 0;
+                }
+            });
+            const setP = (sel, v) => {
+                const el = parentRow.querySelector(sel);
+                if (!el) return;
+                if (el.tagName === 'INPUT') el.value = v.toFixed(2);
+                else el.textContent = numFmt(v);
+            };
+            setP('.q1', q1); setP('.q1-display', q1); setP('.q1-split', q1);
+            setP('.q2', q2); setP('.q2-display', q2); setP('.q2-split', q2);
+            setP('.q3', q3); setP('.q3-display', q3); setP('.q3-split', q3);
+            setP('.q4', q4); setP('.q4-display', q4); setP('.q4-split', q4);
+        }
+
+        updateCategoryFooter(parentRow);
+        updateGrandTotals();
+        if (MANUAL_SPLIT) updateSplitBalance(parentRow);
+        scheduleAutoSave?.();
+    }
+
+    // Dynamically add a new blank sub-entry row below the last sub of this parent
+    function addSubRow(parentId) {
+        const parentRow = document.querySelector(`tr[data-item-id="${parentId}"]`);
+        if (!parentRow) return;
+        const existing = [...document.querySelectorAll(`.sub-entry-row[data-parent-id="${parentId}"]`)];
+        const after = existing.length ? existing[existing.length - 1] : parentRow;
+
+        // Inherit rate/freq from parent inputs
+        const parentRate = parentRow.querySelector('.rate-input')?.value || '';
+        const parentFreq = parentRow.querySelector('.freq-input')?.value || '1';
+
+        const tr = document.createElement('tr');
+        tr.className = 'sub-entry-row sub-entry-new';
+        tr.dataset.subId    = '';
+        tr.dataset.parentId = parentId;
+        tr.dataset.cat      = parentRow.dataset.cat;
+        tr.style.cssText    = 'background:#F0F4FF;border-left:3px solid #818CF8';
+
+        const newNum = existing.length + 1;
+        const nameCell = `<td style="padding-left:28px;vertical-align:middle">
+            <div style="display:flex;align-items:center;gap:5px">
+                <span class="sub-row-number" style="flex-shrink:0;min-width:18px;font-size:11px;font-weight:700;color:#818CF8;text-align:right">${newNum}</span>
+                <input type="text" class="form-control form-control-sm sub-name-input"
+                       value="" placeholder="Sub-item name" style="min-width:130px;font-size:12px"
+                       oninput="scheduleAutoSave()">
+                <button type="button" onclick="removeSubRow(this)" title="Remove sub-item"
+                        style="flex-shrink:0;width:20px;height:20px;border-radius:50%;
+                               background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;
+                               cursor:pointer;font-size:12px;font-weight:700;padding:0;
+                               display:flex;align-items:center;justify-content:center;line-height:1">×</button>
+            </div></td>`;
+
+        let periodCells = '';
+        if (CALC_MODE !== 'none') {
+            periodCells += `<td><input type="number" class="form-control form-control-sm sub-qty text-end" value="" min="0" step="any" placeholder="0" oninput="subLiveUpdate(this)"></td>`;
+            periodCells += `<td><input type="number" class="form-control form-control-sm sub-rate text-end" value="${parentRate}" min="0" step="any" placeholder="0.00" oninput="subLiveUpdate(this)"></td>`;
+            if (CALC_MODE === 'qty_rate_freq')
+                periodCells += `<td><input type="number" class="form-control form-control-sm sub-freq text-end" value="${parentFreq}" min="0" step="any" placeholder="1" oninput="subLiveUpdate(this)"></td>`;
+
+            const splitBtns = MANUAL_SPLIT
+                ? `<div class="sub-split-remain" data-computed="0"
+                        style="font-size:10px;font-weight:600;margin-top:3px;line-height:1.2">&nbsp;</div>
+                   <div style="display:flex;gap:3px;margin-top:4px;flex-wrap:wrap">
+                       <button type="button" onclick="autoSplitEqualSub(this)"
+                               style="font-size:9px;padding:1px 6px;border-radius:4px;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;cursor:pointer;white-space:nowrap;display:inline-block;line-height:1.5;font-weight:600;">÷ equal</button>
+                       <button type="button" onclick="clearSplitInputsSub(this)"
+                               style="font-size:9px;padding:1px 6px;border-radius:4px;background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;cursor:pointer;white-space:nowrap;display:inline-block;line-height:1.5;font-weight:600;">✕ 0</button>
+                   </div>` : '';
+            periodCells += `<td class="text-end fw-semibold" style="color:#4338CA;min-width:130px"><span class="sub-year-total">0.00</span>${splitBtns}</td>`;
+
+            if (ENTRY_MODE === 'monthly') {
+                if (MANUAL_SPLIT) {
+                    for (let m = 1; m <= 12; m++)
+                        periodCells += `<td><input type="number" class="form-control form-control-sm split-input sub-m${m}-split text-end" value="0.00" min="0" step="0.01" data-split-tip="0.00" oninput="updateSubSplitBalance(this)"></td>`;
+                } else {
+                    for (let m = 1; m <= 12; m++)
+                        periodCells += `<td class="text-end small text-muted sub-m${m}-display">0.00</td>`;
+                }
+            } else {
+                if (MANUAL_SPLIT) {
+                    [1,2,3,4].forEach(q =>
+                        periodCells += `<td><input type="number" class="form-control form-control-sm split-input sub-q${q}-split text-end" value="0.00" min="0" step="0.01" data-split-tip="0.00" oninput="updateSubSplitBalance(this)"></td>`);
+                } else {
+                    periodCells += `<td class="text-end small text-muted sub-q1-display">0.00</td><td class="text-end small text-muted sub-q2-display">0.00</td><td class="text-end small text-muted sub-q3-display">0.00</td><td class="text-end small text-muted sub-q4-display">0.00</td>`;
+                }
+            }
+        } else if (ENTRY_MODE === 'monthly') {
+            for (let m = 1; m <= 12; m++)
+                periodCells += `<td><input type="number" class="form-control form-control-sm sub-m${m} text-end" value="0" min="0" step="0.01" oninput="subDirectUpdate(this)"></td>`;
+            periodCells += `<td class="text-end fw-semibold" style="color:#4338CA"><span class="sub-year-total">0.00</span></td>`;
+        } else {
+            [1,2,3,4].forEach(q =>
+                periodCells += `<td><input type="number" class="form-control form-control-sm sub-q${q} text-end" value="0" min="0" step="0.01" oninput="subDirectUpdate(this)"></td>`);
+            periodCells += `<td class="text-end fw-semibold" style="color:#4338CA"><span class="sub-year-total">0.00</span></td>`;
+        }
+
+        let tail = '<td></td><td></td><td></td>';
+        for (let i = 0; i < CUSTOM_FIELD_COUNT; i++) tail += '<td></td>';
+
+        tr.innerHTML = nameCell + periodCells + tail;
+        after.insertAdjacentElement('afterend', tr);
+        tr.querySelector('.sub-name-input')?.focus();
+        setParentInputsReadonly(parentRow, true);
+        scheduleAutoSave?.();
+    }
+
+    // Remove a sub-entry row
+    function removeSubRow(btn) {
+        const sub = btn.closest('.sub-entry-row');
+        if (!sub) return;
+        const parentId = sub.dataset.parentId;
+        sub.remove();
+        renumberSubRows(parentId);
+        updateParentFromSubs(parentId);
+    }
+
+    // Update sequential numbers on all sub-rows for a parent
+    function renumberSubRows(parentId) {
+        document.querySelectorAll(`.sub-entry-row[data-parent-id="${parentId}"]`).forEach((sub, i) => {
+            const el = sub.querySelector('.sub-row-number');
+            if (el) el.textContent = i + 1;
+        });
+    }
+
+    // Collect sub-entries for a single parent item ID
+    function collectSubEntries(parentId) {
+        const result = [];
+        document.querySelectorAll(`.sub-entry-row[data-parent-id="${parentId}"]`).forEach((sub, idx) => {
+            const name = sub.querySelector('.sub-name-input')?.value?.trim() || '';
+            if (!name) return;
+            const entry = {
+                id:   sub.dataset.subId || null,
+                name,
+                qty:  parseFloat(sub.querySelector('.sub-qty')?.value)  || 0,
+                rate: parseFloat(sub.querySelector('.sub-rate')?.value) || 0,
+                freq: parseFloat(sub.querySelector('.sub-freq')?.value) || 1,
+            };
+            const spreadQ = (q) => {
+                const t = Math.floor(q / 3 * 100) / 100;
+                return [t, t, Math.round((q - t * 2) * 100) / 100];
+            };
+            const readDisp = el => parseFloat((el?.textContent || el?.value || '').replace(/,/g,'')) || 0;
+            if (ENTRY_MODE === 'monthly') {
+                for (let m = 1; m <= 12; m++) {
+                    if (CALC_MODE !== 'none' && MANUAL_SPLIT)
+                        entry[`m${m}`] = parseFloat(sub.querySelector(`.sub-m${m}-split`)?.value) || 0;
+                    else if (CALC_MODE !== 'none')
+                        entry[`m${m}`] = readDisp(sub.querySelector(`.sub-m${m}-display`));
+                    else
+                        entry[`m${m}`] = parseFloat(sub.querySelector(`.sub-m${m}`)?.value) || 0;
+                }
+            } else {
+                let q1,q2,q3,q4;
+                if (CALC_MODE !== 'none' && MANUAL_SPLIT) {
+                    [q1,q2,q3,q4] = [1,2,3,4].map(q => parseFloat(sub.querySelector(`.sub-q${q}-split`)?.value) || 0);
+                } else if (CALC_MODE !== 'none') {
+                    [q1,q2,q3,q4] = [1,2,3,4].map(q => readDisp(sub.querySelector(`.sub-q${q}-display`)));
+                } else {
+                    [q1,q2,q3,q4] = [1,2,3,4].map(q => parseFloat(sub.querySelector(`.sub-q${q}`)?.value) || 0);
+                }
+                const [m1,m2,m3]=spreadQ(q1), [m4,m5,m6]=spreadQ(q2), [m7,m8,m9]=spreadQ(q3), [m10,m11,m12]=spreadQ(q4);
+                Object.assign(entry,{m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12});
+            }
+            result.push(entry);
+        });
+        return result;
+    }
+
+    // Collect sub-entries for ALL items that have them
+    function collectAllSubEntries() {
+        const result = {};
+        document.querySelectorAll('tr[data-item-id]').forEach(row => {
+            const id = row.dataset.itemId;
+            const subs = collectSubEntries(id);
+            if (subs.length) result[id] = subs;
+        });
+        return result;
+    }
 </script>
 @endif
 

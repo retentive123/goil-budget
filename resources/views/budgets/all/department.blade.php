@@ -185,7 +185,7 @@
                     </td>
                     <td>
                         <div class="d-flex gap-1">
-                            <a href="{{ route('budgets.show-pnl', $v) }}"
+                            <a href="{{ route('budgets.show', $v) }}"
                                class="btn btn-sm"
                                style="background:var(--navy);color:#fff;
                                       font-size:11px;border-radius:6px;padding:3px 12px">

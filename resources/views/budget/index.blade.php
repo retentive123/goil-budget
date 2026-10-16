@@ -223,7 +223,7 @@ $statusColor = fn($s) => match($s) {
             {{-- Action --}}
             <div class="flex-shrink-0 d-flex gap-1">
                 @if($v->isEditable())
-                <a href="{{ route('budget.show-pnl', $v) }}"
+                <a href="{{ route('budget.show', $v) }}"
                    class="btn btn-sm fw-semibold"
                    style="background:var(--navy);color:#fff;border-radius:8px;font-size:12px">
                     <i class="bi bi-pencil me-1"></i>Continue Editing
@@ -238,13 +238,13 @@ $statusColor = fn($s) => match($s) {
                         <i class="bi bi-arrow-counterclockwise me-1"></i>Edit & Resubmit
                     </button>
                 </form>
-                <a href="{{ route('budget.show-pnl', $v) }}"
+                <a href="{{ route('budget.show', $v) }}"
                    class="btn btn-sm btn-outline-secondary"
                    style="border-radius:8px;font-size:12px">
                     <i class="bi bi-eye me-1"></i>View
                 </a>
                 @else
-                <a href="{{ route('budget.show-pnl', $v) }}"
+                <a href="{{ route('budget.show', $v) }}"
                    class="btn btn-sm btn-outline-secondary"
                    style="border-radius:8px;font-size:12px">
                     <i class="bi bi-eye me-1"></i>View

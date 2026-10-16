@@ -10,7 +10,7 @@ class Department extends Model
 {
     use HasFactory, SoftDeletes;
 
-    protected $fillable = ['name', 'code', 'description', 'is_active', 'budget_type', 'zone_id', 'entity_type'];
+    protected $fillable = ['name', 'code', 'description', 'is_active', 'budget_type', 'zone_id', 'entity_type', 'approval_route'];
 
     protected $casts = ['is_active' => 'boolean'];
 

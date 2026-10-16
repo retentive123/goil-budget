@@ -148,6 +148,8 @@ Route::middleware('auth')->group(function () {
         Route::resource('account-categories', AccountCategoryController::class);
         Route::resource('account-codes', AccountCodeController::class);
         Route::delete('account-codes', [AccountCodeController::class, 'bulkDestroy'])->name('account-codes.bulk-destroy');
+        Route::post('account-codes/{accountCode}/templates', [AccountCodeController::class, 'storeTemplate'])->name('account-codes.templates.store');
+        Route::delete('account-codes/{accountCode}/templates/{template}', [AccountCodeController::class, 'destroyTemplate'])->name('account-codes.templates.destroy');
 
         // Budget periods
         Route::resource('budget-periods', BudgetPeriodController::class);
@@ -434,6 +436,8 @@ Route::prefix('import-export')->name('ie.')->group(function () {
         [ImportExportController::class, 'downloadCategoryTemplate'])->name('categories.download');
     Route::get('codes/download',
         [ImportExportController::class, 'downloadCodeTemplate'])->name('codes.download');
+    Route::get('subsidiary-codes/download',
+        [ImportExportController::class, 'downloadCodeTemplate'])->name('subsidiary-codes.download');
     Route::get('departments/download',
         [ImportExportController::class, 'downloadDepartmentTemplate'])->name('departments.download');
     Route::get('service-stations/download',
@@ -453,6 +457,8 @@ Route::prefix('import-export')->name('ie.')->group(function () {
             [ImportExportController::class, 'uploadCategories'])->name('categories.upload');
         Route::post('codes/upload',
             [ImportExportController::class, 'uploadCodes'])->name('codes.upload');
+        Route::post('subsidiary-codes/upload',
+            [ImportExportController::class, 'uploadSubsidiaryCodes'])->name('subsidiary-codes.upload');
         Route::post('service-stations/upload',
             [ImportExportController::class, 'uploadServiceStations'])->name('service-stations.upload');
     });

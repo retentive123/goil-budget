@@ -36,10 +36,14 @@
 
         @foreach($section['byCategory'] as $catName => $items)
         @php
-            $catTotal = $items->sum('total_amount') + $items->sum(fn($i) => $i->approvedSupplementaryTotal());
+            $catTotal = $items->sum(fn($i) => ($reductions ?? collect())->has($i->id)
+                ? ($reductions ?? collect())->get($i->id)
+                : ((float) $i->total_amount + $i->approvedSupplementaryTotal()));
             $secBase  = $section['sectionTotal'] > 0 ? $section['sectionTotal'] : 1;
             $catShare = round(($catTotal / $secBase) * 100, 1);
-            $catSupp  = $items->sum(fn($i) => $i->approvedSupplementaryTotal());
+            $catSupp  = $items->sum(fn($i) => ($reductions ?? collect())->has($i->id)
+                ? 0
+                : $i->approvedSupplementaryTotal());
             $sectionSupp  += $catSupp;
             $sectionTotal += $catTotal;
         @endphp
@@ -61,9 +65,20 @@
         {{-- Item rows --}}
         @foreach($items->sortByDesc('total_amount') as $item)
         @php
-            $itemSupp     = $item->approvedSupplementaryTotal();
-            $itemEffTotal = $item->total_amount + $itemSupp;
-            $itemShare    = round(($itemEffTotal / $secBase) * 100, 1);
+            $itemSupp      = $item->approvedSupplementaryTotal();
+            $itemEffTotal  = $item->total_amount + $itemSupp;
+            $reducedAmount = ($reductions ?? collect())->get($item->id);
+            $displayTotal  = $reducedAmount !== null ? $reducedAmount : $itemEffTotal;
+            $itemShare     = round(($displayTotal / $secBase) * 100, 1);
+            $lia           = ($reductionLias ?? collect())->get($item->id);
+            $liaHasPeriods = $lia && $lia->m1_amount !== null;
+            // Pre-compute reduced quarter totals from lia m-amounts
+            $liaQ = $liaHasPeriods ? [
+                'q1' => $lia->m1_amount + $lia->m2_amount + $lia->m3_amount,
+                'q2' => $lia->m4_amount + $lia->m5_amount + $lia->m6_amount,
+                'q3' => $lia->m7_amount + $lia->m8_amount + $lia->m9_amount,
+                'q4' => $lia->m10_amount + $lia->m11_amount + $lia->m12_amount,
+            ] : null;
         @endphp
         <tr>
             <td style="padding-left:28px">
@@ -74,19 +89,52 @@
             </td>
             @if($isMonthly)
                 @foreach(range(1,12) as $mn)
-                <td class="text-end small{{ $mn === 1 ? ' border-start' : '' }}">{{ number_format($item->{'m'.$mn.'_amount'}, 2) }}</td>
+                @php
+                    $cellAmt   = $liaHasPeriods ? (float)($lia->{'m'.$mn.'_amount'} ?? 0) : $item->{'m'.$mn.'_amount'};
+                    $cellStyle = $reducedAmount !== null ? ($liaHasPeriods ? 'color:#B45309;font-weight:600' : 'color:#94A3B8') : '';
+                    $cellTitle = $reducedAmount !== null ? ($liaHasPeriods ? 'Reduced period amount' : 'Original period figures; total was reduced by approver') : '';
+                @endphp
+                <td class="text-end small{{ $mn === 1 ? ' border-start' : '' }}"
+                    style="{{ $cellStyle }}"
+                    title="{{ $cellTitle }}">
+                    {{ number_format($cellAmt, 2) }}
+                </td>
                 @endforeach
             @else
-                <td class="text-end border-start small">{{ number_format($item->q1_amount, 2) }}</td>
-                <td class="text-end small">{{ number_format($item->q2_amount, 2) }}</td>
-                <td class="text-end small">{{ number_format($item->q3_amount, 2) }}</td>
-                <td class="text-end small">{{ number_format($item->q4_amount, 2) }}</td>
+                @foreach(['q1','q2','q3','q4'] as $qi => $qk)
+                @php
+                    if ($liaHasPeriods && $liaQ) {
+                        $cellAmt   = $liaQ[$qk];
+                        $cellStyle = 'color:#B45309;font-weight:600';
+                        $cellTitle = 'Reduced period amount';
+                    } else {
+                        $cellAmt   = $item->{$qk.'_amount'};
+                        $cellStyle = $reducedAmount !== null ? 'color:#94A3B8' : '';
+                        $cellTitle = $reducedAmount !== null ? 'Original period figures; total was reduced by approver' : '';
+                    }
+                @endphp
+                <td class="text-end small{{ $qi === 0 ? ' border-start' : '' }}"
+                    style="{{ $cellStyle }}"
+                    title="{{ $cellTitle }}">
+                    {{ number_format($cellAmt, 2) }}
+                </td>
+                @endforeach
             @endif
             <td class="text-end small" style="color:{{ $itemSupp > 0 ? '#92400E' : 'inherit' }}">
                 {{ $itemSupp > 0 ? '+'.number_format($itemSupp, 2) : '—' }}
             </td>
-            <td class="text-end fw-semibold small" style="color:var(--navy)">
-                {{ number_format($itemEffTotal, 2) }}
+            <td class="text-end fw-semibold small">
+                @if($reducedAmount !== null)
+                    <span style="text-decoration:line-through;color:#94A3B8;font-size:10px">
+                        {{ number_format($itemEffTotal, 2) }}
+                    </span><br>
+                    <span style="color:#B45309" title="Reduced by approver">
+                        {{ number_format($reducedAmount, 2) }}
+                        <i class="bi bi-arrow-down-circle-fill" style="font-size:9px"></i>
+                    </span>
+                @else
+                    <span style="color:var(--navy)">{{ number_format($itemEffTotal, 2) }}</span>
+                @endif
             </td>
             <td>
                 <div class="progress mb-0" style="height:4px">
@@ -113,7 +161,7 @@
             <td class="text-end" style="color:{{ $catSupp > 0 ? '#92400E' : 'inherit' }}">
                 {{ $catSupp > 0 ? '+'.number_format($catSupp, 2) : '—' }}
             </td>
-            <td class="text-end" style="color:var(--navy)">{{ number_format($catTotal, 2) }}</td>
+            <td class="text-end fw-semibold" style="color:var(--navy)">{{ number_format($catTotal, 2) }}</td>
             <td></td>
         </tr>
         @endforeach

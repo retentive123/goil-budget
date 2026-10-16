@@ -166,6 +166,21 @@ class BudgetVersion extends Model
 
     public function effectiveTotal(): float
     {
-        return $this->lineItems->sum(fn($item) => $item->effectiveBudget());
+        if (! $this->relationLoaded('approvalDecisions')) {
+            $this->load('approvalDecisions.lineItemApprovals');
+        }
+
+        $reductions = [];
+        foreach ($this->approvalDecisions as $dec) {
+            foreach ($dec->lineItemApprovals as $lia) {
+                if ($lia->status === 'reduced' && $lia->approved_amount !== null) {
+                    $reductions[$lia->budget_line_item_id] = (float) $lia->approved_amount;
+                }
+            }
+        }
+
+        return $this->lineItems->sum(fn($item) =>
+            ($reductions[$item->id] ?? (float) $item->total_amount) + $item->approvedSupplementaryTotal()
+        );
     }
 }

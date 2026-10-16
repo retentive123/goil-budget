@@ -61,11 +61,12 @@ class DepartmentController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name'        => ['required', 'string', 'max:255', 'unique:departments,name'],
-            'code'        => ['required', 'string', 'max:20', 'unique:departments,code'],
-            'description' => ['nullable', 'string'],
-            'budget_type' => ['required','in:revenue,expense,both'],
-            'zone_id'     => ['required', 'exists:zones,id'],
+            'name'           => ['required', 'string', 'max:255', 'unique:departments,name'],
+            'code'           => ['required', 'string', 'max:20', 'unique:departments,code'],
+            'description'    => ['nullable', 'string'],
+            'budget_type'    => ['required','in:revenue,expense,both'],
+            'zone_id'        => ['required', 'exists:zones,id'],
+            'approval_route' => ['required', 'in:gceo,coo,direct'],
         ]);
 
         $department = Department::create([...$validated, 'is_active' => true]);
@@ -92,12 +93,13 @@ class DepartmentController extends Controller
     {
         abort_if($department->isServiceStation(), 404);
         $validated = $request->validate([
-            'name'        => ['required', 'string', 'max:255', 'unique:departments,name,' . $department->id],
-            'code'        => ['required', 'string', 'max:20', 'unique:departments,code,' . $department->id],
-            'description' => ['nullable', 'string'],
-            'is_active'   => ['boolean'],
-            'budget_type' => ['required','in:revenue,expense,both'],
-            'zone_id'     => ['required', 'exists:zones,id'],
+            'name'           => ['required', 'string', 'max:255', 'unique:departments,name,' . $department->id],
+            'code'           => ['required', 'string', 'max:20', 'unique:departments,code,' . $department->id],
+            'description'    => ['nullable', 'string'],
+            'is_active'      => ['boolean'],
+            'budget_type'    => ['required','in:revenue,expense,both'],
+            'zone_id'        => ['required', 'exists:zones,id'],
+            'approval_route' => ['required', 'in:gceo,coo,direct'],
         ]);
 
         $department->update($validated);
@@ -125,7 +127,10 @@ class DepartmentController extends Controller
             ->where('is_active', true)
             ->orderBy('name')
             ->get();
-        $codes = AccountCode::with('category')->where('is_active', true)->orderBy('code')->get();
+        $codes = AccountCode::with('category')
+            ->where('is_active', true)
+            ->where('scope', 'department')
+            ->orderBy('code')->get();
 
         return view('admin.departments.mass-assign', compact('departments', 'codes'));
     }
@@ -181,7 +186,10 @@ class DepartmentController extends Controller
     public function accountCodes(Department $department)
     {
         $assigned = $department->accountCodes()->pluck('account_codes.id')->toArray();
-        $all      = AccountCode::with('category')->where('is_active', true)->orderBy('code')->get();
+        $all      = AccountCode::with('category')
+            ->where('is_active', true)
+            ->where('scope', 'department')
+            ->orderBy('code')->get();
 
         return view('admin.departments.account-codes', compact('department', 'assigned', 'all'));
     }

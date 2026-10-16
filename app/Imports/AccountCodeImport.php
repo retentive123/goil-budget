@@ -16,11 +16,14 @@ class AccountCodeImport implements ToCollection, WithHeadingRow
     public int   $updated  = 0;
     public int   $skipped  = 0;
 
+    public function __construct(private string $scope = 'department') {}
+
     public function collection(Collection $rows)
     {
         // Pre-load all lookups — 2 queries for entire import
         $categories = AccountCategory::all()->keyBy(fn($c) => strtoupper($c->code));
-        $existing   = AccountCode::all()->keyBy(fn($c) => strtoupper($c->code));
+        $existing   = AccountCode::where('scope', $this->scope)
+                          ->get()->keyBy(fn($c) => strtoupper($c->code));
 
         $toInsert = [];
         $toUpdate = [];
@@ -74,6 +77,7 @@ class AccountCodeImport implements ToCollection, WithHeadingRow
                         'default_rate'        => $defaultRate,
                         'default_frequency'   => $defaultFreq,
                         'is_active'           => true,
+                        'scope'               => $this->scope,
                         'created_at'          => $now,
                         'updated_at'          => $now,
                     ];

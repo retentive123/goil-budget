@@ -103,6 +103,7 @@ class BudgetReadOnlyExport implements FromCollection, WithHeadings, WithTitle, W
                     $eff         = (float) $item->effectiveBudget();
                     $actual      = (float) $this->actualsPerItem->get($item->id, 0);
                     $itemPeriod  = $this->itemPeriodCols($item, $isMonthly);
+                    $hasSubs     = $item->subEntries->isNotEmpty();
 
                     $rows->push(array_merge(
                         ['', $item->accountCode->code, $item->accountCode->name, ucfirst($item->line_type)],
@@ -116,6 +117,18 @@ class BudgetReadOnlyExport implements FromCollection, WithHeadings, WithTitle, W
                     $grandSupp   += $supp;
                     $grandEff    += $eff;
                     $grandActual += $actual;
+
+                    if ($hasSubs) {
+                        foreach ($item->subEntries as $si => $sub) {
+                            $subPeriod = $this->subPeriodCols($sub, $isMonthly);
+                            $rows->push(array_merge(
+                                ['', ($si + 1) . '.', '    ↳ ' . $sub->name, 'Sub-item'],
+                                $subPeriod,
+                                [(float) $sub->total_amount, '', '', '']
+                            ));
+                            $this->rowTypes[] = 'sub_entry';
+                        }
+                    }
                 }
             }
         }
@@ -149,6 +162,19 @@ class BudgetReadOnlyExport implements FromCollection, WithHeadings, WithTitle, W
             (float) $item->q2_amount,
             (float) $item->q3_amount,
             (float) $item->q4_amount,
+        ];
+    }
+
+    private function subPeriodCols($sub, bool $isMonthly): array
+    {
+        if ($isMonthly) {
+            return array_map(fn($m) => (float) $sub->{"m{$m}_amount"}, range(1, 12));
+        }
+        return [
+            (float) ($sub->m1_amount + $sub->m2_amount + $sub->m3_amount),
+            (float) ($sub->m4_amount + $sub->m5_amount + $sub->m6_amount),
+            (float) ($sub->m7_amount + $sub->m8_amount + $sub->m9_amount),
+            (float) ($sub->m10_amount + $sub->m11_amount + $sub->m12_amount),
         ];
     }
 
@@ -216,6 +242,21 @@ class BudgetReadOnlyExport implements FromCollection, WithHeadings, WithTitle, W
                 $sheet->getStyle("B{$r}")->getFont()->getColor()->setARGB('FF1B2A4A');
                 $sheet->getStyle("B{$r}")->getFont()->setBold(true);
                 $sheet->getStyle("C{$r}:D{$r}")->getFont()->getColor()->setARGB('FF475569');
+
+            } elseif ($rowType === 'sub_entry') {
+                $sheet->getStyle("A{$r}:{$lc}{$r}")->applyFromArray([
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFF0F4FF']],
+                ]);
+                $sheet->getStyle("B{$r}")->applyFromArray([
+                    'font' => ['bold' => true, 'color' => ['argb' => 'FF818CF8']],
+                    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+                ]);
+                $sheet->getStyle("C{$r}")->applyFromArray([
+                    'font' => ['italic' => true, 'color' => ['argb' => 'FF4338CA']],
+                ]);
+                $sheet->getStyle("D{$r}")->getFont()->getColor()->setARGB('FF818CF8');
+                $sheet->getStyle("A{$r}:{$lc}{$r}")->getBorders()->getLeft()->setBorderStyle(Border::BORDER_MEDIUM);
+                $sheet->getStyle("A{$r}")->getBorders()->getLeft()->getColor()->setARGB('FF818CF8');
 
             } elseif ($rowType === 'grand_total') {
                 $sheet->getStyle("A{$r}:{$lc}{$r}")->applyFromArray([

@@ -23,7 +23,7 @@ class ApprovalController extends Controller
         $currentPeriod = BudgetPeriod::current();
 
         // Get all submitted/under_review versions
-        $pending = BudgetVersion::with('department', 'period')
+        $pending = BudgetVersion::with('department', 'period', 'lineItems', 'approvalDecisions.lineItemApprovals')
             ->whereIn('status', [
                 BudgetVersion::STATUS_SUBMITTED,
                 BudgetVersion::STATUS_UNDER_REVIEW,
@@ -44,15 +44,13 @@ class ApprovalController extends Controller
     // Show a budget version for review
     public function show(BudgetVersion $budgetVersion, Request $request)
     {
-        if (!$request->boolean('classic')) {
-            return redirect()->route('approvals.show-pnl', $budgetVersion);
-        }
-
         $budgetVersion->load(
             'department', 'period',
             'lineItems.accountCode.category',
+            'lineItems.subEntries',
             'approvalDecisions.stage',
             'approvalDecisions.decidedBy',
+            'approvalDecisions.lineItemApprovals',
             'submittedBy'
         );
 
@@ -77,10 +75,25 @@ class ApprovalController extends Controller
         $adminSetsFreq = $budgetVersion->period->adminSetsFreq();
         $entryMode     = $budgetVersion->period->entry_mode ?? 'quarterly';
 
+        // Prior-stage reductions visible to the current approver
+        $priorReductions    = collect(); // item_id => approved_amount
+        $priorReductionLias = collect(); // item_id => LineItemApproval
+        foreach ($budgetVersion->approvalDecisions as $dec) {
+            foreach ($dec->lineItemApprovals as $lia) {
+                if ($lia->status === 'reduced' && $lia->approved_amount !== null) {
+                    $priorReductions[$lia->budget_line_item_id]    = (float) $lia->approved_amount;
+                    $priorReductionLias[$lia->budget_line_item_id] = $lia;
+                }
+            }
+        }
+
+        $allowRestore = setting('approval_allow_restore', false);
+
         return view('approval.show', compact(
             'budgetVersion', 'canDecide', 'currentStage',
             'progress', 'summary', 'grandTotals', 'approvalService',
-            'calcMode', 'adminSetsRate', 'adminSetsFreq', 'entryMode'
+            'calcMode', 'adminSetsRate', 'adminSetsFreq', 'entryMode',
+            'priorReductions', 'priorReductionLias', 'allowRestore'
         ));
     }
 
@@ -90,6 +103,7 @@ class ApprovalController extends Controller
         $budgetVersion->load(
             'department', 'period',
             'lineItems.accountCode.category',
+            'lineItems.subEntries',
             'approvalDecisions.stage',
             'approvalDecisions.decidedBy',
             'submittedBy'
@@ -131,18 +145,77 @@ class ApprovalController extends Controller
             'line_items' => ['nullable', 'array'],
         ]);
 
-        // Parse line item decisions if provided
+        // Parse and validate line item decisions
         $lineItemDecisions = [];
+        $amountErrors = [];
         if ($request->line_items) {
-            foreach ($request->line_items as $itemId => $data) {
-                if (!empty($data['status'])) {
-                    $lineItemDecisions[$itemId] = [
-                        'status'          => $data['status'],
-                        'approved_amount' => $data['approved_amount'] ?? null,
-                        'comments'        => $data['comments'] ?? null,
-                    ];
+            $budgetVersion->loadMissing('lineItems', 'period', 'approvalDecisions.lineItemApprovals');
+            $itemsById = $budgetVersion->lineItems->keyBy('id');
+
+            // Build prior reductions to use as the cap for further reductions
+            $priorReductions = collect();
+            foreach ($budgetVersion->approvalDecisions as $dec) {
+                foreach ($dec->lineItemApprovals as $lia) {
+                    if ($lia->status === 'reduced' && $lia->approved_amount !== null) {
+                        $priorReductions[$lia->budget_line_item_id] = (float) $lia->approved_amount;
+                    }
                 }
             }
+            $allowRestore = setting('approval_allow_restore', false);
+
+            foreach ($request->line_items as $itemId => $data) {
+                if (empty($data['status'])) continue;
+
+                $approvedAmount = isset($data['approved_amount']) && $data['approved_amount'] !== ''
+                    ? (float) $data['approved_amount']
+                    : null;
+
+                if ($data['status'] === 'reduced') {
+                    $item = $itemsById->get($itemId);
+                    if ($item) {
+                        $code = $item->accountCode->code;
+                        if ($item->subEntries()->exists()) {
+                            $amountErrors[] = '"' . $code . '" has sub-items and cannot be reduced at the parent level.';
+                        } elseif ($approvedAmount !== null) {
+                            // Cap: if a prior stage already reduced this item and restore is not allowed,
+                            // the new amount cannot exceed that prior reduction.
+                            $priorReduced = $priorReductions->get($itemId);
+                            $cap = ($priorReduced !== null && !$allowRestore)
+                                ? $priorReduced
+                                : (float) $item->effectiveBudget();
+
+                            if ($approvedAmount <= 0) {
+                                $amountErrors[] = '"' . $code . '" reduced amount must be greater than zero.';
+                            } elseif ($approvedAmount >= $cap) {
+                                $capLabel = $priorReduced !== null && !$allowRestore
+                                    ? 'the previous stage\'s approved amount'
+                                    : 'the original budget';
+                                $amountErrors[] = '"' . $code . '" reduced amount (' . number_format($approvedAmount, 2) . ') must be less than ' . $capLabel . ' (' . number_format($cap, 2) . ').';
+                            } else {
+                                // Validate period breakdown must sum to approved_amount
+                                $periodAmounts = $data['period_amounts'] ?? [];
+                                $periodSum = round(array_sum(array_map('floatval', array_values($periodAmounts))), 2);
+                                if (empty($periodAmounts) || $periodSum == 0) {
+                                    $amountErrors[] = '"' . $code . '" requires a period breakdown (months/quarters) when reducing.';
+                                } elseif (abs($periodSum - $approvedAmount) > 0.01) {
+                                    $amountErrors[] = '"' . $code . '" period breakdown total (' . number_format($periodSum, 2) . ') must equal the reduced amount (' . number_format($approvedAmount, 2) . ').';
+                                }
+                            }
+                        }
+                    }
+                }
+
+                $lineItemDecisions[$itemId] = [
+                    'status'          => $data['status'],
+                    'approved_amount' => $approvedAmount,
+                    'comments'        => $data['comments'] ?? null,
+                    'period_amounts'  => $data['period_amounts'] ?? [],
+                ];
+            }
+        }
+
+        if (!empty($amountErrors)) {
+            return back()->withInput()->with('error', implode(' | ', $amountErrors));
         }
 
         try {

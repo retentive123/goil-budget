@@ -18,7 +18,7 @@
     </div>
     <div class="d-flex align-items-center gap-2">
         <div class="btn-group btn-group-sm" role="group">
-            <a href="{{ route('budgets.show', $budgetVersion) }}?classic=1" class="btn btn-outline-secondary">Classic View</a>
+            <a href="{{ route('budgets.show', $budgetVersion) }}" class="btn btn-outline-secondary">Classic View</a>
             <span class="btn btn-secondary" style="pointer-events:none;">P&amp;L View</span>
         </div>
         <div class="dropdown">

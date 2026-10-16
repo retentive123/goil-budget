@@ -123,7 +123,10 @@ class ServiceStationController extends Controller
             ->orderBy('name')
             ->get();
         $zones = Zone::where('is_active', true)->orderBy('name')->get();
-        $codes = AccountCode::with('category')->where('is_active', true)->orderBy('code')->get();
+        $codes = AccountCode::with('category')
+            ->where('is_active', true)
+            ->where('scope', 'department')
+            ->orderBy('code')->get();
 
         return view('admin.service-stations.mass-assign', compact('stations', 'zones', 'codes'));
     }
@@ -179,7 +182,10 @@ class ServiceStationController extends Controller
     public function accountCodes(Department $serviceStation)
     {
         $assigned = $serviceStation->accountCodes()->pluck('account_codes.id')->toArray();
-        $all      = AccountCode::with('category')->where('is_active', true)->orderBy('code')->get();
+        $all      = AccountCode::with('category')
+            ->where('is_active', true)
+            ->where('scope', 'department')
+            ->orderBy('code')->get();
 
         return view('admin.service-stations.account-codes', [
             'station'  => $serviceStation,

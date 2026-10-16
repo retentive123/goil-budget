@@ -120,6 +120,10 @@ class UserController extends Controller
 
         $user->assignRole($validated['role']);
 
+        // Sync extra approval departments (dept heads only, but store for any role)
+        $extraDeptIds = array_filter(array_map('intval', $request->input('approval_department_ids', [])));
+        $user->approvalDepartments()->sync($extraDeptIds);
+
         AuditLogger::userCreated($user, auth()->user());
 
         try {
@@ -155,6 +159,7 @@ class UserController extends Controller
             ->orderBy('name')
             ->get();
         $roles = Role::orderBy('name')->get();
+        $user->load('approvalDepartments');
 
         return view('admin.users.edit', compact('user', 'departments', 'subsidiaries', 'roles'));
     }
@@ -193,6 +198,10 @@ class UserController extends Controller
         ]);
 
         $user->syncRoles([$validated['role']]);
+
+        // Sync extra approval departments
+        $extraDeptIds = array_filter(array_map('intval', $request->input('approval_department_ids', [])));
+        $user->approvalDepartments()->sync($extraDeptIds);
 
         AuditLogger::roleAssigned($user, $validated['role'], auth()->user());
 
@@ -325,9 +334,10 @@ class UserController extends Controller
 
         $callback = function () {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['name','email','employee_id','phone','department_code','subsidiary_code','role','password']);
-            fputcsv($handle, ['John Kwame','john.kwame@goil.com','EMP001','0244000001','HR','','department_user','']);
-            fputcsv($handle, ['Ama Sarpong','ama.sarpong@goil.com','EMP002','0244000002','','GOILSUB01','department_head','']);
+            fputcsv($handle, ['name','email','employee_id','phone','department_code','subsidiary_code','role','password','approval_departments']);
+            fputcsv($handle, ['John Kwame','john.kwame@goil.com','EMP001','0244000001','05001','','department_user','','']);
+            fputcsv($handle, ['Ama Sarpong','ama.sarpong@goil.com','EMP002','0244000002','','GOILSUB01','department_head','','']);
+            fputcsv($handle, ['Kofi Mensah','kofi.mensah@goil.com','EMP003','0244000003','07000','','department_head','','02001|04001']);
             fclose($handle);
         };
 
@@ -416,6 +426,14 @@ class UserController extends Controller
             ]);
 
             $user->assignRole($role);
+
+            // Sync extra approval departments if provided (pipe-separated dept codes)
+            $approvalCodes = array_filter(array_map('trim', explode('|', $data['approval_departments'] ?? '')));
+            if ($approvalCodes) {
+                $extraIds = array_values(array_filter(array_map(fn($c) => $deptMap[$c] ?? null, $approvalCodes)));
+                $user->approvalDepartments()->sync($extraIds);
+            }
+
             AuditLogger::userCreated($user, auth()->user());
 
             // Mark email as used so duplicate rows in the same CSV are caught

@@ -247,7 +247,17 @@
                             </span>
                         </td>
                         <td class="text-end small fw-semibold">
-                            {{ number_format($v->lineItems->sum('total_amount'), 2) }}
+                            @php
+                                $vOriginal   = (float) $v->lineItems->sum('total_amount');
+                                $vEffective  = $v->effectiveTotal();
+                                $vHasReduced = $v->approvalDecisions->flatMap->lineItemApprovals->contains('status', 'reduced');
+                            @endphp
+                            @if($vHasReduced)
+                                <span style="text-decoration:line-through;color:#9CA3AF;font-size:10px">{{ number_format($vOriginal, 2) }}</span>
+                                <span style="display:block;color:#DC2626;font-weight:700">{{ number_format($vEffective, 2) }}</span>
+                            @else
+                                {{ number_format($vEffective, 2) }}
+                            @endif
                         </td>
                         <td class="small">
                             {{ $v->submittedBy?->name ?? '—' }}
@@ -269,7 +279,7 @@
                         </td>
                         <td>
                             <div class="d-flex gap-1">
-                                <a href="{{ route('budgets.show-pnl', $v) }}"
+                                <a href="{{ route('budgets.show', $v) }}"
                                    class="btn btn-sm"
                                    style="background:var(--navy);color:#fff;
                                           font-size:11px;border-radius:6px;

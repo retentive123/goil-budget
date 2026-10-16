@@ -33,7 +33,16 @@
         </span>
     </td>
     <td class="text-end small fw-semibold">
-        {{ $total > 0 ? number_format($total, 0) : '—' }}
+        @php
+            $originalTotal = $latest ? (float) $latest->lineItems->sum('total_amount') : 0;
+            $hasReduction  = $latest && abs($total - ($originalTotal + $latest->lineItems->sum(fn($i) => $i->approvedSupplementaryTotal()))) > 0.01;
+        @endphp
+        @if($hasReduction && $originalTotal > 0)
+            <span style="text-decoration:line-through;color:#9CA3AF;font-size:10px">{{ number_format($originalTotal, 0) }}</span>
+            <span style="display:block;color:#DC2626;font-weight:700">{{ number_format($total, 0) }}</span>
+        @else
+            {{ $total > 0 ? number_format($total, 0) : '—' }}
+        @endif
     </td>
     <td class="text-end small" style="color:#10B981">
         {{ $actual > 0 ? number_format($actual, 0) : '—' }}
@@ -56,7 +65,7 @@
     <td>
         <div class="d-flex gap-1">
             @if($latest)
-            <a href="{{ route('budgets.show-pnl', $latest) }}"
+            <a href="{{ route('budgets.show', $latest) }}"
                class="btn btn-sm"
                style="background:#1B2A4A;color:#fff;font-size:11px;border-radius:6px;padding:3px 12px">
                 View

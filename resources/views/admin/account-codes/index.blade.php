@@ -9,21 +9,37 @@
 @endphp
 @section('content')
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h5 class="fw-bold mb-0">Account Codes</h5>
         <p class="text-muted small mb-0">
             Manage account codes and their category assignments
         </p>
     </div>
-    <a href="{{ route('admin.account-codes.create') }}" class="btn btn-primary btn-sm">
+    <a href="{{ route('admin.account-codes.create', ['scope' => $scope]) }}" class="btn btn-primary btn-sm">
         <i class="bi bi-plus-circle"></i> Add Code
     </a>
 </div>
 
+{{-- Scope tabs --}}
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {{ $scope === 'department' ? 'active' : '' }}"
+           href="{{ route('admin.account-codes.index', array_merge(request()->except(['scope','page']), ['scope' => 'department'])) }}">
+            <i class="bi bi-building"></i> Department Codes
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {{ $scope === 'subsidiary' ? 'active' : '' }}"
+           href="{{ route('admin.account-codes.index', array_merge(request()->except(['scope','page']), ['scope' => 'subsidiary'])) }}">
+            <i class="bi bi-diagram-3"></i> Subsidiary Codes
+        </a>
+    </li>
+</ul>
+
 {{-- Import/Export buttons --}}
 <div class="d-flex gap-2 mb-3">
-    <a href="{{ route('ie.codes.download') }}"
+    <a href="{{ $scope === 'subsidiary' ? route('ie.subsidiary-codes.download') : route('ie.codes.download') }}"
        class="btn btn-sm btn-outline-success">
         ↓ Download Template
     </a>
@@ -36,9 +52,10 @@
 
 <div id="catUpload" class="{{ session('import_errors') ? '' : 'd-none' }} chart-card mb-4">
     <div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:8px">
-        Import Codes from Excel
+        Import {{ $scope === 'subsidiary' ? 'Subsidiary' : 'Department' }} Codes from Excel
     </div>
-    <form method="POST" action="{{ route('ie.codes.upload') }}"
+    <form method="POST"
+          action="{{ $scope === 'subsidiary' ? route('ie.subsidiary-codes.upload') : route('ie.codes.upload') }}"
           enctype="multipart/form-data">
         @csrf
         <div class="d-flex gap-2 align-items-end">
@@ -49,7 +66,7 @@
             <button type="submit" class="btn btn-sm btn-primary">Upload</button>
         </div>
         <div class="form-text">
-            Existing codes with the same code will be updated.
+            Existing {{ $scope === 'subsidiary' ? 'subsidiary' : 'department' }} codes with the same code will be updated.
             Download the template first to see the correct format.
         </div>
     </form>
@@ -70,6 +87,7 @@
 
 {{-- Filters --}}
 <form method="GET" class="mb-3" id="filterForm">
+    <input type="hidden" name="scope" value="{{ $scope }}">
     <div class="row g-2 align-items-end">
         <div class="col-md-3">
             <label class="form-label small fw-semibold mb-0">Category</label>
@@ -95,7 +113,7 @@
                     <i class="bi bi-search"></i>
                 </button>
                 @if(request('search') || request('category') || request('status'))
-                <a href="{{ route('admin.account-codes.index') }}"
+                <a href="{{ route('admin.account-codes.index', ['scope' => $scope]) }}"
                    class="btn btn-outline-secondary">
                     <i class="bi bi-x"></i> Clear
                 </a>

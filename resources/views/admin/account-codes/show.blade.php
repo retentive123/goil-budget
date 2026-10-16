@@ -92,6 +92,62 @@
             @endif
         </div>
 
+        {{-- Default Sub-entries --}}
+        <div class="chart-card mb-4" id="sub-entry-templates-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="chart-title mb-0">
+                    Default Sub-entries
+                    <span id="tpl-count-badge"
+                          style="background:#EEF2FF;border-radius:20px;padding:1px 8px;
+                                 font-size:12px;font-weight:400;color:#4338CA">
+                        {{ $accountCode->subEntryTemplates->count() }}
+                    </span>
+                </div>
+            </div>
+            <p class="text-muted small mb-3" style="line-height:1.5">
+                When a budget line item using this account code has no sub-entries yet,
+                these rows will auto-appear at entry time. Users can edit amounts, remove rows, or add more.
+            </p>
+
+            {{-- Template list --}}
+            <div id="tpl-list">
+                @forelse($accountCode->subEntryTemplates as $tpl)
+                <div class="d-flex align-items-center gap-2 py-2 px-3 mb-1 tpl-row"
+                     id="tpl-row-{{ $tpl->id }}"
+                     style="background:#F8FAFC;border:1px solid var(--border);border-radius:8px">
+                    <span class="tpl-row-num" style="min-width:20px;font-size:11px;font-weight:700;color:#818CF8;text-align:right">{{ $loop->iteration }}</span>
+                    <span class="flex-grow-1 small fw-semibold" style="color:var(--navy)">{{ $tpl->name }}</span>
+                    <button type="button"
+                            onclick="deleteTpl({{ $tpl->id }}, this)"
+                            style="width:24px;height:24px;border-radius:50%;background:#FEE2E2;
+                                   color:#991B1B;border:1px solid #FECACA;cursor:pointer;
+                                   font-size:13px;font-weight:700;display:flex;align-items:center;
+                                   justify-content:center;padding:0;line-height:1;flex-shrink:0"
+                            title="Remove">×</button>
+                </div>
+                @empty
+                <div id="tpl-empty" class="text-muted small text-center py-2">
+                    No default sub-entries defined yet.
+                </div>
+                @endforelse
+            </div>
+
+            {{-- Add form --}}
+            <div class="mt-3 d-flex gap-2">
+                <input type="text" id="tpl-name-input"
+                       class="form-control form-control-sm"
+                       placeholder="Sub-entry name (e.g. Basic Salary)"
+                       maxlength="255"
+                       style="border-radius:8px">
+                <button type="button" onclick="addTpl()"
+                        class="btn btn-sm"
+                        style="white-space:nowrap;background:var(--navy);color:#fff;
+                               border-radius:8px;padding:5px 14px;font-size:13px">
+                    + Add
+                </button>
+            </div>
+        </div>
+
         {{-- Budget history across all periods --}}
         @php
             $lineItems = \App\Models\BudgetLineItem::where('account_code_id', $accountCode->id)
@@ -237,6 +293,84 @@
 
     </div>
 </div>
+
+<script>
+const TPL_STORE_URL   = '{{ route('admin.account-codes.templates.store', $accountCode) }}';
+const TPL_DESTROY_URL = '{{ url('admin/account-codes/' . $accountCode->id . '/templates/__ID__') }}';
+const CSRF            = '{{ csrf_token() }}';
+
+function renumberTpls() {
+    document.querySelectorAll('#tpl-list .tpl-row').forEach((row, i) => {
+        const num = row.querySelector('.tpl-row-num');
+        if (num) num.textContent = i + 1;
+    });
+    const badge = document.getElementById('tpl-count-badge');
+    if (badge) badge.textContent = document.querySelectorAll('#tpl-list .tpl-row').length;
+}
+
+function addTpl() {
+    const input = document.getElementById('tpl-name-input');
+    const name  = input.value.trim();
+    if (!name) { input.focus(); return; }
+
+    fetch(TPL_STORE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
+        body: JSON.stringify({ name }),
+    })
+    .then(r => r.ok ? r.json() : Promise.reject(r))
+    .then(tpl => {
+        const empty = document.getElementById('tpl-empty');
+        if (empty) empty.remove();
+
+        const list = document.getElementById('tpl-list');
+        const count = list.querySelectorAll('.tpl-row').length + 1;
+        const div = document.createElement('div');
+        div.className = 'd-flex align-items-center gap-2 py-2 px-3 mb-1 tpl-row';
+        div.id = `tpl-row-${tpl.id}`;
+        div.style.cssText = 'background:#F8FAFC;border:1px solid var(--border);border-radius:8px';
+        div.innerHTML = `
+            <span class="tpl-row-num" style="min-width:20px;font-size:11px;font-weight:700;color:#818CF8;text-align:right">${count}</span>
+            <span class="flex-grow-1 small fw-semibold" style="color:var(--navy)">${tpl.name}</span>
+            <button type="button" onclick="deleteTpl(${tpl.id}, this)"
+                    style="width:24px;height:24px;border-radius:50%;background:#FEE2E2;color:#991B1B;
+                           border:1px solid #FECACA;cursor:pointer;font-size:13px;font-weight:700;
+                           display:flex;align-items:center;justify-content:center;padding:0;line-height:1;flex-shrink:0"
+                    title="Remove">×</button>`;
+        list.appendChild(div);
+        input.value = '';
+        renumberTpls();
+    })
+    .catch(() => alert('Failed to add. Please try again.'));
+}
+
+function deleteTpl(id, btn) {
+    if (!confirm('Remove this default sub-entry?')) return;
+    const url = TPL_DESTROY_URL.replace('__ID__', id);
+    fetch(url, {
+        method: 'DELETE',
+        headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
+    })
+    .then(r => r.ok ? r.json() : Promise.reject(r))
+    .then(() => {
+        const row = btn.closest('.tpl-row');
+        row.remove();
+        if (!document.querySelectorAll('#tpl-list .tpl-row').length) {
+            const empty = document.createElement('div');
+            empty.id = 'tpl-empty';
+            empty.className = 'text-muted small text-center py-2';
+            empty.textContent = 'No default sub-entries defined yet.';
+            document.getElementById('tpl-list').appendChild(empty);
+        }
+        renumberTpls();
+    })
+    .catch(() => alert('Failed to remove. Please try again.'));
+}
+
+document.getElementById('tpl-name-input')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); addTpl(); }
+});
+</script>
 
 @if($yearTrend->count() > 0)
 <script>

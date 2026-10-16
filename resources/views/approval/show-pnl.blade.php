@@ -20,7 +20,7 @@
     </div>
     <div class="d-flex align-items-center gap-2">
         <div class="btn-group btn-group-sm" role="group">
-            <a href="{{ route('approvals.show', $budgetVersion) }}?classic=1" class="btn btn-outline-secondary">Classic View</a>
+            <a href="{{ route('approvals.show', $budgetVersion) }}" class="btn btn-outline-secondary">Classic View</a>
             <span class="btn btn-secondary" style="pointer-events:none;">P&amp;L View</span>
         </div>
         <div class="dropdown">
@@ -245,6 +245,30 @@
                                     {{ number_format($item->effectiveBudget(), 2) }}
                                 </td>
                             </tr>
+                            @foreach($item->subEntries as $si => $sub)
+                            <tr style="background:#F0F4FF;border-left:3px solid #818CF8">
+                                <td class="small" style="padding-left:28px">
+                                    <span style="color:#818CF8;font-weight:700;margin-right:4px">{{ $si + 1 }}</span>
+                                    <span style="color:#4338CA">↳ {{ $sub->name }}</span>
+                                </td>
+                                @foreach($periodCols as $pKey => $pLabel)
+                                @php
+                                    $subVal = str_starts_with($pKey, 'q')
+                                        ? match($pKey) {
+                                            'q1' => $sub->m1_amount + $sub->m2_amount + $sub->m3_amount,
+                                            'q2' => $sub->m4_amount + $sub->m5_amount + $sub->m6_amount,
+                                            'q3' => $sub->m7_amount + $sub->m8_amount + $sub->m9_amount,
+                                            'q4' => $sub->m10_amount + $sub->m11_amount + $sub->m12_amount,
+                                            default => 0,
+                                        }
+                                        : (float) $sub->{$pKey.'_amount'};
+                                @endphp
+                                <td class="text-end small" style="color:#818CF8">{{ number_format($subVal, 2) }}</td>
+                                @endforeach
+                                <td></td>
+                                <td class="text-end small fw-semibold" style="color:#4338CA">{{ number_format($sub->total_amount, 2) }}</td>
+                            </tr>
+                            @endforeach
                             @endforeach
                         </tbody>
                         <tfoot style="background:#F8FAFC;font-weight:700;font-size:11px">
@@ -305,6 +329,30 @@
                                     {{ number_format($item->effectiveBudget(), 2) }}
                                 </td>
                             </tr>
+                            @foreach($item->subEntries as $si => $sub)
+                            <tr style="background:#F0F4FF;border-left:3px solid #818CF8">
+                                <td class="small" style="padding-left:28px">
+                                    <span style="color:#818CF8;font-weight:700;margin-right:4px">{{ $si + 1 }}</span>
+                                    <span style="color:#4338CA">↳ {{ $sub->name }}</span>
+                                </td>
+                                @foreach($periodCols as $pKey => $pLabel)
+                                @php
+                                    $subVal = str_starts_with($pKey, 'q')
+                                        ? match($pKey) {
+                                            'q1' => $sub->m1_amount + $sub->m2_amount + $sub->m3_amount,
+                                            'q2' => $sub->m4_amount + $sub->m5_amount + $sub->m6_amount,
+                                            'q3' => $sub->m7_amount + $sub->m8_amount + $sub->m9_amount,
+                                            'q4' => $sub->m10_amount + $sub->m11_amount + $sub->m12_amount,
+                                            default => 0,
+                                        }
+                                        : (float) $sub->{$pKey.'_amount'};
+                                @endphp
+                                <td class="text-end small" style="color:#818CF8">{{ number_format($subVal, 2) }}</td>
+                                @endforeach
+                                <td></td>
+                                <td class="text-end small fw-semibold" style="color:#4338CA">{{ number_format($sub->total_amount, 2) }}</td>
+                            </tr>
+                            @endforeach
                             @endforeach
                         </tbody>
                         <tfoot style="background:#F8FAFC;font-weight:700;font-size:11px">

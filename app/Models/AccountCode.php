@@ -13,7 +13,7 @@ class AccountCode extends Model
     protected $fillable = [
         'account_category_id', 'code', 'name', 'description',
         'unit', 'calc_type', 'calc_config', 'sort_order', 'is_active',
-        'default_rate', 'default_frequency',
+        'default_rate', 'default_frequency', 'scope',
     ];
 
     protected $casts = [
@@ -45,5 +45,10 @@ class AccountCode extends Model
     public function lineItems()
     {
         return $this->hasMany(BudgetLineItem::class);
+    }
+
+    public function subEntryTemplates()
+    {
+        return $this->hasMany(AccountCodeSubEntryTemplate::class)->orderBy('sort_order')->orderBy('id');
     }
 }

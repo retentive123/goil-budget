@@ -116,7 +116,10 @@ class SubsidiaryController extends Controller
     public function accountCodes(Subsidiary $subsidiary)
     {
         $assigned = $subsidiary->accountCodes()->pluck('account_codes.id')->toArray();
-        $all      = AccountCode::with('category')->where('is_active', true)->orderBy('code')->get();
+        $all      = AccountCode::with('category')
+            ->where('is_active', true)
+            ->where('scope', 'subsidiary')
+            ->orderBy('code')->get();
 
         return view('admin.subsidiaries.account-codes', compact('subsidiary', 'assigned', 'all'));
     }
