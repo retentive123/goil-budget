@@ -8,7 +8,7 @@ class Subsidiary extends Model
 {
     protected $fillable = [
         'subsidiary_category_id', 'name', 'code',
-        'description', 'is_active', 'sort_order',
+        'description', 'is_active', 'sort_order', 'approval_route',
     ];
 
     protected $casts = ['is_active' => 'boolean'];

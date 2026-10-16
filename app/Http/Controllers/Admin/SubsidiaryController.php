@@ -51,6 +51,7 @@ class SubsidiaryController extends Controller
             'description'            => ['nullable', 'string', 'max:500'],
             'is_active'              => ['nullable', 'boolean'],
             'sort_order'             => ['nullable', 'integer', 'min:0'],
+            'approval_route'         => ['required', 'in:gceo,coo,direct'],
         ]);
 
         $data['is_active']  = $request->boolean('is_active', true);
@@ -85,6 +86,7 @@ class SubsidiaryController extends Controller
             'description'            => ['nullable', 'string', 'max:500'],
             'is_active'              => ['nullable', 'boolean'],
             'sort_order'             => ['nullable', 'integer', 'min:0'],
+            'approval_route'         => ['required', 'in:gceo,coo,direct'],
         ]);
 
         $data['is_active']  = $request->boolean('is_active', true);

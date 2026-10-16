@@ -66,6 +66,7 @@
                     <th style="padding:10px 16px">Category</th>
                     <th style="padding:10px 16px;text-align:center">Codes</th>
                     <th style="padding:10px 16px;text-align:center">Users</th>
+                    <th style="padding:10px 16px;text-align:center">Approval Route</th>
                     <th style="padding:10px 16px;text-align:center">Status</th>
                     <th style="padding:10px 16px"></th>
                 </tr>
@@ -89,6 +90,19 @@
                         </a>
                     </td>
                     <td style="padding:12px 16px;text-align:center;font-size:13px">{{ $sub->users_count }}</td>
+                    <td style="padding:12px 16px;text-align:center">
+                        @php
+                            $route = $sub->approval_route ?? 'gceo';
+                            [$routeBg, $routeColor] = match($route) {
+                                'coo'    => ['#FEF3C7', '#92400E'],
+                                'direct' => ['#F0FDF4', '#166534'],
+                                default  => ['#EFF6FF', '#1D4ED8'],
+                            };
+                        @endphp
+                        <span class="badge" style="background:{{ $routeBg }};color:{{ $routeColor }}">
+                            {{ \App\Models\ApprovalStage::$routes[$route] ?? $route }}
+                        </span>
+                    </td>
                     <td style="padding:12px 16px;text-align:center">
                         @if($sub->is_active)
                             <span class="badge" style="background:#D1FAE5;color:#065F46">Active</span>

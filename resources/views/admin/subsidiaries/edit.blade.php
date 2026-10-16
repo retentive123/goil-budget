@@ -81,6 +81,21 @@
                     </div>
                 </div>
 
+                <div class="mb-4">
+                    <label class="form-label fw-semibold small">Approval Route <span class="text-danger">*</span></label>
+                    <select name="approval_route" class="form-select @error('approval_route') is-invalid @enderror">
+                        @foreach(\App\Models\ApprovalStage::$routes as $key => $label)
+                        <option value="{{ $key }}" {{ old('approval_route', $subsidiary->approval_route ?? 'gceo') === $key ? 'selected' : '' }}>
+                            {{ $label }}
+                        </option>
+                        @endforeach
+                    </select>
+                    <div class="form-text text-muted" style="font-size:11px">
+                        Which middle approver this subsidiary's budget passes through before the Board.
+                    </div>
+                    @error('approval_route')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                </div>
+
                 <div class="d-flex gap-2">
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-save me-1"></i>Save Changes
