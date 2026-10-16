@@ -5,6 +5,9 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use App\Observers\UniversalAuditObserver;
 use App\Models\Zone;
 
@@ -45,6 +48,11 @@ class AppServiceProvider extends ServiceProvider
         foreach ($models as $model) {
             $model::observe(UniversalAuditObserver::class);
         }
+
+        // 5 login attempts per minute per IP — prevents brute-force
+        RateLimiter::for('login', function (Request $request) {
+            return Limit::perMinute(5)->by($request->ip());
+        });
 
         // Bind 'serviceStation' route parameter to the Department model
         Route::bind('serviceStation', fn($value) => Department::serviceStations()->findOrFail($value));

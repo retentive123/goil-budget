@@ -165,6 +165,17 @@
                             @if($user->department?->isServiceStation())
                             <span style="font-size:10px;color:#2563EB;display:block;margin-top:1px">station</span>
                             @endif
+                            @php
+                                $extras = $user->approvalDepartments
+                                    ->reject(fn($d) => $d->id === $user->department_id);
+                            @endphp
+                            @foreach($extras as $extra)
+                            <span style="display:inline-block;margin-top:2px;padding:1px 7px;
+                                         border-radius:6px;font-size:10px;
+                                         background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE">
+                                + {{ $extra->name }}
+                            </span>
+                            @endforeach
                         </td>
                         <td class="px-4 py-3">
                             @foreach($user->roles as $role)

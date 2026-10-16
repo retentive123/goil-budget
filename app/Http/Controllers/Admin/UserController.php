@@ -20,7 +20,7 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
-        $query = User::with(['department', 'roles']);
+        $query = User::with(['department', 'subsidiary', 'roles', 'approvalDepartments']);
 
         // Search filter
         if ($request->filled('search')) {
