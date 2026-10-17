@@ -838,8 +838,8 @@
                 <i class="bi bi-percent nav-icon"></i>
                 <span class="link-text">Ratio Analysis</span>
             </a>
-            <a href="{{ route('reports.consolidated') }}"
-               class="sidebar-link {{ request()->routeIs('reports.consolidated') ? 'active' : '' }}">
+            <a href="{{ route('reports.consolidated-hub') }}"
+               class="sidebar-link {{ request()->routeIs('reports.consolidated-hub','reports.consolidated','reports.consolidated-departments','reports.consolidated-subsidiaries') ? 'active' : '' }}">
                 <i class="bi bi-layers nav-icon"></i>
                 <span class="link-text">Consolidated</span>
             </a>
@@ -1516,7 +1516,7 @@ window.NAV_ITEMS = [
     { label:'Capital Expenditure',  keywords:['capex','capital','expenditure','report'],icon:'fas fa-hard-hat',              section:'Reports',         url:'{{ route('reports.capex') }}' },
     { label:'Subsidiary Report',   keywords:['subsidiary','subsidiaries','report','entity budget'],icon:'bi bi-building',      section:'Reports',         url:'{{ route('reports.subsidiary') }}' },
     { label:'Ratio Analysis',      keywords:['ratio','ratios','analysis','utilisation rate','kpi','efficiency','intensity'], icon:'bi bi-percent',           section:'Reports', url:'{{ route('reports.ratios') }}' },
-    { label:'Consolidated Report', keywords:['consolidated','group','rollup','multi-department','all departments'],            icon:'bi bi-layers',            section:'Reports', url:'{{ route('reports.consolidated') }}' },
+    { label:'Consolidated Reports',              keywords:['consolidated','group','departments','subsidiaries','rollup','gel','gul','goenergy','upstream'], icon:'bi bi-layers', section:'Reports', url:'{{ route('reports.consolidated-hub') }}' },
     { label:'Compliance Report',   keywords:['compliance','timeliness','submission','on time','deadline'],                     icon:'bi bi-check2-circle',     section:'Reports', url:'{{ route('reports.compliance') }}' },
     { label:'Dept Ranking',        keywords:['ranking','league table','performance','best department','worst'],                icon:'bi bi-trophy',            section:'Reports', url:'{{ route('reports.ranking') }}' },
     { label:'Virement Impact',     keywords:['virement','impact','movement','account code','transfers'],                       icon:'bi bi-arrow-left-right',  section:'Reports', url:'{{ route('reports.virement-impact') }}' },

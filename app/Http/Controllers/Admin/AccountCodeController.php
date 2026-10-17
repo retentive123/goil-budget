@@ -32,6 +32,11 @@ class AccountCodeController extends Controller
             });
         }
 
+        // Apply budget type filter (via category)
+        if ($request->filled('type')) {
+            $query->whereHas('category', fn($q) => $q->where('budget_type', $request->type));
+        }
+
         // Apply status filter
         if ($request->filled('status')) {
             if ($request->status === 'active') {
@@ -41,14 +46,22 @@ class AccountCodeController extends Controller
             }
         }
 
-        // Get per_page value (default 10)
-        $perPage = $request->input('per_page', 10);
-        $perPage = in_array($perPage, [10, 25, 50, 100, 200]) ? $perPage : 10;
+        // Get per_page value
+        $perPage = $request->input('per_page', 50);
+        $validPerPage = in_array($perPage, [25, 50, 100, 200, 'all']);
+        if (!$validPerPage) $perPage = 50;
 
         // Order and paginate with query string preservation
-        $codes = $query->orderBy('code')
-                       ->paginate($perPage)
-                       ->withQueryString();
+        if ($perPage === 'all') {
+            $total = $query->count();
+            $codes = $query->orderBy('code')
+                           ->paginate($total ?: 1)
+                           ->withQueryString();
+        } else {
+            $codes = $query->orderBy('code')
+                           ->paginate((int) $perPage)
+                           ->withQueryString();
+        }
 
         $categories = AccountCategory::orderBy('name')->get();
 
@@ -170,6 +183,67 @@ class AccountCodeController extends Controller
         abort_if($template->account_code_id !== $accountCode->id, 404);
         $template->delete();
         return response()->json(['ok' => true]);
+    }
+
+    public function export(Request $request)
+    {
+        $scope = $request->input('scope', 'department');
+
+        $query = AccountCode::with('category')
+            ->where('scope', $scope);
+
+        if ($request->filled('category')) {
+            $query->where('account_category_id', $request->category);
+        }
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('code', 'LIKE', "%{$search}%")
+                  ->orWhere('name', 'LIKE', "%{$search}%");
+            });
+        }
+        if ($request->filled('type')) {
+            $query->whereHas('category', fn($q) => $q->where('budget_type', $request->type));
+        }
+        if ($request->filled('status')) {
+            if ($request->status === 'active') {
+                $query->where('is_active', true);
+            } elseif ($request->status === 'inactive') {
+                $query->where('is_active', false);
+            }
+        }
+
+        $codes = $query->orderBy('code')->get();
+
+        $filename = 'account-codes-' . $scope . '-' . now()->format('Ymd-His') . '.csv';
+
+        $headers = [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ];
+
+        $callback = function () use ($codes, $scope) {
+            $out = fopen('php://output', 'w');
+            // UTF-8 BOM for Excel compatibility
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, ['Code', 'Name', 'Category', 'Budget Type', 'Scope', 'Status', 'Default Rate', 'Default Frequency', 'Description']);
+            foreach ($codes as $code) {
+                fputcsv($out, [
+                    $code->code,
+                    $code->name,
+                    $code->category?->name ?? '',
+                    $code->category?->budget_type ?? '',
+                    $scope,
+                    $code->is_active ? 'Active' : 'Inactive',
+                    $code->default_rate ?? '',
+                    $code->default_frequency ?? '',
+                    $code->description ?? '',
+                ]);
+            }
+            fclose($out);
+        };
+
+        return response()->stream($callback, 200, $headers);
     }
 
     public function bulkDestroy(Request $request)

@@ -55,8 +55,31 @@
     <div class="card-body p-4">
         <h5 class="fw-bold mb-4">Add Account Code</h5>
 
+        @php $scope = request('scope', 'department'); @endphp
+
         <form method="POST" action="{{ route('admin.account-codes.store') }}">
             @csrf
+            <input type="hidden" name="scope" value="{{ $scope }}">
+
+            {{-- Scope indicator --}}
+            <div class="mb-4 p-3 rounded d-flex align-items-center gap-2"
+                 style="background:{{ $scope === 'subsidiary' ? '#EEF2FF' : '#F0FDF4' }};border:1px solid {{ $scope === 'subsidiary' ? '#C7D2FE' : '#BBF7D0' }};">
+                <i class="bi bi-{{ $scope === 'subsidiary' ? 'buildings-fill' : 'diagram-3-fill' }}"
+                   style="color:{{ $scope === 'subsidiary' ? '#4338CA' : '#166534' }};font-size:18px;"></i>
+                <div>
+                    <div class="fw-semibold" style="font-size:13px;color:{{ $scope === 'subsidiary' ? '#3730A3' : '#14532D' }};">
+                        {{ $scope === 'subsidiary' ? 'Subsidiary Code' : 'Department Code' }}
+                    </div>
+                    <div class="text-muted" style="font-size:11px;">
+                        {{ $scope === 'subsidiary' ? 'This code will be available to assign to subsidiaries (GEL, GUL, GOB, etc.)' : 'This code will be available to assign to GOIL departments.' }}
+                    </div>
+                </div>
+                <a href="{{ route('admin.account-codes.create', ['scope' => $scope === 'subsidiary' ? 'department' : 'subsidiary']) }}"
+                   class="btn btn-sm ms-auto"
+                   style="font-size:11px;background:{{ $scope === 'subsidiary' ? '#E0E7FF' : '#DCFCE7' }};color:{{ $scope === 'subsidiary' ? '#3730A3' : '#14532D' }};border:none;">
+                    Switch to {{ $scope === 'subsidiary' ? 'Department' : 'Subsidiary' }}
+                </a>
+            </div>
 
             {{-- Category — searchable Tom Select --}}
             <div class="mb-3">

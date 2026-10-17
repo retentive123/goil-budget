@@ -16,9 +16,15 @@
             Manage account codes and their category assignments
         </p>
     </div>
-    <a href="{{ route('admin.account-codes.create', ['scope' => $scope]) }}" class="btn btn-primary btn-sm">
-        <i class="bi bi-plus-circle"></i> Add Code
-    </a>
+    <div class="d-flex gap-2">
+        <a href="{{ route('admin.account-codes.export', array_merge(request()->only(['scope','category','search','status','type']), ['scope' => $scope])) }}"
+           class="btn btn-outline-success btn-sm">
+            <i class="bi bi-download"></i> Export CSV
+        </a>
+        <a href="{{ route('admin.account-codes.create', ['scope' => $scope]) }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-circle"></i> Add Code
+        </a>
+    </div>
 </div>
 
 {{-- Scope tabs --}}
@@ -112,13 +118,23 @@
                 <button type="submit" class="btn btn-outline-secondary">
                     <i class="bi bi-search"></i>
                 </button>
-                @if(request('search') || request('category') || request('status'))
+                @if(request('search') || request('category') || request('status') || request('type'))
                 <a href="{{ route('admin.account-codes.index', ['scope' => $scope]) }}"
                    class="btn btn-outline-secondary">
                     <i class="bi bi-x"></i> Clear
                 </a>
                 @endif
             </div>
+        </div>
+
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold mb-0">Type</label>
+            <select name="type" class="form-select form-select-sm filter-select">
+                <option value="">All types</option>
+                <option value="expense"             {{ request('type') === 'expense'             ? 'selected' : '' }}>Expense</option>
+                <option value="revenue"             {{ request('type') === 'revenue'             ? 'selected' : '' }}>Revenue</option>
+                <option value="capital_expenditure" {{ request('type') === 'capital_expenditure' ? 'selected' : '' }}>CapEx</option>
+            </select>
         </div>
 
         <div class="col-md-2">
@@ -133,10 +149,11 @@
         <div class="col-md-2">
             <label class="form-label small fw-semibold mb-0">Per Page</label>
             <select name="per_page" class="form-select form-select-sm filter-select">
-                <option value="25" {{ request('per_page') == 25 ? 'selected' : '' }}>25</option>
-                <option value="50" {{ request('per_page') == 50 || !request('per_page') ? 'selected' : '' }}>50</option>
+                <option value="25"  {{ request('per_page') == 25 ? 'selected' : '' }}>25</option>
+                <option value="50"  {{ request('per_page') == 50 || !request('per_page') ? 'selected' : '' }}>50</option>
                 <option value="100" {{ request('per_page') == 100 ? 'selected' : '' }}>100</option>
                 <option value="200" {{ request('per_page') == 200 ? 'selected' : '' }}>200</option>
+                <option value="all" {{ request('per_page') == 'all' ? 'selected' : '' }}>All</option>
             </select>
         </div>
 

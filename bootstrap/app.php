@@ -19,10 +19,6 @@ return Application::configure(basePath: dirname(__DIR__))
                     ? Limit::perMinute(120)->by($request->user()->id)
                     : Limit::perMinute(20)->by($request->ip());
             });
-
-            RateLimiter::for('login', function ($request) {
-                return Limit::perMinute(5)->by($request->ip());
-            });
         }
     )
     ->withMiddleware(function (Middleware $middleware) {

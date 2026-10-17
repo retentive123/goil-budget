@@ -96,6 +96,7 @@ Route::middleware('auth')->group(function () {
         // Departments — mass-assign before resource so literal segment isn't swallowed by {department}
         Route::get('departments/mass-assign',  [DepartmentController::class, 'massAssignForm'])->name('departments.mass-assign');
         Route::post('departments/mass-assign', [DepartmentController::class, 'massAssign'])->name('departments.mass-assign.store');
+        Route::get('departments/codes-explorer', [DepartmentController::class, 'codesExplorer'])->name('departments.codes-explorer');
         Route::resource('departments', DepartmentController::class);
         Route::get('departments/{department}/account-codes',        [DepartmentController::class, 'accountCodes'])->name('departments.account-codes');
         Route::post('departments/{department}/account-codes',       [DepartmentController::class, 'syncAccountCodes'])->name('departments.sync-account-codes');
@@ -148,6 +149,7 @@ Route::middleware('auth')->group(function () {
         Route::resource('account-categories', AccountCategoryController::class);
         Route::resource('account-codes', AccountCodeController::class);
         Route::delete('account-codes', [AccountCodeController::class, 'bulkDestroy'])->name('account-codes.bulk-destroy');
+        Route::get('account-codes-export', [AccountCodeController::class, 'export'])->name('account-codes.export');
         Route::post('account-codes/{accountCode}/templates', [AccountCodeController::class, 'storeTemplate'])->name('account-codes.templates.store');
         Route::delete('account-codes/{accountCode}/templates/{template}', [AccountCodeController::class, 'destroyTemplate'])->name('account-codes.templates.destroy');
 
@@ -328,7 +330,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/ratios/export',   [RatioAnalysisController::class, 'export'])->name('ratios.export');
 
     // ── New analytical reports ────────────────────────────────────────────────
-    Route::get('/consolidated',        [ReportController::class, 'consolidated'])->name('consolidated');
+    Route::get('/consolidated-hub',              fn() => view('reports.consolidated-hub'))->name('consolidated-hub');
+    Route::get('/consolidated',                  [ReportController::class, 'consolidated'])->name('consolidated');
+    Route::get('/consolidated-departments',      [ReportController::class, 'consolidatedDepartments'])->name('consolidated-departments');
+    Route::get('/consolidated-subsidiaries',     [ReportController::class, 'consolidatedSubsidiaries'])->name('consolidated-subsidiaries');
     Route::get('/compliance',          [ReportController::class, 'compliance'])->name('compliance');
     Route::get('/ranking',             [ReportController::class, 'ranking'])->name('ranking');
     Route::get('/virement-impact',     [ReportController::class, 'virementImpact'])->name('virement-impact');

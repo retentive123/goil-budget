@@ -284,12 +284,54 @@
         <div class="chart-card h-100 d-flex flex-column">
             <h6 class="fw-bold mb-1">Consolidated Group Report</h6>
             <p class="text-muted small flex-grow-1">
-                All departments and subsidiaries rolled up into a single group-level
-                budget view. Quarterly breakdown with supplementary totals.
+                All departments and subsidiaries in one list — entity-level totals,
+                quarterly breakdown, and supplementary amounts at a glance.
             </p>
             <a href="{{ route('reports.consolidated') }}"
                class="btn btn-sm"
                style="background:#E65C00;color:#fff;border-radius:8px">
+                Open Report →
+            </a>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="chart-card h-100 d-flex flex-column position-relative"
+             style="border-top:3px solid #1B2A4A">
+            <span class="badge position-absolute top-0 end-0 m-2"
+                  style="background:#EFF6FF;color:#1e40af;font-size:10px">New</span>
+            <h6 class="fw-bold mb-1" style="color:var(--navy)">
+                <i class="bi bi-diagram-3 me-1"></i>Consolidated Departments
+            </h6>
+            <p class="text-muted small flex-grow-1">
+                All approved department budgets rolled up by account code.
+                Rows = codes, columns = departments. Identify where each cost
+                line sits across the whole organisation.
+            </p>
+            <a href="{{ route('reports.consolidated-departments') }}"
+               class="btn btn-sm"
+               style="background:var(--navy);color:#fff;border-radius:8px">
+                Open Report →
+            </a>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="chart-card h-100 d-flex flex-column position-relative"
+             style="border-top:3px solid #C9A84C">
+            <span class="badge position-absolute top-0 end-0 m-2"
+                  style="background:#FEF3C7;color:#92400E;font-size:10px">New</span>
+            <h6 class="fw-bold mb-1" style="color:#92400E">
+                <i class="bi bi-buildings me-1"></i>Consolidated Subsidiaries
+            </h6>
+            <p class="text-muted small flex-grow-1">
+                GEL and GUL budgets consolidated by account code.
+                Rows = subsidiary-specific codes, columns = subsidiaries.
+                Revenue, cost of sales, expenses and capex on one page.
+            </p>
+            <a href="{{ route('reports.consolidated-subsidiaries') }}"
+               class="btn btn-sm"
+               style="background:#C9A84C;color:#1B2A4A;border-radius:8px;font-weight:600">
                 Open Report →
             </a>
         </div>

@@ -258,4 +258,19 @@ class DepartmentController extends Controller
 
         return response()->stream($callback, 200, $headers);
     }
+
+    public function codesExplorer(Request $request)
+    {
+        $departments = Department::departments()
+            ->where('is_active', true)
+            ->with(['accountCodes' => fn($q) => $q->with('category')->orderBy('account_codes.code')])
+            ->orderBy('name')
+            ->get();
+
+        $selectedId = $request->department_id
+            ? (int) $request->department_id
+            : $departments->first()?->id;
+
+        return view('admin.departments.codes-explorer', compact('departments', 'selectedId'));
+    }
 }

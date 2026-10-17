@@ -80,7 +80,7 @@ class ApprovalController extends Controller
         $priorReductionLias = collect(); // item_id => LineItemApproval
         foreach ($budgetVersion->approvalDecisions as $dec) {
             foreach ($dec->lineItemApprovals as $lia) {
-                if ($lia->status === 'reduced' && $lia->approved_amount !== null) {
+                if (in_array($lia->status, ['reduced', 'increased']) && $lia->approved_amount !== null) {
                     $priorReductions[$lia->budget_line_item_id]    = (float) $lia->approved_amount;
                     $priorReductionLias[$lia->budget_line_item_id] = $lia;
                 }
@@ -156,7 +156,7 @@ class ApprovalController extends Controller
             $priorReductions = collect();
             foreach ($budgetVersion->approvalDecisions as $dec) {
                 foreach ($dec->lineItemApprovals as $lia) {
-                    if ($lia->status === 'reduced' && $lia->approved_amount !== null) {
+                    if (in_array($lia->status, ['reduced', 'increased']) && $lia->approved_amount !== null) {
                         $priorReductions[$lia->budget_line_item_id] = (float) $lia->approved_amount;
                     }
                 }
@@ -199,6 +199,33 @@ class ApprovalController extends Controller
                                     $amountErrors[] = '"' . $code . '" requires a period breakdown (months/quarters) when reducing.';
                                 } elseif (abs($periodSum - $approvedAmount) > 0.01) {
                                     $amountErrors[] = '"' . $code . '" period breakdown total (' . number_format($periodSum, 2) . ') must equal the reduced amount (' . number_format($approvedAmount, 2) . ').';
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if ($data['status'] === 'increased') {
+                    $item = $itemsById->get($itemId);
+                    if ($item) {
+                        $code = $item->accountCode->code;
+                        if (!$allowRestore) {
+                            $amountErrors[] = '"' . $code . '" cannot be increased — the adjust setting is not enabled.';
+                        } elseif ($item->subEntries()->exists()) {
+                            $amountErrors[] = '"' . $code . '" has sub-items and cannot be increased at the parent level.';
+                        } elseif ($approvedAmount !== null) {
+                            $originalBudget = (float) $item->effectiveBudget();
+                            if ($approvedAmount <= 0) {
+                                $amountErrors[] = '"' . $code . '" increased amount must be greater than zero.';
+                            } elseif ($approvedAmount <= $originalBudget) {
+                                $amountErrors[] = '"' . $code . '" increased amount (' . number_format($approvedAmount, 2) . ') must be greater than the original budget (' . number_format($originalBudget, 2) . ').';
+                            } else {
+                                $periodAmounts = $data['period_amounts'] ?? [];
+                                $periodSum = round(array_sum(array_map('floatval', array_values($periodAmounts))), 2);
+                                if (empty($periodAmounts) || $periodSum == 0) {
+                                    $amountErrors[] = '"' . $code . '" requires a period breakdown when increasing.';
+                                } elseif (abs($periodSum - $approvedAmount) > 0.01) {
+                                    $amountErrors[] = '"' . $code . '" period breakdown total (' . number_format($periodSum, 2) . ') must equal the increased amount (' . number_format($approvedAmount, 2) . ').';
                                 }
                             }
                         }

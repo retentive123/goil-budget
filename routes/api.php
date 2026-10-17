@@ -18,7 +18,7 @@ Route::post('/auth/login', [AuthController::class, 'login'])
     ->middleware('throttle:login');
 
 // Protected routes
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     // ── Auth ──
     Route::post('/auth/logout', [AuthController::class, 'logout']);

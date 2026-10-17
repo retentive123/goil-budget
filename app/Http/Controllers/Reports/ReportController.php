@@ -3751,5 +3751,245 @@ private function buildReductionsMap($versions): array
     return [$reductions, $monthlyReductions];
 }
 
+// ── Consolidated Departments ──────────────────────────────────────────────
+public function consolidatedDepartments(Request $request)
+{
+    $periods   = BudgetPeriod::orderByDesc('year')->get();
+    $period    = $this->resolvePeriod($request);
+    $basis     = $request->input('budget_basis', 'original');
+    $entryMode = $period?->entry_mode ?? \App\Models\SystemSetting::get('budget_entry_mode', 'quarterly');
+
+    if (!$period) {
+        return view('reports.consolidated-departments', [
+            'periods' => $periods, 'period' => null,
+            'categories' => collect(), 'departments' => collect(),
+            'basis' => $basis, 'entryMode' => $entryMode,
+            'grandTotal' => 0,
+        ]);
+    }
+
+    $versionIds = $this->effectiveVersionIds($period, $basis);
+    $versions   = BudgetVersion::with([
+            'department',
+            'lineItems.accountCode.category',
+            'approvalDecisions.lineItemApprovals',
+        ])
+        ->whereIn('id', $versionIds)
+        ->whereNotNull('department_id')
+        ->get();
+
+    [$reductions] = $this->buildReductionsMap($versions);
+
+    // Index of departments that have approved budgets (ordered by code)
+    $departments = $versions
+        ->map(fn($v) => $v->department)
+        ->filter()
+        ->sortBy('code')
+        ->values();
+
+    // Build: category → code → dept_id → amount
+    $tree = [];   // [catId => ['cat' => obj, 'codes' => [codeId => ['code' => obj, 'depts' => [deptId => amt]]]]]
+
+    foreach ($versions as $version) {
+        $deptId = $version->department_id;
+        foreach ($version->lineItems as $item) {
+            $code = $item->accountCode;
+            if (!$code) continue;
+            $cat  = $code->category;
+            if (!$cat) continue;
+
+            $amount = $reductions[$item->id] ?? $item->total_amount;
+            $amount += $item->approvedSupplementaryTotal();
+
+            $catId  = $cat->id;
+            $codeId = $code->id;
+
+            if (!isset($tree[$catId])) {
+                $tree[$catId] = ['cat' => $cat, 'codes' => []];
+            }
+            if (!isset($tree[$catId]['codes'][$codeId])) {
+                $tree[$catId]['codes'][$codeId] = ['code' => $code, 'depts' => []];
+            }
+            $tree[$catId]['codes'][$codeId]['depts'][$deptId]
+                = ($tree[$catId]['codes'][$codeId]['depts'][$deptId] ?? 0) + $amount;
+        }
+    }
+
+    // Sort categories by name, codes within each category by code
+    uasort($tree, fn($a, $b) => strcmp($a['cat']->name, $b['cat']->name));
+    foreach ($tree as &$catRow) {
+        uasort($catRow['codes'], fn($a, $b) => strcmp($a['code']->code, $b['code']->code));
+    }
+    unset($catRow);
+
+    $grandTotal = 0;
+    foreach ($tree as $catRow) {
+        foreach ($catRow['codes'] as $codeRow) {
+            $grandTotal += array_sum($codeRow['depts']);
+        }
+    }
+
+    if ($request->get('export') === 'csv') {
+        $filename = 'consolidated-departments-' . ($period->year ?? 'period') . '.csv';
+        return response()->streamDownload(function () use ($tree, $departments, $period, $basis) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, ['Consolidated Departments Report']);
+            fputcsv($out, ['Period', $period->name ?? $period->year, 'Basis', ucfirst($basis)]);
+            fputcsv($out, []);
+            $header = ['Category', 'Code', 'Description'];
+            foreach ($departments as $d) { $header[] = $d->name . ' (' . $d->code . ')'; }
+            $header[] = 'Total';
+            fputcsv($out, $header);
+            foreach ($tree as $catRow) {
+                fputcsv($out, [$catRow['cat']->name]);
+                foreach ($catRow['codes'] as $codeRow) {
+                    $row = [$catRow['cat']->name, $codeRow['code']->code, $codeRow['code']->name];
+                    $rowTotal = 0;
+                    foreach ($departments as $d) {
+                        $amt = $codeRow['depts'][$d->id] ?? 0;
+                        $row[] = $amt;
+                        $rowTotal += $amt;
+                    }
+                    $row[] = $rowTotal;
+                    fputcsv($out, $row);
+                }
+            }
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv']);
+    }
+
+    return view('reports.consolidated-departments', compact(
+        'periods', 'period', 'basis', 'entryMode',
+        'departments', 'tree', 'grandTotal'
+    ));
+}
+
+// ── Consolidated Subsidiaries ─────────────────────────────────────────────
+public function consolidatedSubsidiaries(Request $request)
+{
+    $periods   = BudgetPeriod::orderByDesc('year')->get();
+    $period    = $this->resolvePeriod($request);
+    $basis     = $request->input('budget_basis', 'original');
+    $entryMode = $period?->entry_mode ?? \App\Models\SystemSetting::get('budget_entry_mode', 'quarterly');
+
+    if (!$period) {
+        return view('reports.consolidated-subsidiaries', [
+            'periods' => $periods, 'period' => null,
+            'categories' => collect(), 'subsidiaries' => collect(),
+            'basis' => $basis, 'entryMode' => $entryMode,
+            'grandTotal' => 0,
+        ]);
+    }
+
+    $subVersions = BudgetVersion::with([
+            'subsidiary',
+            'lineItems.accountCode.category',
+            'approvalDecisions.lineItemApprovals',
+        ])
+        ->where('budget_period_id', $period->id)
+        ->whereNotNull('subsidiary_id')
+        ->where('status', 'approved')
+        ->when($basis === 'revised', function ($q) use ($period) {
+            // keep only latest revision per subsidiary, fall back to original
+            $q->whereIn('id', function ($sub) use ($period) {
+                $sub->selectRaw('MAX(id)')
+                    ->from('budget_versions')
+                    ->where('budget_period_id', $period->id)
+                    ->whereNotNull('subsidiary_id')
+                    ->where('status', 'approved')
+                    ->groupBy('subsidiary_id');
+            });
+        }, function ($q) {
+            $q->where('is_revision', false);
+        })
+        ->get();
+
+    [$reductions] = $this->buildReductionsMap($subVersions);
+
+    $subsidiaries = $subVersions
+        ->map(fn($v) => $v->subsidiary)
+        ->filter()
+        ->sortBy('code')
+        ->values();
+
+    // Build: category → code → subId → amount
+    $tree = [];
+
+    foreach ($subVersions as $version) {
+        $subId = $version->subsidiary_id;
+        foreach ($version->lineItems as $item) {
+            $code = $item->accountCode;
+            if (!$code) continue;
+            $cat  = $code->category;
+            if (!$cat) continue;
+
+            $amount = $reductions[$item->id] ?? $item->total_amount;
+            $amount += $item->approvedSupplementaryTotal();
+
+            $catId  = $cat->id;
+            $codeId = $code->id;
+
+            if (!isset($tree[$catId])) {
+                $tree[$catId] = ['cat' => $cat, 'codes' => []];
+            }
+            if (!isset($tree[$catId]['codes'][$codeId])) {
+                $tree[$catId]['codes'][$codeId] = ['code' => $code, 'depts' => []];
+            }
+            $tree[$catId]['codes'][$codeId]['depts'][$subId]
+                = ($tree[$catId]['codes'][$codeId]['depts'][$subId] ?? 0) + $amount;
+        }
+    }
+
+    // Sort: GEL-CAP before GEL-COS before GEL-EXP, then GEL-REV, then GUL
+    uasort($tree, fn($a, $b) => strcmp($a['cat']->code ?? $a['cat']->name, $b['cat']->code ?? $b['cat']->name));
+    foreach ($tree as &$catRow) {
+        uasort($catRow['codes'], fn($a, $b) => strcmp($a['code']->code, $b['code']->code));
+    }
+    unset($catRow);
+
+    $grandTotal = 0;
+    foreach ($tree as $catRow) {
+        foreach ($catRow['codes'] as $codeRow) {
+            $grandTotal += array_sum($codeRow['depts']);
+        }
+    }
+
+    if ($request->get('export') === 'csv') {
+        $filename = 'consolidated-subsidiaries-' . ($period->year ?? 'period') . '.csv';
+        return response()->streamDownload(function () use ($tree, $subsidiaries, $period, $basis) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, ['Consolidated Subsidiaries Report']);
+            fputcsv($out, ['Period', $period->name ?? $period->year, 'Basis', ucfirst($basis)]);
+            fputcsv($out, []);
+            $header = ['Category', 'Code', 'Description'];
+            foreach ($subsidiaries as $s) { $header[] = $s->name . ' (' . $s->code . ')'; }
+            $header[] = 'Total';
+            fputcsv($out, $header);
+            foreach ($tree as $catRow) {
+                fputcsv($out, [$catRow['cat']->name]);
+                foreach ($catRow['codes'] as $codeRow) {
+                    $row = [$catRow['cat']->name, $codeRow['code']->code, $codeRow['code']->name];
+                    $rowTotal = 0;
+                    foreach ($subsidiaries as $s) {
+                        $amt = $codeRow['depts'][$s->id] ?? 0;
+                        $row[] = $amt;
+                        $rowTotal += $amt;
+                    }
+                    $row[] = $rowTotal;
+                    fputcsv($out, $row);
+                }
+            }
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv']);
+    }
+
+    return view('reports.consolidated-subsidiaries', compact(
+        'periods', 'period', 'basis', 'entryMode',
+        'subsidiaries', 'tree', 'grandTotal'
+    ));
+}
+
 }
 

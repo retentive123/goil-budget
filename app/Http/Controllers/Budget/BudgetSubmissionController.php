@@ -131,11 +131,17 @@ class BudgetSubmissionController extends Controller
             }
         });
 
-        //  Clear dashboard cache
+        // Clear dashboard cache — tags only work with Redis; with database driver
+        // we must delete per-user keys individually (wildcard is not supported).
         if (config('cache.default') === 'redis') {
             Cache::tags(['dashboard'])->flush();
         } else {
-            Cache::forget("dashboard.finance.{$budgetVersion->budget_period_id}.*");
+            $periodId = $budgetVersion->budget_period_id;
+            $userIds  = \App\Models\User::pluck('id');
+            foreach ($userIds as $uid) {
+                Cache::forget("dashboard.finance.{$periodId}.{$uid}");
+                Cache::forget("dashboard.finance.all.{$uid}");
+            }
         }
 
         return redirect()->route('budget.index')

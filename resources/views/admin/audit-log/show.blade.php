@@ -69,6 +69,7 @@
                     <div style="font-size:11px;color:var(--slate);font-family:monospace">
                         {{ class_basename($log->subject_type) }}
                         @if($log->subject_id) #{{ $log->subject_id }} @endif
+                        @if($subjectName) — <span style="font-family:sans-serif">{{ $subjectName }}</span> @endif
                     </div>
                     @endif
                 </div>

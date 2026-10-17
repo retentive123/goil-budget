@@ -19,6 +19,9 @@
                class="btn btn-sm btn-outline-success" style="border-radius: 8px;">
                 <i class="fas fa-file-download"></i> Export / Template
             </a>
+            <a href="{{ route('admin.departments.codes-explorer') }}" class="btn btn-sm btn-outline-secondary" style="border-radius: 8px;">
+                <i class="fas fa-hashtag"></i> Code Explorer
+            </a>
             <a href="{{ route('admin.departments.mass-assign') }}" class="btn btn-sm btn-outline-primary" style="border-radius: 8px;">
                 <i class="fas fa-layer-group"></i> Mass Assign Codes
             </a>
@@ -202,6 +205,12 @@
                                        style="border-radius: 6px; font-size: 11px; padding: 2px 8px;"
                                        title="Manage Account Codes">
                                         <i class="fas fa-hashtag"></i>
+                                    </a>
+                                    <a href="{{ route('admin.departments.codes-explorer', ['department_id' => $dept->id]) }}"
+                                       class="btn btn-sm btn-outline-secondary"
+                                       style="border-radius: 6px; font-size: 11px; padding: 2px 8px;"
+                                       title="View in Code Explorer">
+                                        <i class="fas fa-search"></i>
                                     </a>
                                     <a href="{{ route('admin.departments.export-account-codes', $dept) }}"
                                        class="btn btn-sm btn-outline-success"

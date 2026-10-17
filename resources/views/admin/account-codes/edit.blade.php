@@ -58,6 +58,22 @@
         <form method="POST" action="{{ route('admin.account-codes.update', $accountCode) }}">
             @csrf @method('PUT')
 
+            {{-- Scope badge --}}
+            @php $scope = $accountCode->scope; @endphp
+            <div class="mb-4 p-3 rounded d-flex align-items-center gap-2"
+                 style="background:{{ $scope === 'subsidiary' ? '#EEF2FF' : '#F0FDF4' }};border:1px solid {{ $scope === 'subsidiary' ? '#C7D2FE' : '#BBF7D0' }};">
+                <i class="bi bi-{{ $scope === 'subsidiary' ? 'buildings-fill' : 'diagram-3-fill' }}"
+                   style="color:{{ $scope === 'subsidiary' ? '#4338CA' : '#166534' }};font-size:18px;"></i>
+                <div>
+                    <div class="fw-semibold" style="font-size:13px;color:{{ $scope === 'subsidiary' ? '#3730A3' : '#14532D' }};">
+                        {{ $scope === 'subsidiary' ? 'Subsidiary Code' : 'Department Code' }}
+                    </div>
+                    <div class="text-muted" style="font-size:11px;">
+                        Scope cannot be changed after creation.
+                    </div>
+                </div>
+            </div>
+
             <div class="mb-3">
                 <label class="form-label small fw-semibold">Category</label>
                 <select id="categorySelect" name="account_category_id"

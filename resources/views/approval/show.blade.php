@@ -270,13 +270,24 @@
                                 <td class="text-end small" style="color:{{ $itemSupp > 0 ? '#10B981' : 'inherit' }}">
                                     {{ $itemSupp > 0 ? '+'.number_format($itemSupp, 2) : '—' }}
                                 </td>
+                                @php
+                                    $priorLiaStatus = ($priorReductionLias ?? collect())->get($item->id)?->status;
+                                    $priorIsIncrease = $priorLiaStatus === 'increased';
+                                @endphp
                                 <td class="text-end small fw-semibold">
                                     @if($priorReduction !== null)
                                         <span style="text-decoration:line-through;color:#94A3B8;font-size:10px">{{ number_format($itemOrigEffective, 2) }}</span><br>
+                                        @if($priorIsIncrease)
+                                        <span style="color:#10B981" title="Increased by prior approver">
+                                            {{ number_format($priorReduction, 2) }}
+                                            <i class="bi bi-arrow-up-circle-fill" style="font-size:9px"></i>
+                                        </span>
+                                        @else
                                         <span style="color:#B45309" title="Reduced by prior approver">
                                             {{ number_format($priorReduction, 2) }}
                                             <i class="bi bi-arrow-down-circle-fill" style="font-size:9px"></i>
                                         </span>
+                                        @endif
                                     @else
                                         <span style="color:var(--navy)">{{ number_format($itemEffective, 2) }}</span>
                                     @endif
@@ -290,16 +301,20 @@
                                     <select name="line_items[{{ $item->id }}][status]"
                                         class="form-select form-select-sm li-decision"
                                         form="decision-form"
-                                        data-item="{{ $item->id }}">
+                                        data-item="{{ $item->id }}"
+                                        data-original="{{ $itemOrigEffective }}">
                                         <option value="">—</option>
                                         <option value="approved" @selected($oldStatus === 'approved')>Approve</option>
                                         @if(!$hasSubs)
                                         <option value="reduced"  @selected($oldStatus === 'reduced')>Reduce</option>
+                                        @if($allowRestore ?? false)
+                                        <option value="increased" @selected($oldStatus === 'increased')>Increase</option>
+                                        @endif
                                         @endif
                                         <option value="rejected" @selected($oldStatus === 'rejected')>Reject</option>
                                     </select>
                                     @if($hasSubs)
-                                    <div class="text-muted" style="font-size:10px;margin-top:2px">Has sub-items; reduce not allowed</div>
+                                    <div class="text-muted" style="font-size:10px;margin-top:2px">Has sub-items; reduce/increase not allowed</div>
                                     @endif
                                 </td>
                                 <td style="min-width:180px">
@@ -311,19 +326,20 @@
                                         id="amount-{{ $item->id }}"
                                         placeholder="{{ currency() }}"
                                         min="0.01" step="0.01"
-                                        max="{{ $itemEffective }}"
+                                        @if(!($allowRestore ?? false)) max="{{ $itemEffective }}" @endif
+                                        data-original="{{ $itemOrigEffective }}"
                                         value="{{ old("line_items.{$item->id}.approved_amount") }}"
-                                        title="Enter a reduced amount (max: {{ currency() }} {{ number_format($itemEffective, 2) }})"
                                         data-bs-toggle="tooltip"
                                         data-bs-placement="top"
-                                        style="{{ $oldStatus === 'reduced' ? 'display:block' : 'display:none' }}">
+                                        style="{{ in_array($oldStatus, ['reduced','increased']) ? 'display:block' : 'display:none' }}">
 
-                                    {{-- Restore hint (restore allowed + item was previously reduced) --}}
-                                    @if(($allowRestore ?? false) && $priorReduction !== null)
+                                    {{-- Adjust hint (shown when allowRestore is on) --}}
+                                    @if($allowRestore ?? false)
                                     <div style="font-size:9px;color:#6D28D9;margin-top:3px;display:none" id="restore-hint-{{ $item->id }}">
                                         <i class="bi bi-arrow-up-circle-fill" style="font-size:9px"></i>
-                                        Can restore up to {{ currency() }} {{ number_format($itemOrigEffective, 2) }}
-                                        (prior: {{ number_format($priorReduction, 2) }})
+                                        <span id="hint-text-{{ $item->id }}">
+                                            Increase: enter an amount above {{ currency() }} {{ number_format($itemOrigEffective, 2) }}
+                                        </span>
                                     </div>
                                     @endif
 
@@ -708,19 +724,30 @@ if (typeof bootstrap !== 'undefined') {
     });
 }
 
-// Show/hide reduced amount field and period inputs based on line item decision
+// Show/hide amount field and period inputs based on line item decision
 document.querySelectorAll('.li-decision').forEach(sel => {
     sel.addEventListener('change', function () {
-        const itemId     = this.dataset.item;
-        const amountField  = document.getElementById('amount-' + itemId);
-        const periodsDiv   = document.getElementById('periods-' + itemId);
-        const restoreHint  = document.getElementById('restore-hint-' + itemId);
+        const itemId      = this.dataset.item;
+        const amountField = document.getElementById('amount-' + itemId);
+        const periodsDiv  = document.getElementById('periods-' + itemId);
+        const restoreHint = document.getElementById('restore-hint-' + itemId);
+        const hintText    = document.getElementById('hint-text-' + itemId);
         if (!amountField) return;
-        const isReduced = this.value === 'reduced';
-        amountField.style.display = isReduced ? 'block' : 'none';
-        if (periodsDiv)  periodsDiv.style.display  = isReduced ? 'block' : 'none';
-        if (restoreHint) restoreHint.style.display = isReduced ? 'block' : 'none';
-        if (isReduced) amountField.focus();
+        const isReduced   = this.value === 'reduced';
+        const isIncreased = this.value === 'increased';
+        const needsAmount = isReduced || isIncreased;
+        amountField.style.display = needsAmount ? 'block' : 'none';
+        if (periodsDiv)  periodsDiv.style.display  = needsAmount ? 'block' : 'none';
+        if (restoreHint) restoreHint.style.display = needsAmount ? 'block' : 'none';
+        if (hintText) {
+            const orig = parseFloat(this.dataset.original) || 0;
+            if (isIncreased) {
+                hintText.textContent = 'Enter an amount above ' + orig.toLocaleString('en-GH', {minimumFractionDigits:2,maximumFractionDigits:2});
+            } else if (isReduced) {
+                hintText.textContent = 'Enter an amount below ' + orig.toLocaleString('en-GH', {minimumFractionDigits:2,maximumFractionDigits:2});
+            }
+        }
+        if (needsAmount) amountField.focus();
         checkPeriodBalance(itemId);
     });
 });
@@ -762,12 +789,25 @@ document.querySelectorAll('.period-input').forEach(inp => {
 
 // Real-time red border on amount inputs when value is invalid
 function validateAmountInput(inp) {
-    const max = parseFloat(inp.getAttribute('max'));
-    const val = parseFloat(inp.value);
-    const invalid = inp.value !== '' && (isNaN(val) || val <= 0 || (!isNaN(max) && val >= max));
-    inp.style.borderColor  = invalid ? '#EF4444' : '';
-    inp.style.background   = invalid ? '#FFF1F2' : '';
-    inp.style.color        = invalid ? '#991B1B' : '';
+    const row    = inp.closest('tr');
+    const sel    = row ? row.querySelector('.li-decision') : null;
+    const status = sel ? sel.value : 'reduced';
+    const max    = parseFloat(inp.getAttribute('max'));
+    const orig   = parseFloat(inp.getAttribute('data-original'));
+    const val    = parseFloat(inp.value);
+    let invalid  = false;
+    if (inp.value !== '') {
+        if (isNaN(val) || val <= 0) {
+            invalid = true;
+        } else if (status === 'increased') {
+            invalid = !isNaN(orig) && val <= orig;
+        } else {
+            invalid = !isNaN(max) && val >= max;
+        }
+    }
+    inp.style.borderColor = invalid ? '#EF4444' : '';
+    inp.style.background  = invalid ? '#FFF1F2' : '';
+    inp.style.color       = invalid ? '#991B1B' : '';
 }
 document.querySelectorAll('.li-amount').forEach(inp => {
     inp.addEventListener('input', () => {

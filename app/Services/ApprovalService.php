@@ -202,7 +202,7 @@ class ApprovalService
                 ], null);
 
                 $pa = $itemData['period_amounts'] ?? [];
-                if ($itemData['status'] === 'reduced' && !empty($pa)) {
+                if (in_array($itemData['status'], ['reduced', 'increased']) && !empty($pa)) {
                     if ($entryMode === 'monthly') {
                         foreach (range(1, 12) as $mn) {
                             $mAmounts["m{$mn}_amount"] = (float) ($pa["m{$mn}"] ?? 0);

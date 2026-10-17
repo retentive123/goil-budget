@@ -53,7 +53,22 @@ class AuditLogController extends Controller
     public function show(int $id)
     {
         $log = SystemAuditLog::with('user')->findOrFail($id);
-        return view('admin.audit-log.show', compact('log'));
+
+        // Resolve a human-readable name for the subject model
+        $subjectName = null;
+        if ($log->subject_type && $log->subject_id) {
+            try {
+                $model = $log->subject_type::find($log->subject_id);
+                if ($model) {
+                    $subjectName = match (true) {
+                        $model instanceof \App\Models\SystemSetting => $model->label ?: $model->key,
+                        default => null,
+                    };
+                }
+            } catch (\Throwable) {}
+        }
+
+        return view('admin.audit-log.show', compact('log', 'subjectName'));
     }
 
     public function purge(Request $request)
