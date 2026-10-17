@@ -210,29 +210,33 @@ public function isOverBudget(int $departmentId, int $periodId): array
             ];
         }
 
-        $deadlineDays = (int) \App\Models\SystemSetting::get('budget_entry_deadline_days', 0);
-
-        if ($deadlineDays === 0) {
-            return [
-                'passed' => false,
-                'deadline' => null,
-                'has_override' => false,
-                'message' => 'Deadline checking is disabled'
-            ];
-        }
-
         $period = BudgetPeriod::find($periodId);
 
         if (!$period || !$period->opened_at) {
             return [
-                'passed' => false,
-                'deadline' => null,
+                'passed'       => false,
+                'deadline'     => null,
                 'has_override' => false,
-                'message' => 'Period not open'
+                'message'      => 'Period not open',
             ];
         }
 
-        $deadline = $period->opened_at->addDays($deadlineDays);
+        // Use the period's own submission_deadline if set; otherwise fall back to
+        // the global days-after-open setting.
+        if ($period->submission_deadline) {
+            $deadline = $period->submission_deadline;
+        } else {
+            $deadlineDays = (int) \App\Models\SystemSetting::get('budget_entry_deadline_days', 0);
+            if ($deadlineDays === 0) {
+                return [
+                    'passed'       => false,
+                    'deadline'     => null,
+                    'has_override' => false,
+                    'message'      => 'Deadline checking is disabled',
+                ];
+            }
+            $deadline = $period->opened_at->addDays($deadlineDays);
+        }
 
         // Check for override
         $override = \App\Models\SubmissionDeadlineOverride::where('budget_period_id', $periodId)

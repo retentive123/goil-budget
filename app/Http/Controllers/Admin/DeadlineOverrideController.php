@@ -27,10 +27,16 @@ class DeadlineOverrideController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
-        $deadlineDays = (int) \App\Models\SystemSetting::get('budget_entry_deadline_days', 0);
-        $deadline     = $period && $period->opened_at && $deadlineDays > 0
-            ? $period->opened_at->addDays($deadlineDays)
-            : null;
+        // Use the period's own submission_deadline if set; otherwise fall back to global days setting.
+        if ($period && $period->submission_deadline) {
+            $deadline     = $period->submission_deadline;
+            $deadlineDays = null;
+        } else {
+            $deadlineDays = (int) \App\Models\SystemSetting::get('budget_entry_deadline_days', 0);
+            $deadline     = $period && $period->opened_at && $deadlineDays > 0
+                ? $period->opened_at->addDays($deadlineDays)
+                : null;
+        }
 
         // All active entities (departments + service stations)
         $departments = Department::where('is_active', true)->with('zone')->orderBy('entity_type')->orderBy('name')->get()

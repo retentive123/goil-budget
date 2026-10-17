@@ -29,6 +29,28 @@
                 {{ $budgetPeriod->end_date->format('d M Y') }}
                 &middot; Created by {{ $budgetPeriod->createdBy?->name ?? '—' }}
             </div>
+            @if($budgetPeriod->submission_deadline)
+            <div style="font-size:12px;margin-top:4px">
+                <i class="bi bi-alarm" style="color:#E65C00"></i>
+                <strong style="color:#1B2A4A">Submission deadline:</strong>
+                <span style="color:#DC2626;font-weight:600">
+                    {{ $budgetPeriod->submission_deadline->format('d M Y, H:i') }}
+                </span>
+                @if(now()->isAfter($budgetPeriod->submission_deadline))
+                    <span style="font-size:11px;background:#FEE2E2;color:#991B1B;padding:1px 8px;border-radius:10px;margin-left:4px">Passed</span>
+                @else
+                    <span style="font-size:11px;color:#64748B;margin-left:4px">({{ $budgetPeriod->submission_deadline->diffForHumans() }})</span>
+                @endif
+            </div>
+            @else
+            <div style="font-size:12px;color:#94A3B8;margin-top:4px">
+                <i class="bi bi-alarm"></i> No submission deadline set
+                @if($budgetPeriod->status === 'open')
+                — <a href="{{ route('admin.budget-periods.edit', $budgetPeriod) }}"
+                     style="color:#E65C00;font-size:12px">set one</a>
+                @endif
+            </div>
+            @endif
         </div>
         <div class="col-auto d-flex gap-2 align-items-center">
             <span style="padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700;

@@ -15,14 +15,24 @@
     <div class="card-body p-4">
         <h5 class="fw-bold mb-4">Edit Budget Period</h5>
 
+        @if($budgetPeriod->status === 'open')
+        <div class="alert alert-warning py-2 mb-3" style="font-size:13px">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            This period is <strong>open</strong>. Only the submission deadline can be changed.
+        </div>
+        @endif
+
         <form method="POST" action="{{ route('admin.budget-periods.update', $budgetPeriod) }}">
             @csrf @method('PUT')
+
+            @php $locked = $budgetPeriod->status === 'open'; @endphp
 
             <div class="mb-3">
                 <label class="form-label small fw-semibold">Name</label>
                 <input type="text" name="name"
                     value="{{ old('name', $budgetPeriod->name) }}"
-                    class="form-control @error('name') is-invalid @enderror">
+                    class="form-control @error('name') is-invalid @enderror"
+                    {{ $locked ? 'disabled' : '' }}>
                 @error('name')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
 
@@ -31,7 +41,7 @@
                 <input type="number" name="year"
                     value="{{ old('year', $budgetPeriod->year) }}"
                     class="form-control @error('year') is-invalid @enderror"
-                    min="2020" max="2100">
+                    min="2020" max="2100" {{ $locked ? 'disabled' : '' }}>
                 @error('year')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
 
@@ -39,7 +49,8 @@
                 <label class="form-label small fw-semibold">Start date</label>
                 <input type="date" name="start_date"
                     value="{{ old('start_date', $budgetPeriod->start_date?->format('Y-m-d')) }}"
-                    class="form-control @error('start_date') is-invalid @enderror">
+                    class="form-control @error('start_date') is-invalid @enderror"
+                    {{ $locked ? 'disabled' : '' }}>
                 @error('start_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
 
@@ -49,6 +60,21 @@
                     value="{{ old('end_date', $budgetPeriod->end_date?->format('Y-m-d')) }}"
                     class="form-control @error('end_date') is-invalid @enderror">
                 @error('end_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small fw-semibold">
+                    Submission Deadline
+                    <span class="text-muted fw-normal">(optional)</span>
+                </label>
+                <input type="datetime-local" name="submission_deadline"
+                    value="{{ old('submission_deadline', $budgetPeriod->submission_deadline?->format('Y-m-d\TH:i')) }}"
+                    class="form-control @error('submission_deadline') is-invalid @enderror">
+                <div class="form-text">
+                    Departments cannot submit after this date and time.
+                    Leave blank to use the global deadline setting (days after opening).
+                </div>
+                @error('submission_deadline')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
 
             <div class="mb-4">

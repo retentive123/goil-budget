@@ -314,111 +314,63 @@ class GoilDataSeeder extends Seeder
             ['CAT-CAPEX', '11800', 'Right of Use Assets',                                           'department'],
             ['CAT-CAPEX', '11900', 'Capital Work in Progress',                                      'department'],
 
-            // ── Sales Revenue (41000 series) ──────────────────────────────────
-            ['CAT-REV', '41000-113',          'Diesel XP',                                          'department'],
-            ['CAT-REV', '41000-114',          'Super XP RON95',                                     'department'],
-            ['CAT-REV', '41000-120',          'Super XP RON91',                                     'department'],
-            ['CAT-REV', '41000-115',          'Mining Diesel',                                      'department'],
-            ['CAT-REV', '41000-116',          'Kerosene',                                           'department'],
-            ['CAT-REV', '41000-117',          'Fuel Oil (RFO)',                                     'department'],
-            ['CAT-REV', '41000-118',          'Premix',                                             'department'],
-            ['CAT-REV', '41000-401',          'Aviation Turbines Kerosene',                         'department'],
-            ['CAT-REV', '41000-402',          'Marine Gas Oil - MGO',                               'department'],
-            ['CAT-REV', '41000-404',          'LPG',                                                'department'],
-            ['CAT-REV', '41000-407',          'AGO Rig',                                            'department'],
-            ['CAT-REV', '41000-408',          'Ocean Bunkering',                                    'department'],
-            ['CAT-REV', '41000-500',          'CRM/LPG',                                            'department'],
-            ['CAT-REV', '41000-411-002-03',   'Diesel Gamma SAE 40 - 4 Litres',                    'department'],
-            ['CAT-REV', '41000-411-012-01',   'GOIL Engine Oil 40/50 - 208 Litres',                'department'],
-            ['CAT-REV', '41000-411-017-03',   'Motor Oil HD 40/50 - 4 Litres',                     'department'],
-            ['CAT-REV', '41000-414-007-01',   'Marinemix GM - 1 Litre',                            'department'],
-            ['CAT-REV', '41000-411-017-01',   'Motor Oil HD 40/50 - 1 Litre',                      'department'],
-            ['CAT-REV', '41000-411-002-01',   'Diesel Gamma SAE 40 - 1 Litre',                     'department'],
-            ['CAT-REV', '41000-411-019-03',   'Super Motor Oil 20W/50 - 4 Litres',                 'department'],
-            ['CAT-REV', '41000-411-026-01',   'Transformer Oil - 210 Litres',                      'department'],
-            ['CAT-REV', '41000-411-002-02',   'Diesel Gamma SAE 40 - 208 Litres',                  'department'],
-            ['CAT-REV', '41000-411-021-01',   'Super Turbo 15W/40 - 208 Litres',                   'department'],
-            ['CAT-REV', '41000-411-002-05',   'Diesel Gamma SAE 40 - 5 Litres',                    'department'],
-            ['CAT-REV', '41000-413-020-01',   'OSO 68 - 208 Litres',                               'department'],
-            ['CAT-REV', '41000-411-020-08',   'Super Synthetic 5W/30 - 5 Litres',                  'department'],
-            ['CAT-REV', '41000-411-020-12',   'Super Synthetic 5W/20 - 5 Litres',                  'department'],
-            ['CAT-REV', '41000-411-027-01',   'GOIL Super Synthetic 0W20 - 5 Litres',              'department'],
-            ['CAT-REV', '41000-411-016-02',   'GOIL Super Taxi SAE 40 - 4 Litres',                 'department'],
-            ['CAT-REV', '41000-411-020-11',   'Super Synthetic 5W/20 - 4 Litres',                  'department'],
-            ['CAT-REV', '41000-411-020-17',   'Super Synthetic 5W/30 - 4 Litres',                  'department'],
-            ['CAT-REV', '41000-416-003-01',   'Rotra HY 140 - 208 Litres',                         'department'],
-            ['CAT-REV', '41000-411-002-04',   'Diesel Gamma SAE 40 - 20 Litres',                   'department'],
-            ['CAT-REV', '41000-411-008-04',   'Diesel Synthetic SAE 15W/40 - 5 Litres',            'department'],
-            ['CAT-REV', '41000-416-001-01',   'ATF Dexron II - 1 Litre',                           'department'],
-            ['CAT-REV', '41000-415-002-01',   'Radiator Coolant Solution - 1 Litre',               'department'],
-            ['CAT-REV', '41000-411-020-05',   'Super Synthetic 5W/40 - 5 Litres',                  'department'],
-            ['CAT-REV', '41000-411-020-02',   'Super Synthetic 5W/40 - 4 Litres',                  'department'],
-            ['CAT-REV', '41000-413-015-02',   'OSO 100 - 209 Litres',                              'department'],
-            ['CAT-REV', '41000-411-023-01',   'Sigma Truck 15W/40 - 209 Litres',                   'department'],
-            ['CAT-REV', '41000-413-020-02',   'OSO 68 - 209 Litres',                               'department'],
-            ['CAT-REV', '41000-413-057-03',   'Transmission Fluid TO-4 SAE 30 - 209 Litres',       'department'],
-            ['CAT-REV', '41000-413-030-04',   'Transmission Fluid TO-4 SAE 50 - 209 Litres',       'department'],
-            ['CAT-REV', '41000-413-046-01',   'Deg. Compound - 200 Litres',                        'department'],
-            ['CAT-REV', '41000-413-058-02',   'Rockdrill Oil 320 - 208 Litres',                    'department'],
-            ['CAT-REV', '41000-413-004-02',   'Blasia 220 - 209 Litres',                           'department'],
-            ['CAT-REV', '41000-413-024-02',   'Therm Oil 7 - 209 Litres',                          'department'],
-            ['CAT-REV', '41000-412-014-01',   'Renolit Moly LX 2 - 180 kg',                        'department'],
+            // ── Sales Revenue (41000 series) — source: Goil Revenue.xlsx ────────
+            ['CAT-REV', '41000-113', 'Diesel XP',                       'department'],
+            ['CAT-REV', '41000-114', 'Super XP RON95',                  'department'],
+            ['CAT-REV', '41000-120', 'Super XP RON91',                  'department'],
+            ['CAT-REV', '41000-115', 'Mining Diesel',                   'department'],
+            ['CAT-REV', '41000-116', 'Kerosene',                        'department'],
+            ['CAT-REV', '41000-117', 'Fuel Oil (RFO)',                   'department'],
+            ['CAT-REV', '41000-118', 'Premix',                          'department'],
+            ['CAT-REV', '41000-401', 'Aviation Turbines Kerosene',      'department'],
+            ['CAT-REV', '41000-402', 'Marine Gas Oil - MGO',            'department'],
+            ['CAT-REV', '41000-404', 'LPG',                             'department'],
+            ['CAT-REV', '41000-407', 'AGO Rig / MGO Foreign',           'department'],
+            ['CAT-REV', '41000-408', 'Ocean Bunkering',                 'department'],
+            ['CAT-REV', '41000-500', 'CRM/LPG',                        'department'],
+            // Lubricants: all sub-types roll up to 41000-411; see sub-entry templates below
+            ['CAT-REV', '41000-411', 'Lubricants',                      'department'],
 
             // ── Other Income ──────────────────────────────────────────────────
-            ['CAT-OTH-INC', '42114', 'Rent Income - Restaurants',                                  'department'],
-            ['CAT-OTH-INC', '42129', 'ATM Rent',                                                   'department'],
-            ['CAT-OTH-INC', '42122', 'Service Station Rental Income',                              'department'],
+            ['CAT-OTH-INC', '42114', 'Rent Income - Restaurants',       'department'],
+            ['CAT-OTH-INC', '42129', 'ATM Rent',                        'department'],
+            ['CAT-OTH-INC', '42122', 'Service Station Rental Income',   'department'],
 
-            // ── Cost of Sales (52000 series) ──────────────────────────────────
-            ['CAT-COS', '52000-113',          'Diesel XP',                                          'department'],
-            ['CAT-COS', '52000-114',          'Super XP RON95',                                     'department'],
-            ['CAT-COS', '52000-120',          'Super XP RON91',                                     'department'],
-            ['CAT-COS', '52000-115',          'Mining Diesel',                                      'department'],
-            ['CAT-COS', '52000-116',          'Kerosene',                                           'department'],
-            ['CAT-COS', '52000-117',          'Fuel Oil (RFO)',                                     'department'],
-            ['CAT-COS', '52000-118',          'Premix',                                             'department'],
-            ['CAT-COS', '52000-401',          'Aviation Turbines Kerosene',                         'department'],
-            ['CAT-COS', '52000-402',          'Marine Gas Oil - MGO',                               'department'],
-            ['CAT-COS', '52000-404',          'LPG',                                                'department'],
-            ['CAT-COS', '52000-407',          'AGO Rig',                                            'department'],
-            ['CAT-COS', '52000-408',          'Ocean Bunkering',                                    'department'],
-            ['CAT-COS', '52000-500',          'CRM/LPG',                                            'department'],
-            ['CAT-COS', '52000-411-002-03',   'Diesel Gamma SAE 40 - 4 Litres',                    'department'],
-            ['CAT-COS', '52000-411-012-01',   'GOIL Engine Oil 40/50 - 208 Litres',                'department'],
-            ['CAT-COS', '52000-411-017-03',   'Motor Oil HD 40/50 - 4 Litres',                     'department'],
-            ['CAT-COS', '52000-414-007-01',   'Marinemix GM - 1 Litre',                            'department'],
-            ['CAT-COS', '52000-411-017-01',   'Motor Oil HD 40/50 - 1 Litre',                      'department'],
-            ['CAT-COS', '52000-411-002-01',   'Diesel Gamma SAE 40 - 1 Litre',                     'department'],
-            ['CAT-COS', '52000-411-019-03',   'Super Motor Oil 20W/50 - 4 Litres',                 'department'],
-            ['CAT-COS', '52000-411-026-01',   'Transformer Oil - 210 Litres',                      'department'],
-            ['CAT-COS', '52000-411-002-02',   'Diesel Gamma SAE 40 - 208 Litres',                  'department'],
-            ['CAT-COS', '52000-411-021-01',   'Super Turbo 15W/40 - 208 Litres',                   'department'],
-            ['CAT-COS', '52000-411-002-05',   'Diesel Gamma SAE 40 - 5 Litres',                    'department'],
-            ['CAT-COS', '52000-413-020-01',   'OSO 68 - 208 Litres',                               'department'],
-            ['CAT-COS', '52000-411-020-08',   'Super Synthetic 5W/30 - 5 Litres',                  'department'],
-            ['CAT-COS', '52000-411-020-12',   'Super Synthetic 5W/20 - 5 Litres',                  'department'],
-            ['CAT-COS', '52000-411-027-01',   'GOIL Super Synthetic 0W20 - 5 Litres',              'department'],
-            ['CAT-COS', '52000-411-016-02',   'GOIL Super Taxi SAE 40 - 4 Litres',                 'department'],
-            ['CAT-COS', '52000-411-020-11',   'Super Synthetic 5W/20 - 4 Litres',                  'department'],
-            ['CAT-COS', '52000-411-020-17',   'Super Synthetic 5W/30 - 4 Litres',                  'department'],
-            ['CAT-COS', '52000-416-003-01',   'Rotra HY 140 - 208 Litres',                         'department'],
-            ['CAT-COS', '52000-411-002-04',   'Diesel Gamma SAE 40 - 20 Litres',                   'department'],
-            ['CAT-COS', '52000-411-008-04',   'Diesel Synthetic SAE 15W/40 - 5 Litres',            'department'],
-            ['CAT-COS', '52000-416-001-01',   'ATF Dexron II - 1 Litre',                           'department'],
-            ['CAT-COS', '52000-415-002-01',   'Radiator Coolant Solution - 1 Litre',               'department'],
-            ['CAT-COS', '52000-411-020-05',   'Super Synthetic 5W/40 - 5 Litres',                  'department'],
-            ['CAT-COS', '52000-411-020-02',   'Super Synthetic 5W/40 - 4 Litres',                  'department'],
-            ['CAT-COS', '52000-413-015-02',   'OSO 100 - 209 Litres',                              'department'],
-            ['CAT-COS', '52000-411-023-01',   'Sigma Truck 15W/40 - 209 Litres',                   'department'],
-            ['CAT-COS', '52000-413-020-02',   'OSO 68 - 209 Litres',                               'department'],
-            ['CAT-COS', '52000-413-057-03',   'Transmission Fluid TO-4 SAE 30 - 209 Litres',       'department'],
-            ['CAT-COS', '52000-413-030-04',   'Transmission Fluid TO-4 SAE 50 - 209 Litres',       'department'],
-            ['CAT-COS', '52000-413-046-01',   'Deg. Compound - 200 Litres',                        'department'],
-            ['CAT-COS', '52000-413-058-02',   'Rockdrill Oil 320 - 208 Litres',                    'department'],
-            ['CAT-COS', '52000-413-004-02',   'Blasia 220 - 209 Litres',                           'department'],
-            ['CAT-COS', '52000-413-024-02',   'Therm Oil 7 - 209 Litres',                          'department'],
-            ['CAT-COS', '52000-412-014-01',   'Renolit Moly LX 2 - 180 kg',                        'department'],
+            // ── Cost of Sales (52000 series) — source: Goil Revenue.xlsx ─────
+            ['CAT-COS', '52000-113', 'Diesel XP',                       'department'],
+            ['CAT-COS', '52000-114', 'Super XP RON95',                  'department'],
+            ['CAT-COS', '52000-120', 'Super XP RON91',                  'department'],
+            ['CAT-COS', '52000-115', 'Mining Diesel',                   'department'],
+            ['CAT-COS', '52000-116', 'Kerosene',                        'department'],
+            ['CAT-COS', '52000-117', 'Fuel Oil (RFO)',                   'department'],
+            ['CAT-COS', '52000-118', 'Premix',                          'department'],
+            ['CAT-COS', '52000-401', 'Aviation Turbines Kerosene',      'department'],
+            ['CAT-COS', '52000-402', 'Marine Gas Oil - MGO',            'department'],
+            ['CAT-COS', '52000-404', 'LPG',                             'department'],
+            ['CAT-COS', '52000-407', 'AGO Rig / MGO Foreign',           'department'],
+            ['CAT-COS', '52000-408', 'Ocean Bunkering',                 'department'],
+            ['CAT-COS', '52000-500', 'CRM/LPG',                        'department'],
+            ['CAT-COS', '52000-411', 'Lubricants',                      'department'],
         ];
+
+        // Remove old granular lubricant SKU codes that pre-date the Excel consolidation.
+        // These used codes like 41000-411-002-03, 52000-413-024-02, etc. — they are replaced
+        // by the single 41000-411 / 52000-411 Lubricants codes with sub-entry templates.
+        $oldLubricantPattern = DB::table('account_codes')
+            ->where('scope', 'department')
+            ->where(function ($q) {
+                $q->where('code', 'LIKE', '41000-41%-%-% ')
+                  ->orWhere('code', 'LIKE', '41000-41%-%-%')
+                  ->orWhere('code', 'LIKE', '52000-41%-%-%');
+            })
+            ->pluck('id');
+
+        if ($oldLubricantPattern->isNotEmpty()) {
+            DB::table('account_code_sub_entry_templates')->whereIn('account_code_id', $oldLubricantPattern)->delete();
+            DB::table('department_account_codes')->whereIn('account_code_id', $oldLubricantPattern)->delete();
+            DB::table('account_codes')->whereIn('id', $oldLubricantPattern)->delete();
+            $this->command->info("  Removed {$oldLubricantPattern->count()} old granular lubricant SKU codes.");
+        }
 
         foreach ($codes as [$catCode, $code, $name, $scope]) {
             $catId = $catMap[$catCode] ?? null;
@@ -662,6 +614,8 @@ class GoilDataSeeder extends Seeder
         // ── Revenue / Cost of Sales assignments ───────────────────────────────
         $this->command->info('Seeding revenue & cost of sales assignments…');
 
+        // Diesel XP (113), Super XP RON95 (114), Super XP RON91 (120) → Fuels Marketing (04001).
+        // Everything else (mining diesel, kerosene, aviation, marine, LPG, lubricants, other income) → TSPM (03001).
         $fuelsMktCodes = [
             '41000-113', '41000-114', '41000-120',
             '52000-113', '52000-114', '52000-120',
@@ -732,6 +686,28 @@ class GoilDataSeeder extends Seeder
         $this->command->info('Seeding sub-entry templates…');
 
         $subTemplates = [
+            // 41000-411 – Lubricants revenue (sub-types from Goil Revenue.xlsx)
+            '41000-411' => [
+                'Auto Lubes',
+                'Greases',
+                'Industrial Lubes',
+                'Marine Lubes',
+                'Specialties',
+                'Transmission',
+                'Additives Material',
+                'Lubricant Materials',
+            ],
+            // 52000-411 – Lubricants cost of sales (mirrors revenue sub-types)
+            '52000-411' => [
+                'Auto Lubes',
+                'Greases',
+                'Industrial Lubes',
+                'Marine Lubes',
+                'Specialties',
+                'Transmission',
+                'Additives Material',
+                'Lubricant Materials',
+            ],
             // 61814 – Business Promotion
             '61814' => [
                 'Contingency',

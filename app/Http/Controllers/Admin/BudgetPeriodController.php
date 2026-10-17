@@ -49,6 +49,7 @@ class BudgetPeriodController extends Controller
             'year'                => ['required', 'integer', 'min:2020', 'max:2100'],
             'start_date'          => ['required', 'date'],
             'end_date'            => ['required', 'date', 'after:start_date'],
+            'submission_deadline' => ['nullable', 'date', 'after:start_date'],
             'entry_mode'          => ['required', 'in:quarterly,monthly'],
             'line_item_calc_mode' => ['required', 'in:none,qty_rate,qty_rate_freq'],
             'admin_sets_rate'     => ['nullable', 'boolean'],
@@ -57,13 +58,14 @@ class BudgetPeriodController extends Controller
 
         $period = DB::transaction(function () use ($validated) {
             $period = BudgetPeriod::create([
-                'name'       => $validated['name'],
-                'year'       => $validated['year'],
-                'start_date' => $validated['start_date'],
-                'end_date'   => $validated['end_date'],
-                'entry_mode' => $validated['entry_mode'],
-                'status'     => 'draft',
-                'created_by' => auth()->id(),
+                'name'                => $validated['name'],
+                'year'                => $validated['year'],
+                'start_date'          => $validated['start_date'],
+                'end_date'            => $validated['end_date'],
+                'submission_deadline' => $validated['submission_deadline'] ?: null,
+                'entry_mode'          => $validated['entry_mode'],
+                'status'              => 'draft',
+                'created_by'          => auth()->id(),
             ]);
 
             // Snapshot the calc settings for this period
@@ -95,8 +97,8 @@ class BudgetPeriodController extends Controller
 
     public function edit(BudgetPeriod $budgetPeriod)
     {
-        if ($budgetPeriod->status !== 'draft') {
-            return back()->with('error', 'Only draft periods can be edited.');
+        if (!in_array($budgetPeriod->status, ['draft', 'open'])) {
+            return back()->with('error', 'Closed or approved periods cannot be edited.');
         }
 
         $budgetPeriod->load('setting');
@@ -106,8 +108,24 @@ class BudgetPeriodController extends Controller
 
     public function update(Request $request, BudgetPeriod $budgetPeriod)
     {
-        if ($budgetPeriod->status !== 'draft') {
-            return back()->with('error', 'Only draft periods can be edited.');
+        // submission_deadline can be updated on open periods too; everything else is draft-only
+        $isDraft = $budgetPeriod->status === 'draft';
+        $isOpen  = $budgetPeriod->status === 'open';
+
+        if (!$isDraft && !$isOpen) {
+            return back()->with('error', 'Closed or approved periods cannot be edited.');
+        }
+
+        if ($isOpen) {
+            // Open periods: only allow changing the submission deadline
+            $validated = $request->validate([
+                'submission_deadline' => ['nullable', 'date'],
+            ]);
+            $budgetPeriod->update([
+                'submission_deadline' => $validated['submission_deadline'] ?: null,
+            ]);
+            return redirect()->route('admin.budget-periods.show', $budgetPeriod)
+                ->with('success', 'Submission deadline updated.');
         }
 
         $validated = $request->validate([
@@ -120,6 +138,7 @@ class BudgetPeriodController extends Controller
             'year'                => ['required', 'integer', 'min:2020', 'max:2100'],
             'start_date'          => ['required', 'date'],
             'end_date'            => ['required', 'date', 'after:start_date'],
+            'submission_deadline' => ['nullable', 'date', 'after:start_date'],
             'entry_mode'          => ['required', 'in:quarterly,monthly'],
             'line_item_calc_mode' => ['required', 'in:none,qty_rate,qty_rate_freq'],
             'admin_sets_rate'     => ['nullable', 'boolean'],
@@ -133,11 +152,12 @@ class BudgetPeriodController extends Controller
         }
 
         $budgetPeriod->update([
-            'name'       => $validated['name'],
-            'year'       => $validated['year'],
-            'start_date' => $validated['start_date'],
-            'end_date'   => $validated['end_date'],
-            'entry_mode' => $validated['entry_mode'],
+            'name'                => $validated['name'],
+            'year'                => $validated['year'],
+            'start_date'          => $validated['start_date'],
+            'end_date'            => $validated['end_date'],
+            'submission_deadline' => $validated['submission_deadline'] ?: null,
+            'entry_mode'          => $validated['entry_mode'],
         ]);
 
         // Upsert the calc settings snapshot for this period

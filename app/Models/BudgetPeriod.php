@@ -10,15 +10,16 @@ class BudgetPeriod extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name', 'year', 'start_date', 'end_date',
+        'name', 'year', 'start_date', 'end_date', 'submission_deadline',
         'status', 'opened_at', 'closed_at', 'created_by', 'entry_mode',
     ];
 
     protected $casts = [
-        'start_date' => 'date',
-        'end_date'   => 'date',
-        'opened_at'  => 'datetime',
-        'closed_at'  => 'datetime',
+        'start_date'          => 'date',
+        'end_date'            => 'date',
+        'submission_deadline' => 'datetime',
+        'opened_at'           => 'datetime',
+        'closed_at'           => 'datetime',
     ];
 
     public function createdBy()

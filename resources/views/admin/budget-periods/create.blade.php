@@ -48,6 +48,21 @@
                 @error('end_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
 
+            <div class="mb-3">
+                <label class="form-label small fw-semibold">
+                    Submission Deadline
+                    <span class="text-muted fw-normal">(optional)</span>
+                </label>
+                <input type="datetime-local" name="submission_deadline"
+                    value="{{ old('submission_deadline') }}"
+                    class="form-control @error('submission_deadline') is-invalid @enderror">
+                <div class="form-text">
+                    The date and time after which departments can no longer submit budgets.
+                    If left blank, the global deadline setting (days after opening) is used.
+                </div>
+                @error('submission_deadline')<div class="invalid-feedback">{{ $message }}</div>@enderror
+            </div>
+
             <div class="mb-4">
                 <label class="form-label small fw-semibold">Budget Entry Mode</label>
                 <div class="d-flex gap-4 mt-1">
